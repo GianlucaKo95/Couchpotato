@@ -43,15 +43,37 @@ class XtreamClient(private val cfg: XtreamConfig) {
         val code = c.responseCode
         if (code !in 200..299) {
             c.disconnect()
+            if (code in BLOCK_CODES) {
+                // The provider locks the account for a while after too many requests (it answers 404).
+                // Stay away completely for a while instead of making it worse.
+                blockedUntil = System.currentTimeMillis() + COOLDOWN_MS
+                throw ProviderBlockedException(code, blockedUntil)
+            }
             throw IOException("Server antwortet mit HTTP $code")
         }
         return c
     }
 
-    private fun readText(url: String): String {
+    /**
+     * All API requests of the app go through here: one at a time, at least [MIN_GAP_MS] apart,
+     * and none at all while the provider has us blocked.
+     */
+    private fun <T> gated(block: () -> T): T = synchronized(GATE) {
+        val now = System.currentTimeMillis()
+        if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
+        val wait = lastRequestAt + MIN_GAP_MS - now
+        if (wait > 0) Thread.sleep(wait)
+        try {
+            block()
+        } finally {
+            lastRequestAt = System.currentTimeMillis()
+        }
+    }
+
+    private fun readText(url: String): String = gated {
         val c = open(url)
         try {
-            return c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally {
             c.disconnect()
         }
@@ -62,7 +84,7 @@ class XtreamClient(private val cfg: XtreamConfig) {
         extra: String = "",
         onObject: (JsonReader) -> Unit,
         result: () -> T,
-    ): T {
+    ): T = gated {
         val c = open(apiUrl(action, extra))
         try {
             JsonReader(InputStreamReader(c.inputStream.buffered(), Charsets.UTF_8)).use { r ->
@@ -78,7 +100,7 @@ class XtreamClient(private val cfg: XtreamConfig) {
         } finally {
             c.disconnect()
         }
-        return result()
+        result()
     }
 
     /** Checks the login and returns a short status line for the settings screen. */
@@ -328,6 +350,20 @@ class XtreamClient(private val cfg: XtreamConfig) {
     companion object {
         const val USER_AGENT = "Couchpotato/0.1"
 
+        private val GATE = Any()
+        private const val MIN_GAP_MS = 1_500L
+        private const val COOLDOWN_MS = 15 * 60 * 1000L
+        private val BLOCK_CODES = setOf(401, 403, 404, 429, 509)
+
+        @Volatile private var lastRequestAt = 0L
+        @Volatile var blockedUntil = 0L
+            private set
+
+        /** After entering new login data the user wants an immediate try. */
+        fun clearBlock() {
+            blockedUntil = 0L
+        }
+
         fun streamUrl(cfg: XtreamConfig, item: PlayItem): String {
             val base = XtreamConfig.normalizeBase(cfg.baseUrl)
             val segment = when (item.kind) {
@@ -347,3 +383,14 @@ private fun JsonReader.nextLenient(): String? = when (peek()) {
     JsonToken.BOOLEAN -> nextBoolean().toString()
     else -> { skipValue(); null }
 }
+
+/** The provider refuses requests (usually a temporary lock after too many requests). */
+class ProviderBlockedException(code: Int?, val until: Long) : IOException(
+    buildString {
+        val time = SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(until))
+        append("Anbieter sperrt gerade")
+        if (code != null) append(" (HTTP $code)")
+        append(" – vermutlich wegen zu vieler Anfragen. Couchpotato pausiert und versucht es ab $time Uhr wieder.")
+        append(" Bleibt es danach so, bitte die Zugangsdaten prüfen.")
+    }
+)

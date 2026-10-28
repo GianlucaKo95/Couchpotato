@@ -32,7 +32,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -190,6 +189,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun saveAndTest(cfg: XtreamConfig): String {
         settings.save(cfg)
+        XtreamClient.clearBlock()
         seriesCache.clear()
         liveCache.clear()
         categoriesCache = null
@@ -221,9 +221,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         epgJob = viewModelScope.launch {
             val client = XtreamClient(cfg)
             val result = coroutineScope {
-                favs.take(40).map { ch ->
-                    async { ch.id to runCatching { client.nowPlaying(ch.id) }.getOrNull() }
-                }.awaitAll()
+                // one after another (the client spaces them out); only the first ones in the row
+                favs.take(EPG_MAX_CHANNELS).map { ch ->
+                    ch.id to runCatching { client.nowPlaying(ch.id) }.getOrNull()
+                }
             }
             epgLoadedAt = System.currentTimeMillis()
             val map = result.mapNotNull { (id, title) -> title?.let { id to it } }.toMap()
@@ -536,8 +537,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val ROW_SIZE = 40
-        const val CATALOG_MAX_AGE_MS = 3 * 60 * 60 * 1000L
-        const val EPG_MAX_AGE_MS = 5 * 60 * 1000L
-        const val INDEX_MAX_AGE_MS = 12 * 60 * 60 * 1000L
+        // kept low on purpose: the provider locks the account after too many requests
+        const val CATALOG_MAX_AGE_MS = 6 * 60 * 60 * 1000L
+        const val EPG_MAX_AGE_MS = 15 * 60 * 1000L
+        const val EPG_MAX_CHANNELS = 15
+        const val INDEX_MAX_AGE_MS = 24 * 60 * 60 * 1000L
     }
 }

@@ -119,7 +119,7 @@ fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
     // focusing a category selects it after a short pause (no request for every category you scroll past)
     LaunchedEffect(focusedId) {
         val id = focusedId ?: return@LaunchedEffect
-        delay(400)
+        delay(700)   // only load when you stay on a category (the provider limits requests)
         selectedId = id
     }
 
