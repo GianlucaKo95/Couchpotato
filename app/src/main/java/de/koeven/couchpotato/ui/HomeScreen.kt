@@ -182,8 +182,8 @@ fun HomeScreen(
                 Spacer(Modifier.width(18.dp))
                 Clock()
             }
-        item { Spacer(Modifier.height(18.dp)) }   // space between tab bar and the first row
         }
+        item { Spacer(Modifier.height(18.dp)) }   // space between tab bar and the first row
 
         if (!state.configured) {
             item {
