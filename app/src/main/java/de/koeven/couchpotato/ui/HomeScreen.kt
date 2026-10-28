@@ -293,7 +293,7 @@ fun HomeScreen(
                     item(key = HomeRows.MOVIES) {
                         Shelf(HomeRows.label(HomeRows.MOVIES)) {
                             itemsIndexed(state.movies, key = { _, m -> m.id }) { i, movie ->
-                                LandscapePosterCard(
+                                PosterCard(
                                     title = movie.name,
                                     image = movie.image,
                                     onClick = { Playback.start(context, listOf(PlayItem.movie(movie))) },
@@ -308,7 +308,7 @@ fun HomeScreen(
                     item(key = HomeRows.SERIES) {
                         Shelf(HomeRows.label(HomeRows.SERIES)) {
                             itemsIndexed(state.series, key = { _, s -> s.id }) { i, series ->
-                                LandscapePosterCard(
+                                PosterCard(
                                     title = series.name,
                                     image = series.image,
                                     onClick = { onOpenSeries(series) },

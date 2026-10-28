@@ -110,7 +110,7 @@ fun SearchScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
                 item(key = "movies") {
                     Shelf("Filme (${results.movies.size})") {
                         items(results.movies, key = { "m${it.id}" }) { e ->
-                            LandscapePosterCard(
+                            PosterCard(
                                 title = e.name,
                                 image = e.image,
                                 onClick = {
@@ -125,7 +125,7 @@ fun SearchScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
                 item(key = "series") {
                     Shelf("Serien (${results.series.size})") {
                         items(results.series, key = { "s${it.id}" }) { e ->
-                            LandscapePosterCard(title = e.name, image = e.image, onClick = { onOpenSeries(e.id, e.name) })
+                            PosterCard(title = e.name, image = e.image, onClick = { onOpenSeries(e.id, e.name) })
                         }
                     }
                 }

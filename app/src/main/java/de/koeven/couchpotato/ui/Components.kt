@@ -70,7 +70,7 @@ val AppTileWidth: Dp @Composable get() = tileWidth(10.4f)     // "Meine Apps und
 val ContentWidth: Dp @Composable get() = tileWidth(5.4f)      // Weiterschauen, Filme, Serien (16:9)
 val ContinueWidth: Dp @Composable get() = ContentWidth
 val ChannelWidth: Dp @Composable get() = tileWidth(7.4f)      // Live-TV
-val PosterWidth: Dp @Composable get() = tileWidth(8.5f)       // portrait covers in the Mediathek grid
+val PosterWidth: Dp @Composable get() = tileWidth(10.4f)      // portrait covers: Neue Filme/Serien, Suche, Mediathek
 
 @Composable
 fun Shelf(
