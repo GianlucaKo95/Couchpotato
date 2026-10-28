@@ -22,6 +22,7 @@ private sealed interface Screen {
     data object Settings : Screen
     data object Live : Screen
     data object Search : Screen
+    data object Browse : Screen
     data class Series(val id: Long, val name: String) : Screen
 }
 
@@ -96,7 +97,9 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
             onOpenSettings = { go(Screen.Settings) },
             onOpenLive = { go(Screen.Live) },
             onOpenSearch = { go(Screen.Search) },
+            onOpenBrowse = { go(Screen.Browse) },
         )
+        Screen.Browse -> BrowseScreen(vm = vm, onOpenSeries = { id, name -> go(Screen.Series(id, name)) })
         Screen.Live -> LiveScreen(vm = vm)
         Screen.Search -> SearchScreen(vm = vm, onOpenSeries = { id, name -> go(Screen.Series(id, name)) })
         Screen.Settings -> SettingsScreen(vm = vm, onDone = back)

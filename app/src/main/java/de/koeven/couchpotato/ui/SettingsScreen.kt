@@ -1,6 +1,17 @@
 package de.koeven.couchpotato.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.Dialog
+import androidx.tv.material3.ListItem
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -89,14 +100,16 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                 }
             }
 
+            // Fields are buttons: the keyboard only opens when you press OK on one,
+            // not every time the focus passes over it.
             if (asLink) {
-                OutlinedTextField(
+                TextFieldButton(
+                    label = "M3U-Link",
                     value = link,
+                    hint = "http://anbieter.tv:8080/get.php?username=…&password=…",
+                    keyboardType = KeyboardType.Uri,
+                    width = 820,
                     onValueChange = { link = it },
-                    label = { M3Text("M3U-Link, z. B. http://anbieter.tv:8080/get.php?username=…&password=…") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-                    modifier = Modifier.width(820.dp),
                 )
                 Text(
                     "Am einfachsten vom PC aus: adb shell \"am start -n de.koeven.couchpotato/.ui.MainActivity --es m3u 'LINK'\"",
@@ -104,30 +117,20 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                     color = CpColors.TextMuted,
                 )
             } else {
-                OutlinedTextField(
+                TextFieldButton(
+                    label = "Server",
                     value = url,
+                    hint = "http://anbieter.tv:8080",
+                    keyboardType = KeyboardType.Uri,
                     onValueChange = { url = it },
-                    label = { M3Text("Server, z. B. http://anbieter.tv:8080") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                    modifier = Modifier.width(620.dp),
                 )
-                OutlinedTextField(
-                    value = user,
-                    onValueChange = { user = it },
-                    label = { M3Text("Benutzername") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                    modifier = Modifier.width(620.dp),
-                )
-                OutlinedTextField(
+                TextFieldButton(label = "Benutzername", value = user, onValueChange = { user = it })
+                TextFieldButton(
+                    label = "Passwort",
                     value = pass,
+                    password = true,
+                    keyboardType = KeyboardType.Password,
                     onValueChange = { pass = it },
-                    label = { M3Text("Passwort") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                    modifier = Modifier.width(620.dp),
                 )
             }
 
@@ -209,6 +212,77 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                 vm.resetHiddenApps()
                 status = "Alle Apps sind wieder sichtbar."
             }) { Text("Ausgeblendete Apps zurücksetzen") }
+        }
+    }
+}
+
+/**
+ * Shows "Label: value" as a normal focusable button. Only pressing OK opens a small dialog
+ * with the real text field (and the on-screen keyboard).
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun TextFieldButton(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    hint: String = "",
+    password: Boolean = false,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    width: Int = 620,
+) {
+    var editing by remember { mutableStateOf(false) }
+    val shown = when {
+        value.isBlank() -> "nicht gesetzt"
+        password -> "•".repeat(value.length.coerceAtMost(12))
+        else -> value
+    }
+    ListItem(
+        selected = false,
+        onClick = { editing = true },
+        headlineContent = { Text(shown, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        overlineContent = { Text(label) },
+        trailingContent = { Text("bearbeiten", color = CpColors.TextMuted) },
+        modifier = Modifier.width(width.dp),
+    )
+
+    if (editing) {
+        var draft by remember { mutableStateOf(value) }
+        val fieldFocus = remember { FocusRequester() }
+        fun accept() {
+            onValueChange(draft.trim())
+            editing = false
+        }
+        LaunchedEffect(Unit) {
+            delay(100)
+            runCatching { fieldFocus.requestFocus() }
+        }
+        Dialog(onDismissRequest = { editing = false }) {
+            Column(
+                Modifier
+                    .width((width + 48).dp)
+                    .background(CpColors.Surface, RoundedCornerShape(16.dp))
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    placeholder = { M3Text(hint) },
+                    singleLine = true,
+                    visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { accept() }),
+                    modifier = Modifier
+                        .width(width.dp)
+                        .focusRequester(fieldFocus),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { accept() }) { Text("Übernehmen") }
+                    Button(onClick = { editing = false }) { Text("Abbrechen") }
+                }
+            }
         }
     }
 }

@@ -97,68 +97,105 @@ class XtreamClient(private val cfg: XtreamConfig) {
         "Verbunden · Status: $status$exp"
     }
 
-    suspend fun latestMovies(limit: Int): List<VodItem> = withContext(Dispatchers.IO) {
-        val heap = PriorityQueue<VodItem>(limit + 1, compareBy<VodItem> { it.added })
-        streamArray("get_vod_streams", onObject = { r ->
-            var id: Long? = null
-            var name = ""
-            var icon: String? = null
-            var added = 0L
-            var ext = "mp4"
-            r.beginObject()
-            while (r.hasNext()) {
-                when (r.nextName()) {
-                    "stream_id" -> id = r.nextLenient()?.toLongOrNull()
-                    "name" -> name = r.nextLenient() ?: ""
-                    "stream_icon" -> icon = r.nextLenient()?.takeIf { it.startsWith("http") }
-                    "added" -> added = r.nextLenient()?.toLongOrNull() ?: 0L
-                    "container_extension" -> ext = r.nextLenient()?.takeIf { it.isNotBlank() } ?: "mp4"
-                    else -> r.skipValue()
-                }
+    private fun readVod(r: JsonReader): VodItem? {
+        var id: Long? = null
+        var name = ""
+        var icon: String? = null
+        var added = 0L
+        var ext = "mp4"
+        var cat: String? = null
+        r.beginObject()
+        while (r.hasNext()) {
+            when (r.nextName()) {
+                "stream_id" -> id = r.nextLenient()?.toLongOrNull()
+                "name" -> name = r.nextLenient() ?: ""
+                "stream_icon" -> icon = r.nextLenient()?.takeIf { it.startsWith("http") }
+                "added" -> added = r.nextLenient()?.toLongOrNull() ?: 0L
+                "container_extension" -> ext = r.nextLenient()?.takeIf { it.isNotBlank() } ?: "mp4"
+                "category_id" -> cat = r.nextLenient()
+                else -> r.skipValue()
             }
-            r.endObject()
-            id?.let {
-                heap.add(VodItem(it, name.trim(), icon, added, ext))
-                if (heap.size > limit) heap.poll()
-            }
-        }) { heap.sortedByDescending { it.added } }
+        }
+        r.endObject()
+        return id?.let { VodItem(it, name.trim(), icon, added, ext, cat) }
     }
 
-    suspend fun latestSeries(limit: Int): List<SeriesItem> = withContext(Dispatchers.IO) {
-        val heap = PriorityQueue<SeriesItem>(limit + 1, compareBy<SeriesItem> { it.updated })
-        streamArray("get_series", onObject = { r ->
-            var id: Long? = null
-            var name = ""
-            var cover: String? = null
-            var updated = 0L
-            r.beginObject()
-            while (r.hasNext()) {
-                when (r.nextName()) {
-                    "series_id" -> id = r.nextLenient()?.toLongOrNull()
-                    "name" -> name = r.nextLenient() ?: ""
-                    "cover" -> cover = r.nextLenient()?.takeIf { it.startsWith("http") }
-                    "last_modified" -> updated = r.nextLenient()?.toLongOrNull() ?: 0L
-                    else -> r.skipValue()
-                }
+    private fun readSeries(r: JsonReader): SeriesItem? {
+        var id: Long? = null
+        var name = ""
+        var cover: String? = null
+        var updated = 0L
+        var cat: String? = null
+        r.beginObject()
+        while (r.hasNext()) {
+            when (r.nextName()) {
+                "series_id" -> id = r.nextLenient()?.toLongOrNull()
+                "name" -> name = r.nextLenient() ?: ""
+                "cover" -> cover = r.nextLenient()?.takeIf { it.startsWith("http") }
+                "last_modified" -> updated = r.nextLenient()?.toLongOrNull() ?: 0L
+                "category_id" -> cat = r.nextLenient()
+                else -> r.skipValue()
             }
-            r.endObject()
-            id?.let {
-                heap.add(SeriesItem(it, name.trim(), cover, updated))
-                if (heap.size > limit) heap.poll()
-            }
-        }) { heap.sortedByDescending { it.updated } }
+        }
+        r.endObject()
+        return id?.let { SeriesItem(it, name.trim(), cover, updated, cat) }
     }
 
-    suspend fun liveCategories(): List<LiveCategory> = withContext(Dispatchers.IO) {
+    /** Newest [limit] movies, skipping categories in [hiddenCats] (ids without prefix). */
+    suspend fun latestMovies(limit: Int, hiddenCats: Set<String> = emptySet()): List<VodItem> =
+        withContext(Dispatchers.IO) {
+            val heap = PriorityQueue<VodItem>(limit + 1, compareBy<VodItem> { it.added })
+            streamArray("get_vod_streams", onObject = { r ->
+                readVod(r)?.takeIf { (it.categoryId ?: "") !in hiddenCats }?.let {
+                    heap.add(it)
+                    if (heap.size > limit) heap.poll()
+                }
+            }) { heap.sortedByDescending { it.added } }
+        }
+
+    suspend fun latestSeries(limit: Int, hiddenCats: Set<String> = emptySet()): List<SeriesItem> =
+        withContext(Dispatchers.IO) {
+            val heap = PriorityQueue<SeriesItem>(limit + 1, compareBy<SeriesItem> { it.updated })
+            streamArray("get_series", onObject = { r ->
+                readSeries(r)?.takeIf { (it.categoryId ?: "") !in hiddenCats }?.let {
+                    heap.add(it)
+                    if (heap.size > limit) heap.poll()
+                }
+            }) { heap.sortedByDescending { it.updated } }
+        }
+
+    suspend fun moviesInCategory(categoryId: String): List<VodItem> = withContext(Dispatchers.IO) {
+        val list = ArrayList<VodItem>()
+        streamArray("get_vod_streams", "&category_id=${Uri.encode(categoryId)}", onObject = { r ->
+            readVod(r)?.let { list += it }
+        }) { list.sortedByDescending { it.added } }
+    }
+
+    suspend fun seriesInCategory(categoryId: String): List<SeriesItem> = withContext(Dispatchers.IO) {
+        val list = ArrayList<SeriesItem>()
+        streamArray("get_series", "&category_id=${Uri.encode(categoryId)}", onObject = { r ->
+            readSeries(r)?.let { list += it }
+        }) { list.sortedByDescending { it.updated } }
+    }
+
+    /** kind: SearchEntry.KIND_MOVIE / KIND_SERIES / KIND_LIVE */
+    suspend fun categories(kind: Char): List<LiveCategory> = withContext(Dispatchers.IO) {
+        val action = when (kind) {
+            SearchEntry.KIND_MOVIE -> "get_vod_categories"
+            SearchEntry.KIND_SERIES -> "get_series_categories"
+            else -> "get_live_categories"
+        }
         val arr = try {
-            JSONArray(readText(apiUrl("get_live_categories")))
+            JSONArray(readText(apiUrl(action)))
         } catch (e: JSONException) {
-            throw IOException("Live-Kategorien konnten nicht geladen werden")
+            throw IOException("Kategorien konnten nicht geladen werden")
         }
         arr.mapObjects { o ->
             o.str("category_id")?.let { id -> LiveCategory(id, o.str("category_name") ?: id) }
         }.filterNotNull()
     }
+
+    suspend fun liveCategories(): List<LiveCategory> = categories(SearchEntry.KIND_LIVE)
 
     suspend fun liveChannels(categoryId: String): List<LiveChannel> = withContext(Dispatchers.IO) {
         val list = ArrayList<LiveChannel>()
@@ -186,7 +223,7 @@ class XtreamClient(private val cfg: XtreamConfig) {
      * Streams every movie, series and live channel to [onItem] (kind, id, name, image, ext),
      * for the search index. Returns the names of the lists that could not be loaded.
      */
-    suspend fun dumpCatalog(onItem: (Char, Long, String, String?, String) -> Unit): List<String> =
+    suspend fun dumpCatalog(onItem: (Char, Long, String, String?, String, String?) -> Unit): List<String> =
         withContext(Dispatchers.IO) {
             data class Spec(val action: String, val kind: Char, val idField: String, val imageField: String, val label: String)
             val specs = listOf(
@@ -202,6 +239,7 @@ class XtreamClient(private val cfg: XtreamConfig) {
                         var name = ""
                         var image: String? = null
                         var ext = if (spec.kind == SearchEntry.KIND_LIVE) "ts" else "mp4"
+                        var cat: String? = null
                         r.beginObject()
                         while (r.hasNext()) {
                             when (r.nextName()) {
@@ -209,11 +247,12 @@ class XtreamClient(private val cfg: XtreamConfig) {
                                 "name" -> name = r.nextLenient() ?: ""
                                 spec.imageField -> image = r.nextLenient()?.takeIf { it.startsWith("http") }
                                 "container_extension" -> ext = r.nextLenient()?.takeIf { it.isNotBlank() } ?: ext
+                                "category_id" -> cat = r.nextLenient()
                                 else -> r.skipValue()
                             }
                         }
                         r.endObject()
-                        id?.let { onItem(spec.kind, it, name.trim(), image, ext) }
+                        id?.let { onItem(spec.kind, it, name.trim(), image, ext, cat) }
                     }) { Unit }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e

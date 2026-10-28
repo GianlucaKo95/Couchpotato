@@ -64,6 +64,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenLive: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenBrowse: () -> Unit,
 ) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
@@ -160,6 +161,10 @@ fun HomeScreen(
                 Spacer(Modifier.weight(1f))
                 Clock()
                 Spacer(Modifier.width(24.dp))
+                if (state.configured) {
+                    Button(onClick = onOpenBrowse) { Text("Mediathek") }
+                    Spacer(Modifier.width(12.dp))
+                }
                 Button(onClick = onOpenSearch) { Text("Suchen") }
                 Spacer(Modifier.width(12.dp))
                 Button(onClick = onOpenSettings) { Text("Einstellungen") }

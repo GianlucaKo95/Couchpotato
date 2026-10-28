@@ -92,6 +92,15 @@ class SettingsStore(context: Context) {
 
     fun setRowOrder(ids: List<String>) = p.edit().putString("rowOrder", JSONArray(ids).toString()).apply()
 
+    /** Hidden provider categories as "m:<id>" (Filme), "s:<id>" (Serien), "l:<id>" (Live-TV). */
+    fun hiddenCategories(): Set<String> = p.getStringSet("hiddenCats", null)?.toSet() ?: emptySet()
+
+    fun setCategoriesHidden(keys: Collection<String>, hidden: Boolean) {
+        val set = hiddenCategories().toMutableSet()
+        if (hidden) set += keys else set -= keys.toSet()
+        p.edit().putStringSet("hiddenCats", set).apply()
+    }
+
     fun markLaunched(pkg: String) = p.edit().putLong("launch:$pkg", System.currentTimeMillis()).apply()
     fun lastLaunched(pkg: String): Long = p.getLong("launch:$pkg", 0L)
 }
@@ -168,10 +177,10 @@ class CatalogCache(context: Context) {
         val o = JSONObject(file.readText())
         Data(
             movies = o.getJSONArray("movies").mapObjects {
-                VodItem(it.getLong("id"), it.str("name") ?: "", it.str("image"), it.optLong("added"), it.str("ext") ?: "mp4")
+                VodItem(it.getLong("id"), it.str("name") ?: "", it.str("image"), it.optLong("added"), it.str("ext") ?: "mp4", it.str("cat"))
             },
             series = o.getJSONArray("series").mapObjects {
-                SeriesItem(it.getLong("id"), it.str("name") ?: "", it.str("image"), it.optLong("updated"))
+                SeriesItem(it.getLong("id"), it.str("name") ?: "", it.str("image"), it.optLong("updated"), it.str("cat"))
             },
         )
     }.getOrNull()
@@ -179,10 +188,10 @@ class CatalogCache(context: Context) {
     fun save(movies: List<VodItem>, series: List<SeriesItem>) {
         val o = JSONObject()
             .put("movies", JSONArray(movies.map {
-                JSONObject().put("id", it.id).put("name", it.name).put("image", it.image).put("added", it.added).put("ext", it.ext)
+                JSONObject().put("id", it.id).put("name", it.name).put("image", it.image).put("added", it.added).put("ext", it.ext).put("cat", it.categoryId)
             }))
             .put("series", JSONArray(series.map {
-                JSONObject().put("id", it.id).put("name", it.name).put("image", it.image).put("updated", it.updated)
+                JSONObject().put("id", it.id).put("name", it.name).put("image", it.image).put("updated", it.updated).put("cat", it.categoryId)
             }))
         file.writeText(o.toString())
     }

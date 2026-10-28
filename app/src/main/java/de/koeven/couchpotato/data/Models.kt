@@ -61,9 +61,22 @@ data class XtreamConfig(val baseUrl: String, val user: String, val pass: String)
             "${normalizeBase(baseUrl)}/get.php?username=${Uri.encode(user)}&password=${Uri.encode(pass)}&type=m3u_plus&output=ts"
 }
 
-data class VodItem(val id: Long, val name: String, val image: String?, val added: Long, val ext: String)
+data class VodItem(
+    val id: Long,
+    val name: String,
+    val image: String?,
+    val added: Long,
+    val ext: String,
+    val categoryId: String? = null,
+)
 
-data class SeriesItem(val id: Long, val name: String, val image: String?, val updated: Long)
+data class SeriesItem(
+    val id: Long,
+    val name: String,
+    val image: String?,
+    val updated: Long,
+    val categoryId: String? = null,
+)
 
 data class LiveCategory(val id: String, val name: String)
 

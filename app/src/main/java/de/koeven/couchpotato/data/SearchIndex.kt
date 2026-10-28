@@ -15,7 +15,11 @@ data class SearchEntry(
     val image: String?,
     val ext: String,
     val norm: String,
+    val categoryId: String? = null,
 ) {
+    /** Same key format as SettingsStore.hiddenCategories(). */
+    val categoryKey: String get() = "$kind:${categoryId ?: ""}"
+
     companion object {
         const val KIND_MOVIE = 'm'
         const val KIND_SERIES = 's'
@@ -38,7 +42,7 @@ data class SearchResults(
  */
 class SearchIndex(context: Context) {
 
-    private val file = File(context.filesDir, "search_index.tsv")
+    private val file = File(context.filesDir, "search_index_v2.tsv")   // v2: with category column
 
     fun exists(): Boolean = file.exists() && file.length() > 0
     fun ageMs(): Long = if (file.exists()) System.currentTimeMillis() - file.lastModified() else Long.MAX_VALUE
@@ -50,7 +54,7 @@ class SearchIndex(context: Context) {
         val failed = mutableListOf<String>()
         var count = 0
         tmp.bufferedWriter(Charsets.UTF_8).use { w ->
-            failed += client.dumpCatalog { kind, id, name, image, ext ->
+            failed += client.dumpCatalog { kind, id, name, image, ext, cat ->
                 val clean = name.sanitize()
                 if (clean.isEmpty()) return@dumpCatalog
                 w.append(kind).append('\t')
@@ -58,7 +62,8 @@ class SearchIndex(context: Context) {
                     .append(ext.sanitize()).append('\t')
                     .append(image?.sanitize() ?: "").append('\t')
                     .append(clean).append('\t')
-                    .append(normalize(clean)).append('\n')
+                    .append(normalize(clean)).append('\t')
+                    .append(cat?.sanitize() ?: "").append('\n')
                 count++
             }
         }
@@ -84,6 +89,7 @@ class SearchIndex(context: Context) {
                     image = p[3].ifEmpty { null },
                     name = p[4],
                     norm = p[5],
+                    categoryId = p.getOrNull(6)?.ifEmpty { null },
                 )
             }.toList()
         }
@@ -101,7 +107,12 @@ class SearchIndex(context: Context) {
                 .replace(NON_WORD, " ")
                 .trim()
 
-        fun search(entries: List<SearchEntry>, query: String, limit: Int = 40): SearchResults {
+        fun search(
+            entries: List<SearchEntry>,
+            query: String,
+            hiddenCategories: Set<String> = emptySet(),
+            limit: Int = 40,
+        ): SearchResults {
             val q = normalize(query)
             val tokens = q.split(' ').filter { it.isNotEmpty() }
             if (tokens.isEmpty() || q.length < 2) return SearchResults(query)
@@ -113,7 +124,7 @@ class SearchIndex(context: Context) {
                 else -> 3
             }
 
-            val hits = entries.filter { e -> tokens.all { e.norm.contains(it) } }
+            val hits = entries.filter { e -> tokens.all { e.norm.contains(it) } && e.categoryKey !in hiddenCategories }
                 .sortedWith(compareBy<SearchEntry>({ score(it) }, { it.name.length }))
 
             return SearchResults(

@@ -22,6 +22,10 @@ Werbefreier Startbildschirm mit einer gemeinsamen **„Weiterschauen“-Reihe**,
   Favoriten. Unter *Einstellungen* kannst du stattdessen „Sender öffnen mit: IsiPro“ wählen (IsiPro
   bekommt dann den Stream-Link – ob es den annimmt, musst du testen).
 
+- **Mediathek** (oben rechts): Tabs **Live-TV · Filme · Serien**, links die Kategorien, rechts der
+  Inhalt. **Kategorien bearbeiten** blendet Kategorien per OK aus/ein, mit **Alle ausblenden** /
+  **Alle einblenden** für den aktuellen Tab. Ausgeblendete Kategorien fehlen auch bei Neue Filme/Serien,
+  im Live-TV und in der Suche.
 - **Suchen** (oben rechts): durchsucht Filme, Serien und Sender deines IPTV-Anbieters schon beim
   Tippen (Groß/Klein und Umlaute egal). Dafür legt Couchpotato beim ersten Öffnen einen Suchindex an
   und aktualisiert ihn alle 12 Stunden. Darunter: den Begriff an die **Fire-TV-Gesamtsuche** oder an

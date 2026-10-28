@@ -72,6 +72,7 @@ data class HomeState(
     val indexStatus: String = "",
     val searchApps: List<SearchApp> = emptyList(),
     val rowOrder: List<String> = HomeRows.ALL,
+    val hiddenCategories: Set<String> = emptySet(),
     val appsCustomOrder: Boolean = false,
 )
 
@@ -102,7 +103,16 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<HomeState> = _state
 
     init {
-        cache.load()?.let { c -> _state.update { it.copy(movies = c.movies, series = c.series) } }
+        val hidden = settings.hiddenCategories()
+        _state.update { it.copy(hiddenCategories = hidden) }
+        cache.load()?.let { c ->
+            _state.update {
+                it.copy(
+                    movies = c.movies.filterNot { m -> "m:${m.categoryId ?: ""}" in hidden },
+                    series = c.series.filterNot { s -> "s:${s.categoryId ?: ""}" in hidden },
+                )
+            }
+        }
     }
 
     fun config(): XtreamConfig = settings.config()
@@ -163,8 +173,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val client = XtreamClient(cfg)
                 val (movies, series) = coroutineScope {
-                    val m = async { client.latestMovies(ROW_SIZE) }
-                    val s = async { client.latestSeries(ROW_SIZE) }
+                    val hidden = settings.hiddenCategories()
+                    val m = async { client.latestMovies(ROW_SIZE, hiddenIds(hidden, 'm')) }
+                    val s = async { client.latestSeries(ROW_SIZE, hiddenIds(hidden, 's')) }
                     m.await() to s.await()
                 }
                 withContext(Dispatchers.IO) { cache.save(movies, series) }
@@ -182,6 +193,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         seriesCache.clear()
         liveCache.clear()
         categoriesCache = null
+        browseCategories.clear()
+        browseMovies.clear()
+        browseSeries.clear()
         searchIndex.clear()
         indexEntries = null
         _state.update { it.copy(configured = settings.config().isValid) }
@@ -217,8 +231,63 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    suspend fun liveCategories(): List<LiveCategory> =
-        categoriesCache ?: XtreamClient(settings.config()).liveCategories().also { categoriesCache = it }
+    /** Live categories without the hidden ones (used by "Sender verwalten"). */
+    suspend fun liveCategories(): List<LiveCategory> {
+        val all = categoriesCache ?: XtreamClient(settings.config()).liveCategories().also { categoriesCache = it }
+        val hidden = settings.hiddenCategories()
+        return all.filterNot { "l:${it.id}" in hidden }
+    }
+
+    // ---------------- Mediathek / Kategorien ----------------
+
+    private val browseCategories = HashMap<Char, List<LiveCategory>>()
+    private val browseMovies = HashMap<String, List<VodItem>>()
+    private val browseSeries = HashMap<String, List<SeriesItem>>()
+
+    /** Remembered so the Mediathek opens where you left it (e.g. after watching something). */
+    var browseKind: Char = SearchEntry.KIND_LIVE
+    var browseCategoryId: String? = null
+
+    suspend fun allCategories(kind: Char): List<LiveCategory> =
+        browseCategories[kind] ?: XtreamClient(settings.config()).categories(kind).also { browseCategories[kind] = it }
+
+    suspend fun moviesIn(categoryId: String): List<VodItem> =
+        browseMovies[categoryId] ?: XtreamClient(settings.config()).moviesInCategory(categoryId)
+            .also { browseMovies[categoryId] = it }
+
+    suspend fun seriesIn(categoryId: String): List<SeriesItem> =
+        browseSeries[categoryId] ?: XtreamClient(settings.config()).seriesInCategory(categoryId)
+            .also { browseSeries[categoryId] = it }
+
+    fun setCategoryHidden(kind: Char, categoryId: String, hidden: Boolean) =
+        setCategoriesHidden(kind, listOf(categoryId), hidden)
+
+    /** Hides/shows several categories of one tab at once ("Alle ausblenden"). */
+    fun setCategoriesHidden(kind: Char, categoryIds: List<String>, hidden: Boolean, refresh: Boolean = true) {
+        if (categoryIds.isEmpty()) return
+        settings.setCategoriesHidden(categoryIds.map { "$kind:$it" }, hidden)
+        val set = settings.hiddenCategories()
+        _state.update {
+            it.copy(
+                hiddenCategories = set,
+                movies = it.movies.filterNot { m -> "m:${m.categoryId ?: ""}" in set },
+                series = it.series.filterNot { s -> "s:${s.categoryId ?: ""}" in set },
+            )
+        }
+        if (refresh) applyCategoryChanges(kind) else pendingCategoryRefresh = pendingCategoryRefresh || kind != SearchEntry.KIND_LIVE
+    }
+
+    private var pendingCategoryRefresh = false
+
+    /** Refills "Neue Filme/Serien" without the hidden categories (or with re-shown ones). */
+    fun applyCategoryChanges(kind: Char? = null) {
+        if (pendingCategoryRefresh || (kind != null && kind != SearchEntry.KIND_LIVE)) refreshCatalog(force = true)
+        pendingCategoryRefresh = false
+        viewModelScope.launch { runSearch(searchQuery.value) }
+    }
+
+    private fun hiddenIds(hidden: Set<String>, kind: Char): Set<String> =
+        hidden.filter { it.startsWith("$kind:") }.map { it.substring(2) }.toSet()
 
     suspend fun liveChannels(categoryId: String): List<LiveChannel> =
         liveCache[categoryId] ?: XtreamClient(settings.config()).liveChannels(categoryId)
@@ -397,7 +466,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun runSearch(q: String) {
         val entries = indexEntries ?: return
-        _search.value = withContext(Dispatchers.Default) { SearchIndex.search(entries, q) }
+        val hidden = settings.hiddenCategories()
+        _search.value = withContext(Dispatchers.Default) { SearchIndex.search(entries, q, hidden) }
     }
 
     fun searchInApp(context: Context, app: SearchApp, query: String) {
