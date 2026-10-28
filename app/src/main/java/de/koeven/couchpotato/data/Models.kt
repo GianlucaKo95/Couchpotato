@@ -102,6 +102,8 @@ data class SeriesInfo(
     val cover: String?,
     val plot: String?,
     val episodes: List<Episode>,   // sorted by season, then episode number
+    val genre: String? = null,
+    val year: String? = null,
 )
 
 data class AppEntry(

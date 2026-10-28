@@ -1,29 +1,26 @@
 package de.koeven.couchpotato.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.window.Dialog
-import androidx.tv.material3.ListItem
-import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,34 +29,59 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Button
+import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
+import androidx.tv.material3.ListItem
+import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import de.koeven.couchpotato.data.HomeRows
+import de.koeven.couchpotato.data.SearchEntry
+import de.koeven.couchpotato.data.XtreamClient
 import de.koeven.couchpotato.data.XtreamConfig
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.material3.MaterialTheme as M3Theme
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.darkColorScheme as m3DarkColorScheme
 
+private enum class Section(val label: String) {
+    Login("IPTV-Zugang"),
+    Catalog("Katalog & Anfragen"),
+    Home("Startbildschirm"),
+    Live("Live-TV"),
+    Continue("Weiterschauen"),
+    About("Über Couchpotato"),
+}
+
+/** Einstellungen (design B): sections on the left, the chosen section on the right. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
-    val initial = remember { vm.config() }
-    var url by remember { mutableStateOf(initial.baseUrl) }
-    var user by remember { mutableStateOf(initial.user) }
-    var pass by remember { mutableStateOf(initial.pass) }
-    var asLink by remember { mutableStateOf(vm.loginAsLink) }
-    var link by remember { mutableStateOf(initial.toM3uLink()) }
+    val state by vm.state.collectAsState()
+    var section by remember { mutableStateOf(if (state.configured) Section.Catalog else Section.Login) }
     var status by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
+    val navFocus = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(150)
+        runCatching { navFocus.requestFocus() }
+    }
 
     M3Theme(
         colorScheme = m3DarkColorScheme(
@@ -69,192 +91,403 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
             background = CpColors.Background,
         )
     ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 96.dp, vertical = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Text("Einstellungen", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-
-            Text("IPTV-Zugang", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
-            Text(
-                "Die Daten findest du in der Mail deines Anbieters oder in IsiPro – " +
-                    "entweder als Server/Benutzer/Passwort oder als kompletter M3U-Link.",
-                style = MaterialTheme.typography.bodySmall,
-                color = CpColors.TextMuted,
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilterChip(selected = !asLink, onClick = { asLink = false; vm.loginAsLink = false; status = null }) {
-                    Text("Zugangsdaten")
-                }
-                FilterChip(selected = asLink, onClick = {
-                    asLink = true
-                    vm.loginAsLink = true
-                    if (link.isBlank()) link = XtreamConfig(url, user, pass).toM3uLink()
-                    status = null
-                }) {
-                    Text("Kompletter Link")
-                }
-            }
-
-            // Fields are buttons: the keyboard only opens when you press OK on one,
-            // not every time the focus passes over it.
-            if (asLink) {
-                TextFieldButton(
-                    label = "M3U-Link",
-                    value = link,
-                    hint = "http://anbieter.tv:8080/get.php?username=…&password=…",
-                    keyboardType = KeyboardType.Uri,
-                    width = 820,
-                    onValueChange = { link = it },
-                )
-                Text(
-                    "Am einfachsten vom PC aus: adb shell \"am start -n de.koeven.couchpotato/.ui.MainActivity --es m3u 'LINK'\"",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = CpColors.TextMuted,
-                )
-            } else {
-                TextFieldButton(
-                    label = "Server",
-                    value = url,
-                    hint = "http://anbieter.tv:8080",
-                    keyboardType = KeyboardType.Uri,
-                    onValueChange = { url = it },
-                )
-                TextFieldButton(label = "Benutzername", value = user, onValueChange = { user = it })
-                TextFieldButton(
-                    label = "Passwort",
-                    value = pass,
-                    password = true,
-                    keyboardType = KeyboardType.Password,
-                    onValueChange = { pass = it },
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Button(onClick = {
-                    val cfg: XtreamConfig? = if (asLink) {
-                        XtreamConfig.fromLink(link)
-                    } else {
-                        // a full link pasted into the server field still works
-                        XtreamConfig.fromLink(url)?.takeIf { user.isBlank() || pass.isBlank() }
-                            ?: XtreamConfig(url, user, pass)
-                    }
-                    when {
-                        cfg == null -> status = "Fehler: In diesem Link stecken kein Benutzername und Passwort. " +
-                            "Bitte den Link mit „username=…&password=…“ nehmen oder die Zugangsdaten einzeln eingeben."
-                        !cfg.isValid -> status = "Fehler: Server, Benutzername und Passwort werden alle gebraucht."
-                        else -> {
-                            url = XtreamConfig.normalizeBase(cfg.baseUrl)
-                            user = cfg.user
-                            pass = cfg.pass
-                            status = "Prüfe Verbindung …"
-                            scope.launch {
-                                val result = vm.saveAndTest(cfg)
-                                status = if (asLink && !result.startsWith("Fehler")) {
-                                    "$result\nErkannt: Server $url · Benutzer $user"
-                                } else result
-                            }
+        Column(Modifier.fillMaxSize()) {
+            TopBar(active = NavTab.None, showContentTabs = state.configured, activeIcon = "settings")
+            Spacer(Modifier.height(22.dp))
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = ScreenPadding),
+                horizontalArrangement = Arrangement.spacedBy(32.dp),
+            ) {
+                // ---------------- section list ----------------
+                Column(Modifier.width(230.dp)) {
+                    Text(
+                        "Einstellungen",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 12.dp, bottom = 10.dp),
+                    )
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        items(Section.values().toList()) { s ->
+                            NavRow(
+                                label = s.label,
+                                selected = s == section,
+                                onClick = { section = s },
+                                modifier = Modifier
+                                    .onFocusChanged { if (it.isFocused) section = s }
+                                    .then(if (s == section) Modifier.focusRequester(navFocus) else Modifier),
+                            )
+                        }
+                        item {
+                            Spacer(Modifier.height(10.dp))
+                            NavRow(label = "← Zurück", selected = false, muted = true, onClick = onDone)
                         }
                     }
-                }) { Text("Speichern & testen") }
-                Button(onClick = onDone) { Text("Zurück") }
-            }
-            status?.let {
-                Text(it, color = if (it.startsWith("Fehler")) CpColors.Error else CpColors.Text)
-            }
+                }
 
-            Spacer(Modifier.height(16.dp))
-            val sync by vm.state.collectAsState()
-            Text("Katalog & Anfragen", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
-            Text(sync.syncInfo, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "Couchpotato gleicht den Katalog deines Anbieters höchstens einmal am Tag ab (6 Anfragen). " +
-                    "Neue Filme/Serien, Mediathek, Sender, Suche und das Ausblenden von Kategorien laufen danach " +
-                    "komplett auf dem Stick. Anfragen gehen einzeln mit Pause raus, mit Stundenlimit; " +
-                    "bei einer Sperre pausiert die App 15 Minuten.",
-                style = MaterialTheme.typography.bodySmall,
-                color = CpColors.TextMuted,
-            )
-            Button(onClick = { status = vm.syncNow() }) { Text("Katalog jetzt abgleichen") }
-
-            Text("Bilder", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            Text(sync.imageInfo, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "Jedes Bild wird nur einmal geladen und dann dauerhaft auf dem Stick gespeichert. Bilder vom " +
-                    "Server deines Anbieters laufen durch dieselbe Bremse (einzeln, mit Pause, max. 60 pro Stunde); " +
-                    "Bilder von anderen Diensten wie TMDB zählen beim Anbieter nicht.",
-                style = MaterialTheme.typography.bodySmall,
-                color = CpColors.TextMuted,
-            )
-            Button(onClick = { vm.setLoadProviderImages(!sync.loadProviderImages) }) {
-                Text("Bilder vom Anbieter-Server: " + if (sync.loadProviderImages) "laden (gebremst)" else "nicht laden")
-            }
-
-            Spacer(Modifier.height(16.dp))
-            val wn by vm.state.collectAsState()
-            Text("Weiterschauen aus anderen Apps", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
-            Text(
-                "Status: ${wn.externalStatus}",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                "Couchpotato liest die offene Android-„Watch Next“-Liste. Die „Weiterschauen“-Reihe von Fire OS " +
-                    "ist dagegen Amazons eigene und für andere Apps nicht lesbar. Steht hier „0 Einträge“, " +
-                    "melden Netflix & Co. ihren Fortschritt nur an Amazon.",
-                style = MaterialTheme.typography.bodySmall,
-                color = CpColors.TextMuted,
-            )
-            Button(onClick = { vm.onResume() }) { Text("Erneut prüfen") }
-            Spacer(Modifier.height(16.dp))
-            Text("Startbildschirm", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
-            Text(
-                "Lange OK auf einer App, einem Sender oder einem Titel in „Weiterschauen“ öffnet ein Menü " +
-                    "(Verschieben, Ausblenden, Entfernen). Beim Verschieben mit ◀ ▶ schieben, OK = fertig.",
-                style = MaterialTheme.typography.bodySmall,
-                color = CpColors.TextMuted,
-            )
-            val home by vm.state.collectAsState()
-
-            Button(onClick = { vm.setAppsCustomOrder(!home.appsCustomOrder) }) {
-                Text("Apps sortieren: " + if (home.appsCustomOrder) "eigene Reihenfolge" else "zuletzt genutzt zuerst")
-            }
-
-            Text("Reihenfolge der Reihen", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            home.rowOrder.forEachIndexed { i, id ->
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                // ---------------- content ----------------
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 40.dp, end = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("${i + 1}. ${HomeRows.label(id)}", modifier = Modifier.width(260.dp))
-                    Button(onClick = { vm.moveRow(id, -1) }, enabled = i > 0) { Text("▲ nach oben") }
-                    Button(onClick = { vm.moveRow(id, 1) }, enabled = i < home.rowOrder.lastIndex) { Text("▼ nach unten") }
+                    when (section) {
+                        Section.Login -> LoginSection(vm) { status = it }
+                        Section.Catalog -> CatalogSection(vm, state) { status = it }
+                        Section.Home -> HomeSection(vm, state) { status = it }
+                        Section.Live -> LiveSection(vm, state)
+                        Section.Continue -> ContinueSection(vm, state)
+                        Section.About -> AboutSection(state)
+                    }
+                    status?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (it.startsWith("Fehler")) CpColors.Error else CpColors.Accent,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            Text("Live-TV", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
-            Button(onClick = { vm.setLiveInExternalApp(!home.liveInExternalApp) }) {
-                Text("Sender öffnen mit: " + if (home.liveInExternalApp) "IsiPro" else "Couchpotato-Player")
-            }
-            Text(
-                "Im Couchpotato-Player schaltest du mit Hoch/Runter durch deine Favoriten. " +
-                    "IsiPro bekommt nur den Stream-Link – ob es den annimmt, hängt von IsiPro ab.",
-                style = MaterialTheme.typography.bodySmall,
-                color = CpColors.TextMuted,
-            )
-            Button(onClick = {
-                vm.resetHiddenApps()
-                status = "Alle Apps sind wieder sichtbar."
-            }) { Text("Ausgeblendete Apps zurücksetzen") }
         }
     }
 }
 
+// =====================================================================================
+// Sections
+// =====================================================================================
+
+@Composable
+private fun LoginSection(vm: HomeViewModel, setStatus: (String?) -> Unit) {
+    val initial = remember { vm.config() }
+    var url by remember { mutableStateOf(initial.baseUrl) }
+    var user by remember { mutableStateOf(initial.user) }
+    var pass by remember { mutableStateOf(initial.pass) }
+    var asLink by remember { mutableStateOf(vm.loginAsLink) }
+    var link by remember { mutableStateOf(initial.toM3uLink()) }
+    var result by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    SectionTitle(
+        "IPTV-Zugang",
+        "Steht in der Mail deines Anbieters oder in IsiPro – als Server/Benutzer/Passwort oder als kompletter M3U-Link.",
+    )
+    SettingRow(
+        title = "Anmelden mit",
+        value = if (asLink) "Kompletter Link" else "Zugangsdaten",
+    ) {
+        asLink = !asLink
+        vm.loginAsLink = asLink
+        if (asLink && link.isBlank()) link = XtreamConfig(url, user, pass).toM3uLink()
+        result = null
+    }
+    if (asLink) {
+        TextFieldButton(
+            label = "M3U-Link",
+            value = link,
+            hint = "http://anbieter.tv:8080/get.php?username=…&password=…",
+            keyboardType = KeyboardType.Uri,
+            onValueChange = { link = it },
+        )
+        Hint("Am einfachsten vom PC aus: adb shell \"am start -n de.koeven.couchpotato/.ui.MainActivity --es m3u 'LINK'\"")
+    } else {
+        TextFieldButton(
+            label = "Server",
+            value = url,
+            hint = "http://anbieter.tv:8080",
+            keyboardType = KeyboardType.Uri,
+            onValueChange = { url = it },
+        )
+        TextFieldButton(label = "Benutzername", value = user, onValueChange = { user = it })
+        TextFieldButton(
+            label = "Passwort",
+            value = pass,
+            password = true,
+            keyboardType = KeyboardType.Password,
+            onValueChange = { pass = it },
+        )
+    }
+    Spacer(Modifier.height(4.dp))
+    PrimaryPill("Speichern & testen") {
+        setStatus(null)
+        val cfg: XtreamConfig? = if (asLink) {
+            XtreamConfig.fromLink(link)
+        } else {
+            // a full link pasted into the server field still works
+            XtreamConfig.fromLink(url)?.takeIf { user.isBlank() || pass.isBlank() }
+                ?: XtreamConfig(url, user, pass)
+        }
+        when {
+            cfg == null -> result = "Fehler: In diesem Link stecken kein Benutzername und Passwort. " +
+                "Bitte den Link mit „username=…&password=…“ nehmen oder die Zugangsdaten einzeln eingeben."
+            !cfg.isValid -> result = "Fehler: Server, Benutzername und Passwort werden alle gebraucht."
+            else -> {
+                url = XtreamConfig.normalizeBase(cfg.baseUrl)
+                user = cfg.user
+                pass = cfg.pass
+                result = "Prüfe Verbindung …"
+                scope.launch {
+                    val r = vm.saveAndTest(cfg)
+                    result = if (asLink && !r.startsWith("Fehler")) "$r\nErkannt: Server $url · Benutzer $user" else r
+                }
+            }
+        }
+    }
+    result?.let {
+        Text(it, color = if (it.startsWith("Fehler")) CpColors.Error else CpColors.Text)
+    }
+}
+
+@Composable
+private fun CatalogSection(vm: HomeViewModel, state: HomeState, setStatus: (String?) -> Unit) {
+    // re-read the counters whenever the screen state changes (they live in the request brake)
+    val last = remember(state.syncInfo) { vm.lastSyncAt() }
+    val requests = remember(state.syncInfo) { XtreamClient.requestsLastHour() }
+    val images = remember(state.syncInfo) { XtreamClient.imagesLastHour() }
+
+    SectionTitle(
+        "Katalog & Anfragen",
+        "Der Katalog wird höchstens einmal am Tag abgeglichen (6 Anfragen). Mediathek, Suche, Sender und " +
+            "Ausblenden laufen danach komplett auf dem Stick.",
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatCard(
+            "Letzter Abgleich",
+            if (last == 0L) "noch nie" else SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(last)),
+            if (last == 0L) " " else SimpleDateFormat("EEEE, dd.MM.", Locale.GERMANY).format(Date(last)),
+            Modifier.weight(1f),
+        )
+        StatCard(
+            "Anfragen",
+            "$requests / ${XtreamClient.MAX_PER_HOUR}",
+            "in der letzten Stunde",
+            Modifier.weight(1f),
+        )
+        StatCard(
+            "Bilder vom Anbieter",
+            "$images / ${XtreamClient.IMAGES_PER_HOUR}",
+            if (state.loadProviderImages) "in der letzten Stunde" else "ausgeschaltet",
+            Modifier.weight(1f),
+        )
+    }
+    Spacer(Modifier.height(4.dp))
+    SettingRow(
+        title = "Katalog jetzt abgleichen",
+        description = "Höchstens alle 10 Minuten · bei einer Sperre pausiert die App 15 Minuten",
+        value = "Abgleichen",
+    ) { setStatus(vm.syncNow()) }
+    SettingRow(
+        title = "Bilder vom Anbieter-Server",
+        description = "Einzeln, mit Pause, max. ${XtreamClient.IMAGES_PER_HOUR} pro Stunde · jedes Bild nur einmal",
+        value = if (state.loadProviderImages) "laden (gebremst)" else "nicht laden",
+    ) { vm.setLoadProviderImages(!state.loadProviderImages) }
+    Hint(state.imageInfo)
+    if (state.indexStatus.isNotBlank()) Hint(state.indexStatus)
+}
+
+@Composable
+private fun HomeSection(vm: HomeViewModel, state: HomeState, setStatus: (String?) -> Unit) {
+    SectionTitle(
+        "Startbildschirm",
+        "Lange OK auf einer App, einem Sender oder einem Titel öffnet ein Menü (Verschieben, Ausblenden, Entfernen).",
+    )
+    SettingRow(
+        title = "Apps sortieren",
+        value = if (state.appsCustomOrder) "eigene Reihenfolge" else "zuletzt genutzt zuerst",
+    ) { vm.setAppsCustomOrder(!state.appsCustomOrder) }
+    SettingRow(
+        title = "Ausgeblendete Apps",
+        description = "Alle versteckten Apps wieder anzeigen",
+        value = "Zurücksetzen",
+    ) {
+        vm.resetHiddenApps()
+        setStatus("Alle Apps sind wieder sichtbar.")
+    }
+    Text(
+        "Reihenfolge der Reihen",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 10.dp),
+    )
+    state.rowOrder.forEachIndexed { i, id ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("${i + 1}.  ${HomeRows.label(id)}", modifier = Modifier.weight(1f))
+            if (i > 0) TabPill("▲ hoch", false) { vm.moveRow(id, -1) }
+            if (i < state.rowOrder.lastIndex) TabPill("▼ runter", false) { vm.moveRow(id, 1) }
+        }
+    }
+}
+
+@Composable
+private fun LiveSection(vm: HomeViewModel, state: HomeState) {
+    val nav = LocalNav.current
+    SectionTitle(
+        "Live-TV",
+        "Im Couchpotato-Player schaltest du mit Hoch/Runter durch deine Favoriten. " +
+            "IsiPro bekommt nur den Stream-Link – ob es den annimmt, hängt von IsiPro ab.",
+    )
+    SettingRow(
+        title = "Sender öffnen mit",
+        value = if (state.liveInExternalApp) "IsiPro" else "Couchpotato-Player",
+    ) { vm.setLiveInExternalApp(!state.liveInExternalApp) }
+    SettingRow(
+        title = "Favoriten",
+        description = "${state.favorites.size} Sender · „Jetzt läuft“ für die ersten 8, alle 30 Minuten",
+        value = "Sender verwalten",
+    ) { nav?.browse?.invoke(SearchEntry.KIND_LIVE) }
+}
+
+@Composable
+private fun ContinueSection(vm: HomeViewModel, state: HomeState) {
+    SectionTitle(
+        "Weiterschauen",
+        "Filme und Folgen aus Couchpotato merken sich die Stelle selbst. Andere Apps erscheinen nur, " +
+            "wenn sie die offene Android-„Watch Next“-Liste nutzen – Netflix & Co. melden ihren Fortschritt " +
+            "nur an Amazon, und diese Liste kann keine andere App lesen.",
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatCard("Einträge in Weiterschauen", state.continueWatching.size.toString(), " ", Modifier.weight(1f))
+        StatCard("Andere Apps", state.externalStatus.ifBlank { "–" }, " ", Modifier.weight(2f), small = true)
+    }
+    SettingRow(title = "Andere Apps erneut prüfen", value = "Prüfen") { vm.onResume() }
+}
+
+@Composable
+private fun AboutSection(state: HomeState) {
+    val context = LocalContext.current
+    val version = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
+    }
+    SectionTitle("Über Couchpotato", "Dein eigener Startbildschirm für Fire TV – ohne Werbung.")
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatCard("Version", version, " ", Modifier.weight(1f))
+        StatCard("IPTV", if (state.configured) "verbunden" else "nicht eingerichtet", " ", Modifier.weight(1f))
+    }
+    Hint(
+        "Schutz vor Sperren: Anfragen gehen einzeln mit 2,5 s Pause raus, höchstens " +
+            "${XtreamClient.MAX_PER_HOUR} pro Stunde (Hintergrund 20). Antwortet der Anbieter mit einer Sperre, " +
+            "pausiert Couchpotato 15 Minuten – auch über einen Neustart hinweg."
+    )
+}
+
+// =====================================================================================
+// Building blocks
+// =====================================================================================
+
+@Composable
+private fun SectionTitle(title: String, subtitle: String) {
+    Column(Modifier.padding(bottom = 6.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = CpColors.TextMuted,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = CpColors.TextMuted)
+}
+
+@Composable
+private fun StatCard(label: String, value: String, sub: String, modifier: Modifier = Modifier, small: Boolean = false) {
+    Column(
+        modifier
+            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = CpColors.TextMuted)
+        Text(
+            value,
+            style = if (small) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            maxLines = if (small) 3 else 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Text(sub, style = MaterialTheme.typography.labelSmall, color = CpColors.TextMuted, maxLines = 1)
+    }
+}
+
+/** A whole-width row: title (+ description) on the left, current value as a pill on the right. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SettingRow(title: String, value: String, description: String? = null, onClick: () -> Unit) {
+    val supporting: (@Composable () -> Unit)? = if (description != null) {
+        { Text(description, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+    } else null
+    ListItem(
+        selected = false,
+        onClick = onClick,
+        shape = ListItemDefaults.shape(RoundedCornerShape(12.dp)),
+        colors = ListItemDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.06f),
+            contentColor = CpColors.Text,
+            focusedContainerColor = CpColors.Text,
+            focusedContentColor = CpColors.Background,
+        ),
+        scale = ListItemDefaults.scale(focusedScale = 1.01f),
+        headlineContent = { Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1) },
+        supportingContent = supporting,
+        trailingContent = {
+            Text(
+                value,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = CpColors.OnAccent,
+                maxLines = 1,
+                modifier = Modifier
+                    .background(CpColors.Accent, RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun NavRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    muted: Boolean = false,
+) {
+    ListItem(
+        selected = selected,
+        onClick = onClick,
+        shape = ListItemDefaults.shape(RoundedCornerShape(10.dp)),
+        colors = ListItemDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = if (muted) CpColors.TextMuted else CpColors.Text,
+            selectedContainerColor = Color.White.copy(alpha = 0.14f),
+            selectedContentColor = CpColors.Text,
+            focusedContainerColor = CpColors.Text,
+            focusedContentColor = CpColors.Background,
+        ),
+        scale = ListItemDefaults.scale(focusedScale = 1.02f),
+        headlineContent = {
+            Text(label, maxLines = 1, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+        },
+        modifier = modifier.fillMaxWidth(),
+    )
+}
+
 /**
- * Shows "Label: value" as a normal focusable button. Only pressing OK opens a small dialog
+ * Shows "Label: value" as a normal focusable row. Only pressing OK opens a small dialog
  * with the real text field (and the on-screen keyboard).
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -266,7 +499,6 @@ private fun TextFieldButton(
     hint: String = "",
     password: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
-    width: Int = 620,
 ) {
     var editing by remember { mutableStateOf(false) }
     val shown = when {
@@ -277,10 +509,18 @@ private fun TextFieldButton(
     ListItem(
         selected = false,
         onClick = { editing = true },
-        headlineContent = { Text(shown, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        shape = ListItemDefaults.shape(RoundedCornerShape(12.dp)),
+        colors = ListItemDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.06f),
+            contentColor = CpColors.Text,
+            focusedContainerColor = CpColors.Text,
+            focusedContentColor = CpColors.Background,
+        ),
+        scale = ListItemDefaults.scale(focusedScale = 1.01f),
         overlineContent = { Text(label) },
-        trailingContent = { Text("bearbeiten", color = CpColors.TextMuted) },
-        modifier = Modifier.width(width.dp),
+        headlineContent = { Text(shown, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        trailingContent = { Text("bearbeiten", style = MaterialTheme.typography.labelSmall) },
+        modifier = Modifier.fillMaxWidth(),
     )
 
     if (editing) {
@@ -297,7 +537,7 @@ private fun TextFieldButton(
         Dialog(onDismissRequest = { editing = false }) {
             Column(
                 Modifier
-                    .width((width + 48).dp)
+                    .width(600.dp)
                     .background(CpColors.Surface, RoundedCornerShape(16.dp))
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -312,12 +552,12 @@ private fun TextFieldButton(
                     keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { accept() }),
                     modifier = Modifier
-                        .width(width.dp)
+                        .fillMaxWidth()
                         .focusRequester(fieldFocus),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { accept() }) { Text("Übernehmen") }
-                    Button(onClick = { editing = false }) { Text("Abbrechen") }
+                    PrimaryPill("Übernehmen") { accept() }
+                    SecondaryPill("Abbrechen") { editing = false }
                 }
             }
         }

@@ -2,7 +2,7 @@ package de.koeven.couchpotato.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -30,14 +31,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
 import androidx.tv.material3.ListItem
+import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import de.koeven.couchpotato.data.LiveCategory
@@ -63,18 +65,21 @@ private sealed interface BrowseMenu {
     data class Channel(val channel: LiveChannel) : BrowseMenu
 }
 
+private val GridGap = 14.dp
+
 /**
- * "Mediathek": browse the provider's catalogue by category.
- * Focusing a category (briefly) loads it; long OK on a category hides/shows it everywhere.
+ * "Mediathek" (design B): categories on the left with their number of titles,
+ * the chosen category as a poster grid on the right. Everything comes from the
+ * local catalogue – browsing never sends a request to the provider.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
+fun BrowseScreen(vm: HomeViewModel, kind: Char, onOpenSeries: (Long, String) -> Unit) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
 
-    var kind by remember { mutableStateOf(vm.browseKind) }
     var categories by remember { mutableStateOf<List<LiveCategory>?>(null) }
+    var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var catError by remember { mutableStateOf<String?>(null) }
     var selectedId by remember { mutableStateOf(vm.browseCategoryId) }
     var focusedId by remember { mutableStateOf<String?>(null) }
@@ -89,23 +94,23 @@ fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
     val visibleCats = categories.orEmpty().filter { editing || showHidden || !isHidden(it) }
     val hiddenCount = categories.orEmpty().count { isHidden(it) }
     val favIds = state.favorites.map { it.id }.toSet()
-
-    // leaving the screen while editing: apply the changes (refill "Neue Filme/Serien")
-    DisposableEffect(Unit) {
-        onDispose { vm.applyCategoryChanges() }
+    val unit = when (kind) {
+        SearchEntry.KIND_MOVIE -> "Filme"
+        SearchEntry.KIND_SERIES -> "Serien"
+        else -> "Sender"
     }
+
+    DisposableEffect(Unit) { onDispose { vm.applyCategoryChanges() } }
     fun finishEditing() {
         editing = false
         vm.applyCategoryChanges()
     }
 
-    // load the category list of the current tab
     LaunchedEffect(kind) {
         vm.browseKind = kind
-        categories = null
-        catError = null
         try {
             val cats = vm.allCategories(kind)
+            counts = vm.categoryCounts(kind)
             categories = cats
             val firstVisible = cats.firstOrNull { "$kind:${it.id}" !in vm.state.value.hiddenCategories }
             if (selectedId == null || cats.none { it.id == selectedId }) selectedId = firstVisible?.id
@@ -116,14 +121,14 @@ fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
         }
     }
 
-    // focusing a category selects it after a short pause (no request for every category you scroll past)
+    // focusing a category shows it after a short pause, so scrolling through the list stays smooth
     LaunchedEffect(focusedId) {
         val id = focusedId ?: return@LaunchedEffect
-        delay(700)   // only load when you stay on a category (the provider limits requests)
+        if (editing) return@LaunchedEffect
+        delay(450)
         selectedId = id
     }
 
-    // load the selected category
     LaunchedEffect(kind, selectedId) {
         val id = selectedId ?: return@LaunchedEffect
         vm.browseCategoryId = id
@@ -148,187 +153,182 @@ fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
         }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = ScreenPadding, vertical = 32.dp)
-    ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "Mediathek",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(end = 20.dp),
-            )
-            for ((k, label) in listOf(
-                SearchEntry.KIND_LIVE to "Live-TV",
-                SearchEntry.KIND_MOVIE to "Filme",
-                SearchEntry.KIND_SERIES to "Serien",
-            )) {
-                FilterChip(selected = kind == k, onClick = {
-                    if (kind != k) {
-                        kind = k
-                        selectedId = null
-                        focusedId = null
-                        showHidden = false
-                    }
-                }) { Text(label) }
-            }
-            Spacer(Modifier.weight(1f))
-            val cats = categories.orEmpty()
-            if (editing) {
-                Button(onClick = {
-                    vm.setCategoriesHidden(kind, cats.map { it.id }, hidden = true, refresh = false)
-                }) { Text("Alle ausblenden") }
-                Button(onClick = {
-                    vm.setCategoriesHidden(kind, cats.map { it.id }, hidden = false, refresh = false)
-                }) { Text("Alle einblenden") }
-                Button(onClick = { finishEditing() }) { Text("Fertig") }
-            } else if (cats.isNotEmpty()) {
-                Button(onClick = { editing = true }) { Text("Kategorien bearbeiten") }
-            }
-        }
-        Text(
-            if (editing) {
-                val visible = categories.orEmpty().count { !isHidden(it) }
-                "OK schaltet eine Kategorie an oder aus · $visible von ${categories.orEmpty().size} sichtbar · " +
-                    "gilt auch für Neue Filme/Serien, Live-TV und Suche"
-            } else {
-                "Kategorien ein- oder ausblenden: „Kategorien bearbeiten“ oben rechts oder lange OK auf einer Kategorie."
+    Column(Modifier.fillMaxSize()) {
+        TopBar(
+            active = when (kind) {
+                SearchEntry.KIND_MOVIE -> NavTab.Movies
+                SearchEntry.KIND_SERIES -> NavTab.Series
+                else -> NavTab.Live
             },
-            style = MaterialTheme.typography.bodySmall,
-            color = if (editing) CpColors.Accent else CpColors.TextMuted,
-            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
+        Spacer(Modifier.height(22.dp))
 
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            // ---- categories ----
-            LazyColumn(
-                modifier = Modifier.width(300.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                contentPadding = PaddingValues(bottom = 32.dp),
-            ) {
-                when {
-                    catError != null -> item { Text(catError ?: "", color = CpColors.Error) }
-                    categories == null -> item { Text("Lade Kategorien …", color = CpColors.TextMuted) }
-                }
-                itemsIndexed(visibleCats, key = { _, c -> "$kind-${c.id}" }) { i, cat ->
-                    val hidden = isHidden(cat)
-                    val isSelected = cat.id == selectedId
-                    val wantsFocus = isSelected || (selectedId == null && i == 0)
-                    val trailing: (@Composable () -> Unit)? = if (editing) {
-                        {
-                            Text(
-                                if (hidden) "aus" else "✓ an",
-                                color = if (hidden) CpColors.TextMuted else CpColors.Accent,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+        Row(
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = ScreenPadding),
+            horizontalArrangement = Arrangement.spacedBy(28.dp),
+        ) {
+            // ---------------- categories ----------------
+            Column(Modifier.width(250.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Kategorien",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (categories.orEmpty().isNotEmpty()) {
+                        TabPill(if (editing) "Fertig" else "Bearbeiten", selected = editing) {
+                            if (editing) finishEditing() else editing = true
                         }
-                    } else null
-                    val supporting: (@Composable () -> Unit)? =
-                        if (hidden) { { Text("ausgeblendet", color = CpColors.TextMuted) } } else null
-                    ListItem(
-                        selected = isSelected && !editing,
-                        onClick = {
-                            if (editing) vm.setCategoriesHidden(kind, listOf(cat.id), !hidden, refresh = false)
-                            else selectedId = cat.id
-                        },
-                        onLongClick = { if (!editing) menu = BrowseMenu.Category(cat, hidden) },
-                        trailingContent = trailing,
-                        headlineContent = {
-                            Text(
-                                cat.name,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = if (hidden) CpColors.TextMuted else CpColors.Text,
-                            )
-                        },
-                        supportingContent = supporting,
-                        modifier = Modifier
-                            .onFocusChanged { if (it.isFocused) focusedId = cat.id }
-                            .then(if (wantsFocus) Modifier.focusRequester(selectedFocus) else Modifier),
+                    }
+                }
+                if (editing) {
+                    val cats = categories.orEmpty()
+                    Row(Modifier.padding(top = 10.dp)) {
+                        TabPill("Alle aus", false) {
+                            vm.setCategoriesHidden(kind, cats.map { it.id }, hidden = true, refresh = false)
+                        }
+                        TabPill("Alle an", false) {
+                            vm.setCategoriesHidden(kind, cats.map { it.id }, hidden = false, refresh = false)
+                        }
+                    }
+                    Text(
+                        "OK schaltet eine Kategorie an oder aus · ${cats.count { !isHidden(it) }} von ${cats.size} sichtbar",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CpColors.Accent,
+                        modifier = Modifier.padding(top = 8.dp),
                     )
                 }
-                if (!editing && categories != null && (hiddenCount > 0 || showHidden)) {
-                    item(key = "toggle-hidden") {
-                        Spacer(Modifier.height(8.dp))
-                        ListItem(
-                            selected = false,
-                            onClick = { showHidden = !showHidden },
-                            headlineContent = {
-                                Text(
-                                    if (showHidden) "Ausgeblendete verbergen" else "Ausgeblendete anzeigen ($hiddenCount)",
-                                    color = CpColors.Accent,
-                                )
+                Spacer(Modifier.height(10.dp))
+
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    contentPadding = PaddingValues(bottom = 40.dp),
+                ) {
+                    when {
+                        catError != null -> item { Text(catError ?: "", color = CpColors.Error) }
+                        categories == null -> item { Text("Lade Kategorien …", color = CpColors.TextMuted) }
+                    }
+                    itemsIndexed(visibleCats, key = { _, c -> "$kind-${c.id}" }) { i, cat ->
+                        val hidden = isHidden(cat)
+                        val isSelected = cat.id == selectedId
+                        val wantsFocus = isSelected || (selectedId == null && i == 0)
+                        CategoryRow(
+                            name = cat.name,
+                            trailing = if (editing) (if (hidden) "aus" else "✓ an") else (counts[cat.id]?.toString() ?: ""),
+                            trailingAccent = editing && !hidden,
+                            selected = isSelected && !editing,
+                            dimmed = hidden,
+                            onClick = {
+                                if (editing) vm.setCategoriesHidden(kind, listOf(cat.id), !hidden, refresh = false)
+                                else selectedId = cat.id
                             },
+                            onLongClick = { if (!editing) menu = BrowseMenu.Category(cat, hidden) },
+                            modifier = Modifier
+                                .onFocusChanged { if (it.isFocused) focusedId = cat.id }
+                                .then(if (wantsFocus) Modifier.focusRequester(selectedFocus) else Modifier),
+                        )
+                    }
+                    if (!editing && categories != null && (hiddenCount > 0 || showHidden)) {
+                        item(key = "toggle-hidden") {
+                            Spacer(Modifier.height(8.dp))
+                            CategoryRow(
+                                name = if (showHidden) "Ausgeblendete verbergen" else "Ausgeblendete anzeigen",
+                                trailing = if (showHidden) "" else hiddenCount.toString(),
+                                trailingAccent = true,
+                                selected = false,
+                                dimmed = false,
+                                accent = true,
+                                onClick = { showHidden = !showHidden },
+                                onLongClick = {},
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ---------------- titles ----------------
+            Column(Modifier.weight(1f)) {
+                val selectedCat = categories.orEmpty().firstOrNull { it.id == selectedId }
+                val total = when (val c = content) {
+                    is BrowseContent.Movies -> c.items.size
+                    is BrowseContent.Series -> c.items.size
+                    is BrowseContent.Live -> c.items.size
+                    else -> null
+                }
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        selectedCat?.name ?: "Mediathek",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (total != null) {
+                        Text(
+                            "  ·  $total $unit" + if (kind != SearchEntry.KIND_LIVE) " · neueste zuerst" else "",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = CpColors.TextMuted,
+                            modifier = Modifier.padding(bottom = 3.dp),
                         )
                     }
                 }
-            }
+                Spacer(Modifier.height(12.dp))
 
-            // ---- items ----
-            Box(Modifier.weight(1f)) {
-                when (val c = content) {
-                    BrowseContent.Loading ->
-                        if (selectedId != null) Text("Lade …", color = CpColors.TextMuted) else Unit
-                    is BrowseContent.Error -> Text(c.message, color = CpColors.Error)
-                    is BrowseContent.Movies -> if (c.items.isEmpty()) {
-                        Text("Keine Filme in dieser Kategorie.", color = CpColors.TextMuted)
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(PosterWidth + 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(20.dp),
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp, end = 8.dp),
-                        ) {
-                            itemsIndexed(c.items, key = { _, m -> m.id }) { _, movie ->
-                                PosterCard(
-                                    title = movie.name,
-                                    image = movie.image,
-                                    onClick = { Playback.start(context, listOf(PlayItem.movie(movie))) },
-                                )
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val posterCols = 8
+                    val liveCols = 5
+                    val posterW = cellWidth(maxWidth, posterCols)
+                    val liveW = cellWidth(maxWidth, liveCols)
+                    when (val c = content) {
+                        BrowseContent.Loading ->
+                            if (selectedId != null) Text("Lade …", color = CpColors.TextMuted)
+                        is BrowseContent.Error -> Text(c.message, color = CpColors.Error)
+                        is BrowseContent.Movies -> if (c.items.isEmpty()) {
+                            Text("Keine Filme in dieser Kategorie.", color = CpColors.TextMuted)
+                        } else {
+                            TitleGrid(posterCols) {
+                                itemsIndexed(c.items, key = { _, m -> m.id }) { _, movie ->
+                                    PosterCard(
+                                        title = movie.name,
+                                        image = movie.image,
+                                        width = posterW,
+                                        onClick = { Playback.start(context, listOf(PlayItem.movie(movie))) },
+                                    )
+                                }
                             }
                         }
-                    }
-                    is BrowseContent.Series -> if (c.items.isEmpty()) {
-                        Text("Keine Serien in dieser Kategorie.", color = CpColors.TextMuted)
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(PosterWidth + 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(20.dp),
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp, end = 8.dp),
-                        ) {
-                            itemsIndexed(c.items, key = { _, s -> s.id }) { _, series ->
-                                PosterCard(
-                                    title = series.name,
-                                    image = series.image,
-                                    onClick = { onOpenSeries(series.id, series.name) },
-                                )
+                        is BrowseContent.Series -> if (c.items.isEmpty()) {
+                            Text("Keine Serien in dieser Kategorie.", color = CpColors.TextMuted)
+                        } else {
+                            TitleGrid(posterCols) {
+                                itemsIndexed(c.items, key = { _, s -> s.id }) { _, series ->
+                                    PosterCard(
+                                        title = series.name,
+                                        image = series.image,
+                                        width = posterW,
+                                        onClick = { onOpenSeries(series.id, series.name) },
+                                    )
+                                }
                             }
                         }
-                    }
-                    is BrowseContent.Live -> if (c.items.isEmpty()) {
-                        Text("Keine Sender in dieser Kategorie.", color = CpColors.TextMuted)
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(ChannelWidth + 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp, end = 8.dp),
-                        ) {
-                            itemsIndexed(c.items, key = { _, ch -> ch.id }) { i, ch ->
-                                ChannelCard(
-                                    name = (if (ch.id in favIds) "★ " else "") + ch.name,
-                                    logo = ch.logo,
-                                    nowPlaying = null,
-                                    onClick = { vm.playLive(context, c.items, i) },
-                                    onLongClick = { menu = BrowseMenu.Channel(ch) },
-                                )
+                        is BrowseContent.Live -> if (c.items.isEmpty()) {
+                            Text("Keine Sender in dieser Kategorie.", color = CpColors.TextMuted)
+                        } else {
+                            TitleGrid(liveCols) {
+                                itemsIndexed(c.items, key = { _, ch -> ch.id }) { i, ch ->
+                                    ChannelCard(
+                                        name = (if (ch.id in favIds) "★ " else "") + ch.name,
+                                        logo = ch.logo,
+                                        nowPlaying = state.nowPlaying[ch.id],
+                                        width = liveW,
+                                        onClick = { vm.playLive(context, c.items, i) },
+                                        onLongClick = { menu = BrowseMenu.Channel(ch) },
+                                    )
+                                }
                             }
                         }
                     }
@@ -353,6 +353,7 @@ fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
                         ).show()
                     }
                 },
+                MenuAction("Kategorien bearbeiten") { editing = true },
             ),
             onDismiss = { menu = null },
         )
@@ -367,4 +368,72 @@ fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
         )
         null -> Unit
     }
+}
+
+private fun cellWidth(total: Dp, columns: Int): Dp =
+    (total - GridGap * (columns - 1) - 8.dp) / columns
+
+@Composable
+private fun TitleGrid(
+    columns: Int,
+    content: androidx.compose.foundation.lazy.grid.LazyGridScope.() -> Unit,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
+        horizontalArrangement = Arrangement.spacedBy(GridGap),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp, end = 8.dp, start = 2.dp),
+        content = content,
+    )
+}
+
+/** One line of the category list: name left, number (or on/off while editing) right. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun CategoryRow(
+    name: String,
+    trailing: String,
+    trailingAccent: Boolean,
+    selected: Boolean,
+    dimmed: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accent: Boolean = false,
+) {
+    ListItem(
+        selected = selected,
+        onClick = onClick,
+        onLongClick = onLongClick,
+        shape = ListItemDefaults.shape(RoundedCornerShape(10.dp)),
+        colors = ListItemDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = if (dimmed) CpColors.TextMuted else CpColors.Text,
+            selectedContainerColor = Color.White.copy(alpha = 0.14f),
+            selectedContentColor = CpColors.Text,
+            focusedContainerColor = CpColors.Text,
+            focusedContentColor = CpColors.Background,
+        ),
+        scale = ListItemDefaults.scale(focusedScale = 1.02f),
+        headlineContent = {
+            Text(
+                name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (accent) CpColors.Accent else Color.Unspecified,
+            )
+        },
+        trailingContent = {
+            if (trailing.isNotEmpty()) {
+                Text(
+                    trailing,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (trailingAccent) CpColors.Accent else Color.Unspecified,
+                )
+            }
+        },
+        modifier = modifier.fillMaxWidth(),
+    )
 }

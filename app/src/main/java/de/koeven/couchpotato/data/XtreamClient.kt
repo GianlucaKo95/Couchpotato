@@ -359,6 +359,8 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
             name = info?.str("name") ?: fallbackName,
             cover = info?.str("cover")?.takeIf { it.startsWith("http") },
             plot = info?.str("plot"),
+            genre = info?.str("genre"),
+            year = (info?.str("releaseDate") ?: info?.str("release_date") ?: info?.str("year"))?.take(4)?.takeIf { y -> y.all { it.isDigit() } },
             episodes = episodes.sortedWith(compareBy({ it.season }, { it.number })),
         )
     }
@@ -370,7 +372,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         private const val MIN_GAP_MS = 2_500L
         private const val HOUR_MS = 60 * 60 * 1000L
         /** Hard cap for everything in one hour (a normal day needs ~6 for the sync). */
-        private const val MAX_PER_HOUR = 40
+        const val MAX_PER_HOUR = 40
         /** Background work (sync, "Jetzt läuft") stops earlier, so you still have room to browse. */
         private const val BACKGROUND_PER_HOUR = 20
         private const val COOLDOWN_MS = 15 * 60 * 1000L
@@ -378,7 +380,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
 
         /** Pictures that live on the provider's own server: one at a time, own hourly budget. */
         private const val IMAGE_GAP_MS = 1_200L
-        private const val IMAGES_PER_HOUR = 60
+        const val IMAGES_PER_HOUR = 60
 
         private val requestLog = ArrayDeque<Long>()
         private val imageLog = ArrayDeque<Long>()

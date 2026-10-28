@@ -8,6 +8,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -15,15 +17,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import de.koeven.couchpotato.data.ImageGate
+import de.koeven.couchpotato.data.SearchEntry
 import de.koeven.couchpotato.data.SettingsStore
 import de.koeven.couchpotato.data.XtreamConfig
 
 private sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
-    data object Live : Screen
     data object Search : Screen
-    data object Browse : Screen
+    data class Browse(val kind: Char) : Screen
     data class Series(val id: Long, val name: String) : Screen
 }
 
@@ -91,26 +93,40 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
 
     LaunchedEffect(homeTick) { stack = listOf(Screen.Home) }
 
+    // The tabs of the top bar switch areas: Start = home, the others = Mediathek on that tab.
+    val nav = remember {
+        NavActions(
+            home = { stack = listOf(Screen.Home) },
+            browse = { kind ->
+                vm.browseKind = kind
+                vm.browseCategoryId = null
+                stack = listOf(Screen.Home, Screen.Browse(kind))
+            },
+            search = { if (stack.lastOrNull() != Screen.Search) stack = stack + Screen.Search },
+            settings = { if (stack.lastOrNull() != Screen.Settings) stack = stack + Screen.Settings },
+        )
+    }
+
     // A launcher must never close on Back; sub-screens go back one step.
     BackHandler(enabled = true) { back() }
 
-    when (val s = stack.last()) {
-        Screen.Home -> HomeScreen(
-            vm = vm,
-            homeTick = homeTick,
-            onOpenSeries = { go(Screen.Series(it.id, it.name)) },
-            onOpenSettings = { go(Screen.Settings) },
-            onOpenLive = { go(Screen.Live) },
-            onOpenSearch = { go(Screen.Search) },
-            onOpenBrowse = { kind ->
-                vm.browseKind = kind
-                go(Screen.Browse)
-            },
-        )
-        Screen.Browse -> BrowseScreen(vm = vm, onOpenSeries = { id, name -> go(Screen.Series(id, name)) })
-        Screen.Live -> LiveScreen(vm = vm)
-        Screen.Search -> SearchScreen(vm = vm, onOpenSeries = { id, name -> go(Screen.Series(id, name)) })
-        Screen.Settings -> SettingsScreen(vm = vm, onDone = back)
-        is Screen.Series -> SeriesScreen(vm = vm, seriesId = s.id, name = s.name)
+    CompositionLocalProvider(LocalNav provides nav) {
+        when (val s = stack.last()) {
+            Screen.Home -> HomeScreen(
+                vm = vm,
+                homeTick = homeTick,
+                onOpenSeries = { go(Screen.Series(it.id, it.name)) },
+                onOpenSettings = nav.settings,
+                onOpenLive = { nav.browse(SearchEntry.KIND_LIVE) },   // "Sender verwalten" = Mediathek Live-TV
+                onOpenSearch = nav.search,
+                onOpenBrowse = nav.browse,
+            )
+            is Screen.Browse -> key(s.kind) {
+                BrowseScreen(vm = vm, kind = s.kind, onOpenSeries = { id, name -> go(Screen.Series(id, name)) })
+            }
+            Screen.Search -> SearchScreen(vm = vm, onOpenSeries = { id, name -> go(Screen.Series(id, name)) }, onClose = back)
+            Screen.Settings -> SettingsScreen(vm = vm, onDone = back)
+            is Screen.Series -> SeriesScreen(vm = vm, seriesId = s.id, name = s.name)
+        }
     }
 }

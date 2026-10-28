@@ -141,47 +141,16 @@ fun HomeScreen(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 18.dp, bottom = 48.dp),
+        contentPadding = PaddingValues(top = 0.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),   // groups sit close together, like Fire OS
     ) {
         item {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = ScreenPadding),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.logo_mark),
-                    contentDescription = "Couchpotato",
-                    modifier = Modifier
-                        .height(46.dp)
-                        .aspectRatio(228f / 148f),
-                )
-                Spacer(Modifier.width(22.dp))
-                // design B: tab bar; Live-TV / Filme / Serien open the Mediathek on that tab
-                NavTab("Start", selected = true, onClick = {
-                    scope.launch { listState.animateScrollToItem(0) }
-                })
-                if (state.configured) {
-                    NavTab("Live-TV", selected = false, onClick = { onOpenBrowse(SearchEntry.KIND_LIVE) })
-                    NavTab("Filme", selected = false, onClick = { onOpenBrowse(SearchEntry.KIND_MOVIE) })
-                    NavTab("Serien", selected = false, onClick = { onOpenBrowse(SearchEntry.KIND_SERIES) })
-                }
-                if (state.loading) {
-                    Text(
-                        "  aktualisiere …",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = CpColors.TextMuted,
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                HeaderIcon(R.drawable.ic_search, "Suchen", onOpenSearch)
-                Spacer(Modifier.width(8.dp))
-                HeaderIcon(R.drawable.ic_settings, "Einstellungen", onOpenSettings)
-                Spacer(Modifier.width(18.dp))
-                Clock()
-            }
+            TopBar(
+                active = NavTab.Start,
+                showContentTabs = state.configured,
+                status = if (state.loading) "aktualisiere …" else null,
+                onStart = { scope.launch { listState.animateScrollToItem(0) } },
+            )
         }
         item { Spacer(Modifier.height(18.dp)) }   // space between tab bar and the first row
 
@@ -397,46 +366,5 @@ private suspend fun LazyListState.keepVisible(index: Int) {
     when {
         index <= first -> animateScrollToItem((index - 1).coerceAtLeast(0))
         index >= last -> animateScrollToItem((index - visible.size + 2).coerceAtLeast(0))
-    }
-}
-
-/** Round icon button for the header (magnifier, gear). */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun HeaderIcon(icon: Int, description: String, onClick: () -> Unit) {
-    IconButton(
-        onClick = onClick,
-        colors = IconButtonDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.10f),
-            contentColor = CpColors.Text,
-            focusedContainerColor = CpColors.Text,
-            focusedContentColor = CpColors.Background,
-        ),
-    ) {
-        Icon(
-            painter = painterResource(icon),
-            contentDescription = description,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-}
-
-/** Pill-shaped tab of the top bar. */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun NavTab(label: String, selected: Boolean, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        shape = ButtonDefaults.shape(RoundedCornerShape(50)),
-        colors = ButtonDefaults.colors(
-            containerColor = if (selected) CpColors.Text else Color.White.copy(alpha = 0.06f),
-            contentColor = if (selected) CpColors.Background else CpColors.Text,
-            focusedContainerColor = CpColors.Accent,
-            focusedContentColor = CpColors.OnAccent,
-        ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-        modifier = Modifier.padding(end = 6.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
     }
 }

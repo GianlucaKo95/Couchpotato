@@ -1,185 +1,351 @@
 package de.koeven.couchpotato.ui
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import de.koeven.couchpotato.R
 import de.koeven.couchpotato.data.LiveChannel
 import de.koeven.couchpotato.data.PlayItem
+import de.koeven.couchpotato.data.SearchEntry
 import de.koeven.couchpotato.data.VodItem
 import de.koeven.couchpotato.player.Playback
 import kotlinx.coroutines.delay
-import androidx.compose.material3.MaterialTheme as M3Theme
-import androidx.compose.material3.Text as M3Text
-import androidx.compose.material3.darkColorScheme as m3DarkColorScheme
 
+private val SearchBackground = Color(0xFF0E4247)
+private val KeyGap = 6.dp
+private const val KEY_COLUMNS = 7
+
+private val LETTERS = "abcdefghijklmnopqrstuvwxyzäöüß".map { it.toString() }
+private val DIGITS = "1234567890-.:'&!?+#/()".map { it.toString() }
+
+/**
+ * Search as its own full-screen window, like on Fire OS 8: a keyboard made for the remote
+ * on the left (no system keyboard), suggestions and results on the right.
+ * Searches only the catalogue stored on the stick – typing never reaches the provider.
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun SearchScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
+fun SearchScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
     val results by vm.search.collectAsState()
     val query by vm.searchQuery.collectAsState()
-    val keyboard = LocalSoftwareKeyboardController.current
-    val fieldFocus = remember { FocusRequester() }
+    var digits by remember { mutableStateOf(false) }
+    var recent by remember { mutableStateOf(vm.recentSearches()) }
+    val firstKey = remember { FocusRequester() }
     val favIds = state.favorites.map { it.id }.toSet()
+
+    BackHandler { onClose() }
 
     LaunchedEffect(Unit) {
         vm.prepareSearch()
-        // only jump into the text field (and pop up the keyboard) for a fresh search
-        if (vm.searchQuery.value.isBlank()) {
-            delay(150)
-            runCatching { fieldFocus.requestFocus() }
-        }
+        delay(150)
+        runCatching { firstKey.requestFocus() }
     }
 
-    // search while typing (short pause so the stick isn't busy on every key)
     LaunchedEffect(query) {
-        delay(300)
+        delay(250)
         vm.runSearch(query)
     }
 
-    val liveChannels = results.live.map { LiveChannel(it.id, it.name, it.image, null) }
-    val showResults = query.trim().length >= 2
+    fun type(s: String) = vm.setQuery(query + s)
+    fun saveQuery(q: String = query) {
+        vm.rememberSearch(q)
+        recent = vm.recentSearches()
+    }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 36.dp, bottom = 64.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-    ) {
-        item {
-            Column(Modifier.padding(horizontal = ScreenPadding)) {
-                Text("Suchen", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                M3Theme(
-                    colorScheme = m3DarkColorScheme(
-                        primary = CpColors.Accent,
-                        surface = CpColors.Surface,
-                        onSurface = CpColors.Text,
-                        background = CpColors.Background,
-                    )
-                ) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = vm::setQuery,
-                        label = { M3Text("Film, Serie oder Sender") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .width(640.dp)
-                            .focusRequester(fieldFocus),
-                    )
-                }
-                Text(
-                    state.indexStatus,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = CpColors.TextMuted,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+    val q = query.trim()
+    val showResults = q.length >= 2
+    val titles: List<SearchEntry> = remember(results) {
+        // films and series together, alternating so both kinds show up front
+        val m = results.movies
+        val s = results.series
+        buildList {
+            for (i in 0 until maxOf(m.size, s.size)) {
+                m.getOrNull(i)?.let { add(it) }
+                s.getOrNull(i)?.let { add(it) }
             }
         }
+    }
+    val liveChannels = results.live.map { LiveChannel(it.id, it.name, it.image, null) }
+    val suggestions: List<String> = if (showResults) {
+        (recent.filter { it.contains(q, ignoreCase = true) && !it.equals(q, ignoreCase = true) } +
+            titles.map { it.name.substringBefore(" (").trim() })
+            .distinctBy { it.lowercase() }
+            .filterNot { it.equals(q, ignoreCase = true) }
+            .take(6)
+    } else {
+        recent.take(6)
+    }
 
-        if (showResults) {
-            if (results.movies.isNotEmpty()) {
-                item(key = "movies") {
-                    Shelf("Filme (${results.movies.size})") {
-                        items(results.movies, key = { "m${it.id}" }) { e ->
-                            PosterCard(
-                                title = e.name,
-                                image = e.image,
-                                onClick = {
-                                    Playback.start(context, listOf(PlayItem.movie(VodItem(e.id, e.name, e.image, 0, e.ext))))
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-            if (results.series.isNotEmpty()) {
-                item(key = "series") {
-                    Shelf("Serien (${results.series.size})") {
-                        items(results.series, key = { "s${it.id}" }) { e ->
-                            PosterCard(title = e.name, image = e.image, onClick = { onOpenSeries(e.id, e.name) })
-                        }
-                    }
-                }
-            }
-            if (results.live.isNotEmpty()) {
-                item(key = "live") {
-                    Shelf("Live-TV (${results.live.size}) · lange OK = Favorit") {
-                        itemsIndexed(liveChannels, key = { _, ch -> "l${ch.id}" }) { i, ch ->
-                            ChannelCard(
-                                name = ch.name,
-                                logo = ch.logo,
-                                nowPlaying = null,
-                                onClick = { vm.playLive(context, liveChannels, i) },
-                                onLongClick = {
-                                    val wasFav = ch.id in favIds
-                                    vm.toggleFavorite(ch)
-                                    Toast.makeText(
-                                        context,
-                                        if (wasFav) "${ch.name} aus Favoriten entfernt" else "${ch.name} zu Favoriten hinzugefügt",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-            if (results.isEmpty && results.query == query && state.configured) {
-                item {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(SearchBackground)
+    ) {
+        Row(Modifier.fillMaxSize().padding(start = ScreenPadding, top = 32.dp)) {
+            // ---------------- search field + keyboard ----------------
+            val keyWidth = 50.dp
+            val boardWidth = keyWidth * KEY_COLUMNS + KeyGap * (KEY_COLUMNS - 1)
+            Column(Modifier.width(boardWidth).fillMaxHeight()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(50))
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_search),
+                        contentDescription = null,
+                        tint = CpColors.TextMuted,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
                     Text(
-                        "Keine Treffer bei deinem IPTV-Anbieter.",
-                        color = CpColors.TextMuted,
-                        modifier = Modifier.padding(horizontal = ScreenPadding),
+                        if (query.isEmpty()) "Filme, Serien, Sender …" else "${query.takeLast(26)}▏",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (query.isEmpty()) CpColors.TextMuted else CpColors.Text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Clip,
                     )
                 }
+                Spacer(Modifier.height(16.dp))
+
+                val keys = if (digits) DIGITS else LETTERS
+                Column(verticalArrangement = Arrangement.spacedBy(KeyGap)) {
+                    keys.chunked(KEY_COLUMNS).forEachIndexed { r, row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
+                            row.forEachIndexed { c, k ->
+                                Key(
+                                    k,
+                                    keyWidth,
+                                    Modifier.then(if (r == 0 && c == 0) Modifier.focusRequester(firstKey) else Modifier),
+                                ) { type(k) }
+                            }
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
+                        Key("Leerzeichen", keyWidth * 3 + KeyGap * 2) { if (query.isNotEmpty() && !query.endsWith(" ")) type(" ") }
+                        Key("⌫ Löschen", keyWidth * 2 + KeyGap) { vm.setQuery(query.dropLast(1)) }
+                        Key(if (digits) "abc" else "123", keyWidth * 2 + KeyGap) { digits = !digits }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
+                        Key("Alles löschen", keyWidth * 4 + KeyGap * 3, muted = true) { vm.setQuery("") }
+                        Key("Schließen", keyWidth * 3 + KeyGap * 2, muted = true) { onClose() }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "Zurück = schließen",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CpColors.TextMuted,
+                )
+                Text(
+                    state.indexStatus,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CpColors.TextMuted,
+                    maxLines = 2,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
 
-            item(key = "apps") {
-                Shelf("„${query.trim()}“ in anderen Apps suchen") {
-                    item(key = "global") {
-                        TileCard(
-                            label = "Fire TV\nGesamtsuche",
-                            onClick = { vm.openGlobalSearch(context, query.trim()) },
-                        )
+            Spacer(Modifier.width(36.dp))
+
+            // ---------------- suggestions + results ----------------
+            LazyColumn(
+                Modifier.weight(1f).fillMaxHeight(),
+                contentPadding = PaddingValues(bottom = 48.dp),
+                verticalArrangement = Arrangement.spacedBy(22.dp),
+            ) {
+                if (suggestions.isNotEmpty()) {
+                    item(key = "suggest") {
+                        Section(if (showResults) "Vorschläge" else "Zuletzt gesucht") {
+                            items(suggestions, key = { "sg-$it" }) { s ->
+                                TabPill(s, selected = false) { vm.setQuery(s) }
+                            }
+                        }
                     }
-                    items(state.searchApps, key = { it.app.packageName }) { sa ->
-                        AppCard(
-                            app = sa.app,
-                            onClick = { vm.searchInApp(context, sa, query.trim()) },
-                            onLongClick = { vm.searchInApp(context, sa, query.trim()) },
+                } else if (!showResults) {
+                    item(key = "hint") {
+                        Text(
+                            "Tippe mit der Fernbedienung – Treffer erscheinen hier, schon ab zwei Buchstaben.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = CpColors.TextMuted,
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                 }
+
+                if (showResults) {
+                    if (titles.isNotEmpty()) {
+                        item(key = "titles") {
+                            Section("Filme & Serien (${titles.size})") {
+                                items(titles, key = { "${it.kind}${it.id}" }) { e ->
+                                    PosterCard(
+                                        title = e.name,
+                                        image = e.image,
+                                        onClick = {
+                                            saveQuery()
+                                            if (e.kind == SearchEntry.KIND_SERIES) {
+                                                onOpenSeries(e.id, e.name)
+                                            } else {
+                                                Playback.start(
+                                                    context,
+                                                    listOf(PlayItem.movie(VodItem(e.id, e.name, e.image, 0, e.ext))),
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (liveChannels.isNotEmpty()) {
+                        item(key = "live") {
+                            Section("Live-TV (${liveChannels.size}) · lange OK = Favorit") {
+                                itemsIndexed(liveChannels, key = { _, ch -> "l${ch.id}" }) { i, ch ->
+                                    ChannelCard(
+                                        name = (if (ch.id in favIds) "★ " else "") + ch.name,
+                                        logo = ch.logo,
+                                        nowPlaying = state.nowPlaying[ch.id],
+                                        onClick = {
+                                            saveQuery()
+                                            vm.playLive(context, liveChannels, i)
+                                        },
+                                        onLongClick = {
+                                            val wasFav = ch.id in favIds
+                                            vm.toggleFavorite(ch)
+                                            Toast.makeText(
+                                                context,
+                                                if (wasFav) "${ch.name} aus Favoriten entfernt" else "${ch.name} zu Favoriten hinzugefügt",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (results.isEmpty && results.query == query && state.configured) {
+                        item(key = "none") {
+                            Text("Keine Treffer bei deinem IPTV-Anbieter.", color = CpColors.TextMuted)
+                        }
+                    }
+                    item(key = "apps") {
+                        Section("„$q“ in Apps suchen") {
+                            item(key = "global") {
+                                TileCard(
+                                    label = "Fire TV\nGesamtsuche",
+                                    onClick = {
+                                        saveQuery()
+                                        vm.openGlobalSearch(context, q)
+                                    },
+                                )
+                            }
+                            items(state.searchApps, key = { it.app.packageName }) { sa ->
+                                AppCard(
+                                    app = sa.app,
+                                    onClick = {
+                                        saveQuery()
+                                        vm.searchInApp(context, sa, q)
+                                    },
+                                    onLongClick = { vm.searchInApp(context, sa, q) },
+                                )
+                            }
+                        }
+                    }
+                }
             }
+        }
+    }
+}
+
+/** A titled horizontal row inside the result column (no screen padding – the column already has it). */
+@Composable
+private fun Section(title: String, content: LazyListScope.() -> Unit) {
+    Column {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        LazyRow(
+            contentPadding = PaddingValues(top = 8.dp, bottom = 4.dp, end = ScreenPadding, start = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun Key(
+    label: String,
+    width: Dp,
+    modifier: Modifier = Modifier,
+    muted: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        shape = ButtonDefaults.shape(RoundedCornerShape(10.dp)),
+        colors = ButtonDefaults.colors(
+            containerColor = Color.White.copy(alpha = if (muted) 0.05f else 0.09f),
+            contentColor = if (muted) CpColors.TextMuted else CpColors.Text,
+            focusedContainerColor = CpColors.Text,
+            focusedContentColor = SearchBackground,
+        ),
+        scale = ButtonDefaults.scale(focusedScale = 1.08f),
+        contentPadding = PaddingValues(0.dp),
+        modifier = modifier.width(width).height(42.dp),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                style = if (label.length == 1) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
         }
     }
 }

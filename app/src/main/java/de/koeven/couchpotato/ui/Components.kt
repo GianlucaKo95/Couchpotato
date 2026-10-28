@@ -60,18 +60,18 @@ import java.util.Locale
  * so they look the same whatever density the stick reports.
  */
 val ScreenPadding = 48.dp
-private val CardShape = RoundedCornerShape(12.dp)
+internal val CardShape = RoundedCornerShape(12.dp)
 
 /** Design B: focused tile gets a light frame and grows a little. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun cardBorder() = CardDefaults.border(
+internal fun cardBorder() = CardDefaults.border(
     focusedBorder = Border(border = BorderStroke(3.dp, CpColors.Text), inset = 0.dp, shape = CardShape),
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun cardScale() = CardDefaults.scale(focusedScale = 1.06f)
+internal fun cardScale() = CardDefaults.scale(focusedScale = 1.06f)
 
 /** Tells the background glow which picture is focused. */
 @Composable
@@ -403,13 +403,14 @@ fun ChannelCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    width: Dp = ChannelWidth,
 ) {
-    Column(Modifier.width(ChannelWidth)) {
+    Column(Modifier.width(width)) {
         Card(
             onClick = onClick,
             onLongClick = onLongClick,
             modifier = modifier
-                .width(ChannelWidth)
+                .width(width)
                 .aspectRatio(16f / 9f),
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),

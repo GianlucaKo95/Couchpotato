@@ -172,6 +172,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             " · Bilder vom Anbieter: ${XtreamClient.imagesLastHour()}"
     }
 
+    /** Time of the last successful catalogue sync (0 = never). */
+    fun lastSyncAt(): Long = searchIndex.lastSync()
+
     private fun imageInfo(): String =
         searchIndex.imageStats() ?: "Bildquellen werden beim nächsten Abgleich ausgewertet."
 
@@ -269,6 +272,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // category names missing (that request failed): use the ids from the titles
         return entries.asSequence().filter { it.kind == kind }.mapNotNull { it.categoryId }.distinct()
             .map { LiveCategory(it, "Kategorie $it") }.toList()
+    }
+
+    /** Number of titles per category (for the Mediathek list) – local, no request. */
+    suspend fun categoryCounts(kind: Char): Map<String, Int> = withContext(Dispatchers.Default) {
+        catalog().asSequence().filter { it.kind == kind }.mapNotNull { it.categoryId }
+            .groupingBy { it }.eachCount()
     }
 
     suspend fun moviesIn(categoryId: String): List<VodItem> = withContext(Dispatchers.Default) {
@@ -550,6 +559,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun setIndexStatus(text: String) = _state.update { it.copy(indexStatus = text) }
+
+    fun recentSearches(): List<String> = settings.recentSearches()
+    fun rememberSearch(q: String) = settings.addRecentSearch(q)
 
     fun setQuery(q: String) {
         searchQuery.value = q

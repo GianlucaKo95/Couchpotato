@@ -133,6 +133,17 @@ class SettingsStore(context: Context) {
         get() = p.getBoolean("providerImages", true)
         set(value) = p.edit().putBoolean("providerImages", value).apply()
 
+    /** Last searches (newest first), shown as suggestions in the search window. */
+    fun recentSearches(): List<String> =
+        p.getString("recentSearches", null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
+
+    fun addRecentSearch(q: String) {
+        val t = q.trim()
+        if (t.length < 2) return
+        val list = (listOf(t) + recentSearches().filterNot { it.equals(t, ignoreCase = true) }).take(8)
+        p.edit().putString("recentSearches", list.joinToString("\n")).apply()
+    }
+
     fun markLaunched(pkg: String) = p.edit().putLong("launch:$pkg", System.currentTimeMillis()).apply()
     fun lastLaunched(pkg: String): Long = p.getLong("launch:$pkg", 0L)
 }
