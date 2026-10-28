@@ -54,8 +54,8 @@ adb install -r couchpotato.apk
 
 ## 3. IPTV-Zugang eintragen
 
-Entweder auf dem Stick unter *Einstellungen* (Server, Benutzer, Passwort – der komplette
-M3U-Link aus IsiPro funktioniert im Server-Feld auch), oder bequem vom Rechner:
+Entweder auf dem Stick unter *Einstellungen* – wahlweise als **Zugangsdaten** (Server, Benutzer,
+Passwort) oder als **kompletter Link** (M3U-Link aus IsiPro/Anbieter-Mail) –, oder bequem vom Rechner:
 
 ```bash
 adb shell am start -n de.koeven.couchpotato/.ui.MainActivity \

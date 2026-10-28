@@ -22,6 +22,11 @@ class SettingsStore(context: Context) {
             .apply()
     }
 
+    /** true = login is entered as one complete link instead of server/user/password. */
+    var loginAsLink: Boolean
+        get() = p.getBoolean("loginAsLink", false)
+        set(value) = p.edit().putBoolean("loginAsLink", value).apply()
+
     fun hiddenApps(): Set<String> = p.getStringSet("hidden", null)?.toSet() ?: emptySet()
     fun hideApp(pkg: String) = p.edit().putStringSet("hidden", hiddenApps() + pkg).apply()
     fun resetHiddenApps() = p.edit().remove("hidden").apply()

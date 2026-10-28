@@ -104,6 +104,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun config(): XtreamConfig = settings.config()
 
+    var loginAsLink: Boolean
+        get() = settings.loginAsLink
+        set(value) { settings.loginAsLink = value }
+
     fun onResume() {
         viewModelScope.launch { refreshLocal() }
         refreshCatalog(force = false)

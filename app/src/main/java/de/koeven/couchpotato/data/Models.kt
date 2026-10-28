@@ -21,15 +21,44 @@ data class XtreamConfig(val baseUrl: String, val user: String, val pass: String)
             return s.trimEnd('/')
         }
 
-        /** Parses an M3U link like http://host:8080/get.php?username=X&password=Y&type=m3u_plus */
-        fun fromM3uLink(link: String): XtreamConfig? = runCatching {
-            val uri = Uri.parse(link.trim())
-            val user = uri.getQueryParameter("username")
-            val pass = uri.getQueryParameter("password")
-            if (user.isNullOrBlank() || pass.isNullOrBlank()) null
-            else XtreamConfig(normalizeBase(link), user, pass)
+        /**
+         * Reads server, user and password out of a complete provider link. Understands
+         *  - http://host:8080/get.php?username=U&password=P&type=m3u_plus   (also player_api.php, xmltv.php)
+         *  - http://host:8080/playlist/U/P/m3u_plus  and  http://host:8080/get/U/P
+         *  - a stream link like http://host:8080/live/U/P/123.ts, /movie/U/P/1.mkv, /series/U/P/7.mp4
+         *  - http://host:8080/U/P/123   (short live link)
+         * Returns null if the link carries no login (then it's not an Xtream playlist).
+         */
+        fun fromLink(input: String): XtreamConfig? = runCatching {
+            val link = input.trim().trim('"', '\'', '<', '>').trim()
+            if (link.isEmpty()) return null
+            val withScheme = if (link.startsWith("http://") || link.startsWith("https://")) link else "http://$link"
+            val uri = Uri.parse(withScheme)
+            val authority = uri.encodedAuthority?.takeIf { it.isNotBlank() } ?: return null
+            val root = "${uri.scheme}://$authority"
+
+            val qUser = uri.getQueryParameter("username")
+            val qPass = uri.getQueryParameter("password")
+            if (!qUser.isNullOrBlank() && !qPass.isNullOrBlank()) {
+                return XtreamConfig(normalizeBase(withScheme.substringBefore('?')), qUser.trim(), qPass.trim())
+            }
+
+            val seg = uri.pathSegments.filter { it.isNotBlank() }
+            val pair: Pair<String, String>? = when {
+                seg.size >= 3 && seg[0].lowercase() in PATH_PREFIXES -> seg[1] to seg[2]
+                seg.size >= 3 && seg[2].substringBefore('.').all { it.isDigit() } -> seg[0] to seg[1]
+                else -> null
+            }
+            pair?.let { (u, p) -> XtreamConfig(root, u, p) }
         }.getOrNull()
+
+        private val PATH_PREFIXES = setOf("playlist", "get", "live", "movie", "series", "timeshift")
     }
+
+    /** The standard M3U link for these credentials (shown when the login is entered as a link). */
+    fun toM3uLink(): String =
+        if (!isValid) "" else
+            "${normalizeBase(baseUrl)}/get.php?username=${Uri.encode(user)}&password=${Uri.encode(pass)}&type=m3u_plus&output=ts"
 }
 
 data class VodItem(val id: Long, val name: String, val image: String?, val added: Long, val ext: String)

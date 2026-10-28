@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun applyConfigExtras(intent: Intent?): Boolean {
         intent ?: return false
-        val cfg = intent.getStringExtra("m3u")?.let { XtreamConfig.fromM3uLink(it) }
+        val cfg = intent.getStringExtra("m3u")?.let { XtreamConfig.fromLink(it) }
             ?: run {
                 val url = intent.getStringExtra("xtream_url")
                 val user = intent.getStringExtra("xtream_user")

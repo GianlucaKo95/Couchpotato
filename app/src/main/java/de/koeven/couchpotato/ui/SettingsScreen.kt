@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.FilterChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import de.koeven.couchpotato.data.XtreamConfig
@@ -42,6 +43,8 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
     var url by remember { mutableStateOf(initial.baseUrl) }
     var user by remember { mutableStateOf(initial.user) }
     var pass by remember { mutableStateOf(initial.pass) }
+    var asLink by remember { mutableStateOf(vm.loginAsLink) }
+    var link by remember { mutableStateOf(initial.toM3uLink()) }
     var status by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -62,49 +65,96 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
         ) {
             Text("Einstellungen", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
-            Text("IPTV-Zugang (Xtream Codes)", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
+            Text("IPTV-Zugang", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
             Text(
-                "Die Daten findest du in der Mail deines Anbieters oder in IsiPro. " +
-                    "Statt der Server-Adresse kannst du auch den kompletten M3U-Link einfügen.",
+                "Die Daten findest du in der Mail deines Anbieters oder in IsiPro – " +
+                    "entweder als Server/Benutzer/Passwort oder als kompletter M3U-Link.",
                 style = MaterialTheme.typography.bodySmall,
                 color = CpColors.TextMuted,
             )
 
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                label = { M3Text("Server, z. B. http://anbieter.tv:8080") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                modifier = Modifier.width(620.dp),
-            )
-            OutlinedTextField(
-                value = user,
-                onValueChange = { user = it },
-                label = { M3Text("Benutzername") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                modifier = Modifier.width(620.dp),
-            )
-            OutlinedTextField(
-                value = pass,
-                onValueChange = { pass = it },
-                label = { M3Text("Passwort") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                modifier = Modifier.width(620.dp),
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilterChip(selected = !asLink, onClick = { asLink = false; vm.loginAsLink = false; status = null }) {
+                    Text("Zugangsdaten")
+                }
+                FilterChip(selected = asLink, onClick = {
+                    asLink = true
+                    vm.loginAsLink = true
+                    if (link.isBlank()) link = XtreamConfig(url, user, pass).toM3uLink()
+                    status = null
+                }) {
+                    Text("Kompletter Link")
+                }
+            }
+
+            if (asLink) {
+                OutlinedTextField(
+                    value = link,
+                    onValueChange = { link = it },
+                    label = { M3Text("M3U-Link, z. B. http://anbieter.tv:8080/get.php?username=…&password=…") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+                    modifier = Modifier.width(820.dp),
+                )
+                Text(
+                    "Am einfachsten vom PC aus: adb shell \"am start -n de.koeven.couchpotato/.ui.MainActivity --es m3u 'LINK'\"",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = CpColors.TextMuted,
+                )
+            } else {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { M3Text("Server, z. B. http://anbieter.tv:8080") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                    modifier = Modifier.width(620.dp),
+                )
+                OutlinedTextField(
+                    value = user,
+                    onValueChange = { user = it },
+                    label = { M3Text("Benutzername") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    modifier = Modifier.width(620.dp),
+                )
+                OutlinedTextField(
+                    value = pass,
+                    onValueChange = { pass = it },
+                    label = { M3Text("Passwort") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    modifier = Modifier.width(620.dp),
+                )
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Button(onClick = {
-                    val cfg = XtreamConfig.fromM3uLink(url)?.takeIf { user.isBlank() || pass.isBlank() }
-                        ?: XtreamConfig(url, user, pass)
-                    url = XtreamConfig.normalizeBase(cfg.baseUrl)
-                    user = cfg.user
-                    pass = cfg.pass
-                    status = "Prüfe Verbindung …"
-                    scope.launch { status = vm.saveAndTest(cfg) }
+                    val cfg: XtreamConfig? = if (asLink) {
+                        XtreamConfig.fromLink(link)
+                    } else {
+                        // a full link pasted into the server field still works
+                        XtreamConfig.fromLink(url)?.takeIf { user.isBlank() || pass.isBlank() }
+                            ?: XtreamConfig(url, user, pass)
+                    }
+                    when {
+                        cfg == null -> status = "Fehler: In diesem Link stecken kein Benutzername und Passwort. " +
+                            "Bitte den Link mit „username=…&password=…“ nehmen oder die Zugangsdaten einzeln eingeben."
+                        !cfg.isValid -> status = "Fehler: Server, Benutzername und Passwort werden alle gebraucht."
+                        else -> {
+                            url = XtreamConfig.normalizeBase(cfg.baseUrl)
+                            user = cfg.user
+                            pass = cfg.pass
+                            status = "Prüfe Verbindung …"
+                            scope.launch {
+                                val result = vm.saveAndTest(cfg)
+                                status = if (asLink && !result.startsWith("Fehler")) {
+                                    "$result\nErkannt: Server $url · Benutzer $user"
+                                } else result
+                            }
+                        }
+                    }
                 }) { Text("Speichern & testen") }
                 Button(onClick = onDone) { Text("Zurück") }
             }
