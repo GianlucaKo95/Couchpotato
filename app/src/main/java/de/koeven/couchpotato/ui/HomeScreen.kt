@@ -50,6 +50,7 @@ fun HomeScreen(
     onOpenSeries: (SeriesItem) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenLive: () -> Unit,
+    onOpenSearch: () -> Unit,
 ) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
@@ -104,6 +105,8 @@ fun HomeScreen(
                 Spacer(Modifier.weight(1f))
                 Clock()
                 Spacer(Modifier.width(24.dp))
+                Button(onClick = onOpenSearch) { Text("Suchen") }
+                Spacer(Modifier.width(12.dp))
                 Button(onClick = onOpenSettings) { Text("Einstellungen") }
             }
         }

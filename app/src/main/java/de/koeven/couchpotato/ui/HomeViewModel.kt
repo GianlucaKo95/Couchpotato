@@ -15,6 +15,9 @@ import de.koeven.couchpotato.data.LiveChannel
 import de.koeven.couchpotato.data.PlayItem
 import de.koeven.couchpotato.data.ProgressEntry
 import de.koeven.couchpotato.data.ProgressStore
+import de.koeven.couchpotato.data.SearchEntry
+import de.koeven.couchpotato.data.SearchIndex
+import de.koeven.couchpotato.data.SearchResults
 import de.koeven.couchpotato.data.SeriesInfo
 import de.koeven.couchpotato.data.SeriesItem
 import de.koeven.couchpotato.data.SettingsStore
@@ -65,7 +68,12 @@ data class HomeState(
     val favorites: List<LiveChannel> = emptyList(),
     val nowPlaying: Map<Long, String> = emptyMap(),
     val liveInExternalApp: Boolean = false,
+    val indexStatus: String = "",
+    val searchApps: List<SearchApp> = emptyList(),
 )
+
+/** An installed app in the "search in other apps" row; [acceptsQuery] = search term is handed over. */
+data class SearchApp(val app: AppEntry, val acceptsQuery: Boolean)
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -79,6 +87,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private var epgLoadedAt = 0L
     private val liveCache = HashMap<String, List<LiveChannel>>()
     private var categoriesCache: List<LiveCategory>? = null
+
+    private val searchIndex = SearchIndex(app)
+    private var indexEntries: List<SearchEntry>? = null
+    private var indexJob: Job? = null
+    private val _search = MutableStateFlow(SearchResults())
+    val search: StateFlow<SearchResults> = _search
+    val searchQuery = MutableStateFlow("")
 
     private val _state = MutableStateFlow(HomeState(configured = settings.config().isValid))
     val state: StateFlow<HomeState> = _state
@@ -163,6 +178,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         seriesCache.clear()
         liveCache.clear()
         categoriesCache = null
+        searchIndex.clear()
+        indexEntries = null
         _state.update { it.copy(configured = settings.config().isValid) }
         return try {
             val msg = XtreamClient(settings.config()).checkAuth()
@@ -254,6 +271,88 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------------- Suche ----------------
+
+    /** Called when the search screen opens: app list for hand-over + make sure the index is there. */
+    fun prepareSearch() {
+        viewModelScope.launch {
+            val searchable = withContext(Dispatchers.IO) { AppsRepository.searchablePackages(getApplication()) }
+            val apps = _state.value.apps
+                .map { SearchApp(it, it.packageName in searchable) }
+                .sortedByDescending { it.acceptsQuery }
+            _state.update { it.copy(searchApps = apps) }
+        }
+        ensureIndex(force = false)
+    }
+
+    fun ensureIndex(force: Boolean) {
+        if (indexJob?.isActive == true) return
+        indexJob = viewModelScope.launch {
+            if (indexEntries == null && searchIndex.exists()) {
+                setIndexStatus("Lade Suchindex …")
+                indexEntries = searchIndex.load()
+                setIndexStatus(indexSummary(emptyList()))
+                runSearch(searchQuery.value)
+            }
+            val cfg = settings.config()
+            if (!cfg.isValid) {
+                setIndexStatus("IPTV ist noch nicht eingerichtet – gesucht wird nur in Apps.")
+                return@launch
+            }
+            val stale = !searchIndex.exists() || searchIndex.ageMs() > INDEX_MAX_AGE_MS
+            if (!force && !stale) return@launch
+            setIndexStatus(
+                if (indexEntries.isNullOrEmpty()) "Suchindex wird aufgebaut … (einmalig, dauert je nach Anbieter etwas)"
+                else "Suchindex wird im Hintergrund aktualisiert …"
+            )
+            try {
+                val failed = searchIndex.rebuild(XtreamClient(cfg))
+                indexEntries = searchIndex.load()
+                setIndexStatus(indexSummary(failed))
+                runSearch(searchQuery.value)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                setIndexStatus("Suchindex konnte nicht geladen werden: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
+    }
+
+    private fun indexSummary(failed: List<String>): String {
+        val entries = indexEntries.orEmpty()
+        val m = entries.count { it.kind == SearchEntry.KIND_MOVIE }
+        val s = entries.count { it.kind == SearchEntry.KIND_SERIES }
+        val l = entries.count { it.kind == SearchEntry.KIND_LIVE }
+        val base = "Durchsucht $m Filme, $s Serien und $l Sender"
+        return if (failed.isEmpty()) base else "$base · nicht geladen: ${failed.joinToString()}"
+    }
+
+    private fun setIndexStatus(text: String) = _state.update { it.copy(indexStatus = text) }
+
+    fun setQuery(q: String) {
+        searchQuery.value = q
+    }
+
+    suspend fun runSearch(q: String) {
+        val entries = indexEntries ?: return
+        _search.value = withContext(Dispatchers.Default) { SearchIndex.search(entries, q) }
+    }
+
+    fun searchInApp(context: Context, app: SearchApp, query: String) {
+        settings.markLaunched(app.app.packageName)
+        val handedOver = app.acceptsQuery && AppsRepository.searchInApp(context, app.app.packageName, query)
+        if (!handedOver) {
+            if (!app.acceptsQuery) AppsRepository.launch(context, app.app.packageName)
+            Toast.makeText(context, "${app.app.label} nimmt keinen Suchbegriff an – bitte dort suchen", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun openGlobalSearch(context: Context, query: String) {
+        if (!AppsRepository.openGlobalSearch(context, query)) {
+            Toast.makeText(context, "Fire-TV-Suche lässt sich hier nicht öffnen", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // ---------------- Apps / Weiterschauen ----------------
 
     fun launchApp(pkg: String) {
@@ -307,5 +406,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         const val ROW_SIZE = 40
         const val CATALOG_MAX_AGE_MS = 3 * 60 * 60 * 1000L
         const val EPG_MAX_AGE_MS = 5 * 60 * 1000L
+        const val INDEX_MAX_AGE_MS = 12 * 60 * 60 * 1000L
     }
 }

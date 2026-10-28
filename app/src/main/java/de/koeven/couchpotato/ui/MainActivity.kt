@@ -21,6 +21,7 @@ private sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
     data object Live : Screen
+    data object Search : Screen
     data class Series(val id: Long, val name: String) : Screen
 }
 
@@ -77,25 +78,28 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    // small back stack, so e.g. Search -> Series -> Back returns to the search results
+    var stack by remember { mutableStateOf(listOf<Screen>(Screen.Home)) }
+    val go: (Screen) -> Unit = { stack = stack + it }
+    val back: () -> Unit = { if (stack.size > 1) stack = stack.dropLast(1) }
 
-    LaunchedEffect(homeTick) { screen = Screen.Home }
+    LaunchedEffect(homeTick) { stack = listOf(Screen.Home) }
 
-    // A launcher must never close on Back; sub-screens go back to home.
-    BackHandler(enabled = true) {
-        if (screen != Screen.Home) screen = Screen.Home
-    }
+    // A launcher must never close on Back; sub-screens go back one step.
+    BackHandler(enabled = true) { back() }
 
-    when (val s = screen) {
+    when (val s = stack.last()) {
         Screen.Home -> HomeScreen(
             vm = vm,
             homeTick = homeTick,
-            onOpenSeries = { screen = Screen.Series(it.id, it.name) },
-            onOpenSettings = { screen = Screen.Settings },
-            onOpenLive = { screen = Screen.Live },
+            onOpenSeries = { go(Screen.Series(it.id, it.name)) },
+            onOpenSettings = { go(Screen.Settings) },
+            onOpenLive = { go(Screen.Live) },
+            onOpenSearch = { go(Screen.Search) },
         )
         Screen.Live -> LiveScreen(vm = vm)
-        Screen.Settings -> SettingsScreen(vm = vm, onDone = { screen = Screen.Home })
+        Screen.Search -> SearchScreen(vm = vm, onOpenSeries = { id, name -> go(Screen.Series(id, name)) })
+        Screen.Settings -> SettingsScreen(vm = vm, onDone = back)
         is Screen.Series -> SeriesScreen(vm = vm, seriesId = s.id, name = s.name)
     }
 }

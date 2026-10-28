@@ -1,5 +1,6 @@
 package de.koeven.couchpotato.data
 
+import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
@@ -43,6 +44,38 @@ object AppsRepository {
         val intent = pm.getLeanbackLaunchIntentForPackage(pkg) ?: pm.getLaunchIntentForPackage(pkg) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return runCatching { context.startActivity(intent) }.isSuccess
+    }
+
+    /** Packages that accept a search intent (the query can be handed over). */
+    fun searchablePackages(context: Context): Set<String> = runCatching {
+        context.packageManager.queryIntentActivities(Intent(Intent.ACTION_SEARCH), 0)
+            .map { it.activityInfo.packageName }
+            .toSet()
+    }.getOrDefault(emptySet())
+
+    /** Opens [pkg] with the search term; falls back to just starting the app. */
+    fun searchInApp(context: Context, pkg: String, query: String): Boolean {
+        val intent = Intent(Intent.ACTION_SEARCH)
+            .setPackage(pkg)
+            .putExtra(SearchManager.QUERY, query)
+            .putExtra("query", query)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (runCatching { context.startActivity(intent) }.isSuccess) return true
+        launch(context, pkg)
+        return false
+    }
+
+    /** Fire TV's own search (covers Netflix, Prime & co.), with the term pre-filled where supported. */
+    fun openGlobalSearch(context: Context, query: String): Boolean {
+        val intents = listOf(
+            Intent(SearchManager.INTENT_ACTION_GLOBAL_SEARCH).putExtra(SearchManager.QUERY, query),
+            Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, query),
+        )
+        for (i in intents) {
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (runCatching { context.startActivity(i) }.isSuccess) return true
+        }
+        return false
     }
 
     fun openSystemSettings(context: Context) {

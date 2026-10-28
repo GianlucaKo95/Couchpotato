@@ -20,6 +20,11 @@ Werbefreier Startbildschirm mit einer gemeinsamen **„Weiterschauen“-Reihe**,
   Favoriten. Unter *Einstellungen* kannst du stattdessen „Sender öffnen mit: IsiPro“ wählen (IsiPro
   bekommt dann den Stream-Link – ob es den annimmt, musst du testen).
 
+- **Suchen** (oben rechts): durchsucht Filme, Serien und Sender deines IPTV-Anbieters schon beim
+  Tippen (Groß/Klein und Umlaute egal). Dafür legt Couchpotato beim ersten Öffnen einen Suchindex an
+  und aktualisiert ihn alle 12 Stunden. Darunter: den Begriff an die **Fire-TV-Gesamtsuche** oder an
+  einzelne Apps (Netflix, Prime …) übergeben – Apps, die das können, stehen vorne.
+
 > „Weiterschauen“ von Netflix & Co. ist ein Versuch: Auf dem Fire TV melden diese Apps ihren
 > Fortschritt meist nur an Amazons Oberfläche. Unter *Einstellungen* siehst du, ob und wie viele
 > Einträge gefunden wurden (auf Fire OS 6 gibt es die Schnittstelle gar nicht).
