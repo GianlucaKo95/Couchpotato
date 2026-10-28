@@ -31,7 +31,6 @@ import de.koeven.couchpotato.player.Playback
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,6 +72,7 @@ data class HomeState(
     val rowOrder: List<String> = HomeRows.ALL,
     val hiddenCategories: Set<String> = emptySet(),
     val appsCustomOrder: Boolean = false,
+    val syncInfo: String = "",
 )
 
 /** An installed app in the "search in other apps" row; [acceptsQuery] = search term is handed over. */
@@ -85,11 +85,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val cache = CatalogCache(app)
     private val watchNextCache = WatchNextCache(app)
     private val seriesCache = HashMap<Long, SeriesInfo>()
-    private var catalogJob: Job? = null
     private var epgJob: Job? = null
     private var epgLoadedAt = 0L
-    private val liveCache = HashMap<String, List<LiveChannel>>()
-    private var categoriesCache: List<LiveCategory>? = null
+    private var categoriesByKind: Map<Char, List<LiveCategory>> = emptyMap()
 
     private val searchIndex = SearchIndex(app)
     private var indexEntries: List<SearchEntry>? = null
@@ -122,7 +120,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onResume() {
         viewModelScope.launch { refreshLocal() }
-        refreshCatalog(force = false)
+        ensureIndex(force = false)      // local; talks to the provider at most once a day
         refreshEpg(force = false)
     }
 
@@ -154,50 +152,28 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 liveInExternalApp = settings.liveInExternalApp,
                 rowOrder = settings.rowOrder(),
                 appsCustomOrder = settings.appsCustomOrder,
+                syncInfo = syncInfo(),
             )
         }
     }
 
-    fun refreshCatalog(force: Boolean) {
-        val cfg = settings.config()
-        if (!cfg.isValid) return
-        if (catalogJob?.isActive == true) {
-            if (!force) return
-            catalogJob?.cancel()
-        }
-        if (!force && cache.ageMs() < CATALOG_MAX_AGE_MS && _state.value.movies.isNotEmpty()) return
-
-        catalogJob = viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null) }
-            try {
-                val client = XtreamClient(cfg)
-                val (movies, series) = coroutineScope {
-                    val hidden = settings.hiddenCategories()
-                    val m = async { client.latestMovies(ROW_SIZE, hiddenIds(hidden, 'm')) }
-                    val s = async { client.latestSeries(ROW_SIZE, hiddenIds(hidden, 's')) }
-                    m.await() to s.await()
-                }
-                withContext(Dispatchers.IO) { cache.save(movies, series) }
-                _state.update { it.copy(movies = movies, series = series, loading = false) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = e.message ?: e.javaClass.simpleName) }
-            }
-        }
+    private fun syncInfo(): String {
+        val last = searchIndex.lastSync()
+        val lastText = if (last == 0L) "noch nie" else
+            java.text.SimpleDateFormat("dd.MM. HH:mm", java.util.Locale.GERMANY).format(java.util.Date(last)) + " Uhr"
+        return "Letzter Abgleich: $lastText · Anfragen in der letzten Stunde: ${XtreamClient.requestsLastHour()}"
     }
+
+    /** "Neue Filme/Serien" come from the local catalogue; this only syncs if it is older than a day. */
+    fun refreshCatalog(force: Boolean) = ensureIndex(force)
 
     suspend fun saveAndTest(cfg: XtreamConfig): String {
         settings.save(cfg)
         XtreamClient.clearBlock()
         seriesCache.clear()
-        liveCache.clear()
-        categoriesCache = null
-        browseCategories.clear()
-        browseMovies.clear()
-        browseSeries.clear()
         searchIndex.clear()
         indexEntries = null
+        categoriesByKind = emptyMap()
         _state.update { it.copy(configured = settings.config().isValid) }
         return try {
             val msg = XtreamClient(settings.config()).checkAuth()
@@ -212,14 +188,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------- Live-TV ----------------
 
-    /** "Jetzt läuft" for the favourites; refreshed at most every 5 minutes unless forced. */
+    /** "Jetzt läuft" for the first favourites; at most every 30 minutes, background budget. */
     fun refreshEpg(force: Boolean) {
         val cfg = settings.config()
         val favs = settings.favorites()
         if (!cfg.isValid || favs.isEmpty() || epgJob?.isActive == true) return
         if (!force && System.currentTimeMillis() - epgLoadedAt < EPG_MAX_AGE_MS) return
         epgJob = viewModelScope.launch {
-            val client = XtreamClient(cfg)
+            val client = XtreamClient(cfg, background = true)
             val result = coroutineScope {
                 // one after another (the client spaces them out); only the first ones in the row
                 favs.take(EPG_MAX_CHANNELS).map { ch ->
@@ -232,67 +208,70 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Live categories without the hidden ones (used by "Sender verwalten"). */
+    /** Live categories without the hidden ones (used by "Sender verwalten") – local, no request. */
     suspend fun liveCategories(): List<LiveCategory> {
-        val all = categoriesCache ?: XtreamClient(settings.config()).liveCategories().also { categoriesCache = it }
         val hidden = settings.hiddenCategories()
-        return all.filterNot { "l:${it.id}" in hidden }
+        return allCategories(SearchEntry.KIND_LIVE).filterNot { "l:${it.id}" in hidden }
     }
 
     // ---------------- Mediathek / Kategorien ----------------
-
-    private val browseCategories = HashMap<Char, List<LiveCategory>>()
-    private val browseMovies = HashMap<String, List<VodItem>>()
-    private val browseSeries = HashMap<String, List<SeriesItem>>()
 
     /** Remembered so the Mediathek opens where you left it (e.g. after watching something). */
     var browseKind: Char = SearchEntry.KIND_LIVE
     var browseCategoryId: String? = null
 
-    suspend fun allCategories(kind: Char): List<LiveCategory> =
-        browseCategories[kind] ?: XtreamClient(settings.config()).categories(kind).also { browseCategories[kind] = it }
+    /** The local catalogue; loads it from the stick (or does the first sync) if needed. */
+    private suspend fun catalog(): List<SearchEntry> {
+        if (indexEntries == null) ensureIndex(force = false)
+        indexJob?.join()
+        return indexEntries ?: throw java.io.IOException(
+            "Noch kein Katalog auf dem Stick – Einstellungen → „Katalog jetzt abgleichen“."
+        )
+    }
 
-    suspend fun moviesIn(categoryId: String): List<VodItem> =
-        browseMovies[categoryId] ?: XtreamClient(settings.config()).moviesInCategory(categoryId)
-            .also { browseMovies[categoryId] = it }
+    suspend fun allCategories(kind: Char): List<LiveCategory> {
+        val entries = catalog()
+        categoriesByKind[kind]?.takeIf { it.isNotEmpty() }?.let { return it }
+        // category names missing (that request failed): use the ids from the titles
+        return entries.asSequence().filter { it.kind == kind }.mapNotNull { it.categoryId }.distinct()
+            .map { LiveCategory(it, "Kategorie $it") }.toList()
+    }
 
-    suspend fun seriesIn(categoryId: String): List<SeriesItem> =
-        browseSeries[categoryId] ?: XtreamClient(settings.config()).seriesInCategory(categoryId)
-            .also { browseSeries[categoryId] = it }
+    suspend fun moviesIn(categoryId: String): List<VodItem> = withContext(Dispatchers.Default) {
+        catalog().filter { it.kind == SearchEntry.KIND_MOVIE && it.categoryId == categoryId }
+            .sortedByDescending { it.added }
+            .map { VodItem(it.id, it.name, it.image, it.added, it.ext, it.categoryId) }
+    }
+
+    suspend fun seriesIn(categoryId: String): List<SeriesItem> = withContext(Dispatchers.Default) {
+        catalog().filter { it.kind == SearchEntry.KIND_SERIES && it.categoryId == categoryId }
+            .sortedByDescending { it.added }
+            .map { SeriesItem(it.id, it.name, it.image, it.added, it.categoryId) }
+    }
+
+    suspend fun liveChannels(categoryId: String): List<LiveChannel> = withContext(Dispatchers.Default) {
+        catalog().filter { it.kind == SearchEntry.KIND_LIVE && it.categoryId == categoryId }
+            .map { LiveChannel(it.id, it.name, it.image, it.categoryId) }
+    }
 
     fun setCategoryHidden(kind: Char, categoryId: String, hidden: Boolean) =
         setCategoriesHidden(kind, listOf(categoryId), hidden)
 
-    /** Hides/shows several categories of one tab at once ("Alle ausblenden"). */
+    /** Hides/shows categories – everything is recomputed locally, without a single request. */
+    @Suppress("UNUSED_PARAMETER")
     fun setCategoriesHidden(kind: Char, categoryIds: List<String>, hidden: Boolean, refresh: Boolean = true) {
         if (categoryIds.isEmpty()) return
         settings.setCategoriesHidden(categoryIds.map { "$kind:$it" }, hidden)
-        val set = settings.hiddenCategories()
-        _state.update {
-            it.copy(
-                hiddenCategories = set,
-                movies = it.movies.filterNot { m -> "m:${m.categoryId ?: ""}" in set },
-                series = it.series.filterNot { s -> "s:${s.categoryId ?: ""}" in set },
-            )
+        _state.update { it.copy(hiddenCategories = settings.hiddenCategories()) }
+        applyCategoryChanges()
+    }
+
+    fun applyCategoryChanges(@Suppress("UNUSED_PARAMETER") kind: Char? = null) {
+        viewModelScope.launch {
+            recomputeRows()
+            runSearch(searchQuery.value)
         }
-        if (refresh) applyCategoryChanges(kind) else pendingCategoryRefresh = pendingCategoryRefresh || kind != SearchEntry.KIND_LIVE
     }
-
-    private var pendingCategoryRefresh = false
-
-    /** Refills "Neue Filme/Serien" without the hidden categories (or with re-shown ones). */
-    fun applyCategoryChanges(kind: Char? = null) {
-        if (pendingCategoryRefresh || (kind != null && kind != SearchEntry.KIND_LIVE)) refreshCatalog(force = true)
-        pendingCategoryRefresh = false
-        viewModelScope.launch { runSearch(searchQuery.value) }
-    }
-
-    private fun hiddenIds(hidden: Set<String>, kind: Char): Set<String> =
-        hidden.filter { it.startsWith("$kind:") }.map { it.substring(2) }.toSet()
-
-    suspend fun liveChannels(categoryId: String): List<LiveChannel> =
-        liveCache[categoryId] ?: XtreamClient(settings.config()).liveChannels(categoryId)
-            .also { liveCache[categoryId] = it }
 
     fun toggleFavorite(channel: LiveChannel) {
         val current = settings.favorites()
@@ -300,7 +279,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         else current + channel
         settings.setFavorites(updated)
         _state.update { it.copy(favorites = updated) }
-        refreshEpg(force = true)
+        // only the newly added channel needs "Jetzt läuft" (1 request instead of all of them)
+        if (updated.size > current.size && updated.indexOfFirst { it.id == channel.id } < EPG_MAX_CHANNELS) {
+            val cfg = settings.config()
+            viewModelScope.launch {
+                val title = runCatching { XtreamClient(cfg, background = true).nowPlaying(channel.id) }.getOrNull()
+                    ?: return@launch
+                _state.update { it.copy(nowPlaying = it.nowPlaying + (channel.id to title)) }
+            }
+        }
     }
 
     /** Moves a favourite by [delta] places; returns its new index. */
@@ -417,37 +404,91 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         ensureIndex(force = false)
     }
 
+    /**
+     * Loads the catalogue from the stick and syncs it with the provider only when it is older
+     * than a day (or when asked to). One sync = 6 requests, nothing else talks to the provider
+     * except opening a series, "Jetzt läuft" and playback itself.
+     */
     fun ensureIndex(force: Boolean) {
         if (indexJob?.isActive == true) return
-        indexJob = viewModelScope.launch {
-            if (indexEntries == null && searchIndex.exists()) {
-                setIndexStatus("Lade Suchindex …")
-                indexEntries = searchIndex.load()
-                setIndexStatus(indexSummary(emptyList()))
-                runSearch(searchQuery.value)
-            }
-            val cfg = settings.config()
-            if (!cfg.isValid) {
-                setIndexStatus("IPTV ist noch nicht eingerichtet – gesucht wird nur in Apps.")
-                return@launch
-            }
-            val stale = !searchIndex.exists() || searchIndex.ageMs() > INDEX_MAX_AGE_MS
-            if (!force && !stale) return@launch
-            setIndexStatus(
-                if (indexEntries.isNullOrEmpty()) "Suchindex wird aufgebaut … (einmalig, dauert je nach Anbieter etwas)"
-                else "Suchindex wird im Hintergrund aktualisiert …"
-            )
-            try {
-                val failed = searchIndex.rebuild(XtreamClient(cfg))
-                indexEntries = searchIndex.load()
-                setIndexStatus(indexSummary(failed))
-                runSearch(searchQuery.value)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                setIndexStatus("Suchindex konnte nicht geladen werden: ${e.message ?: e.javaClass.simpleName}")
-            }
+        indexJob = viewModelScope.launch { syncCatalog(force) }
+    }
+
+    /** "Katalog jetzt abgleichen" in the settings. */
+    fun syncNow(): String {
+        if (searchIndex.exists() && searchIndex.ageMs() < MIN_MANUAL_SYNC_GAP_MS) {
+            return "Der Katalog wurde gerade erst abgeglichen – bitte in ein paar Minuten wieder."
         }
+        if (indexJob?.isActive == true) return "Abgleich läuft bereits …"
+        indexJob = viewModelScope.launch { syncCatalog(force = true) }
+        return "Abgleich gestartet (6 Anfragen, dauert etwas) …"
+    }
+
+    private suspend fun syncCatalog(force: Boolean) {
+        loadLocalCatalog()
+        val cfg = settings.config()
+        if (!cfg.isValid) {
+            setIndexStatus("IPTV ist noch nicht eingerichtet – gesucht wird nur in Apps.")
+            return
+        }
+        val stale = !searchIndex.exists() || searchIndex.ageMs() > SYNC_MAX_AGE_MS
+        if (!force && !stale) return
+        _state.update { it.copy(loading = true, error = null) }
+        setIndexStatus(
+            if (indexEntries.isNullOrEmpty()) "Katalog wird geladen … (einmal am Tag, 6 Anfragen)"
+            else "Katalog wird im Hintergrund abgeglichen …"
+        )
+        try {
+            // automatic daily sync = background budget; asked for by the user = normal budget
+            val failed = searchIndex.rebuild(XtreamClient(cfg, background = !force))
+            indexEntries = null
+            loadLocalCatalog()
+            setIndexStatus(indexSummary(failed))
+            _state.update {
+                it.copy(loading = false, error = if (failed.isEmpty()) null else "Nicht geladen: ${failed.joinToString()}")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.update { it.copy(loading = false, error = e.message ?: e.javaClass.simpleName) }
+            setIndexStatus("Katalog konnte nicht abgeglichen werden: ${e.message ?: e.javaClass.simpleName}")
+        } finally {
+            _state.update { it.copy(syncInfo = syncInfo()) }
+        }
+    }
+
+    private suspend fun loadLocalCatalog() {
+        if (indexEntries == null && searchIndex.exists()) {
+            setIndexStatus("Lade Katalog …")
+            indexEntries = searchIndex.load()
+            categoriesByKind = withContext(Dispatchers.IO) { searchIndex.loadCategories() }
+            setIndexStatus(indexSummary(emptyList()))
+        }
+        recomputeRows()
+        runSearch(searchQuery.value)
+    }
+
+    /** "Neue Filme/Serien": the newest titles of the local catalogue, hidden categories left out. */
+    private suspend fun recomputeRows() {
+        val entries = indexEntries ?: return
+        val hidden = settings.hiddenCategories()
+        val (movies, series) = withContext(Dispatchers.Default) {
+            val m = entries.asSequence()
+                .filter { it.kind == SearchEntry.KIND_MOVIE && it.categoryKey !in hidden }
+                .sortedByDescending { it.added }
+                .take(ROW_SIZE)
+                .map { VodItem(it.id, it.name, it.image, it.added, it.ext, it.categoryId) }
+                .toList()
+            val sr = entries.asSequence()
+                .filter { it.kind == SearchEntry.KIND_SERIES && it.categoryKey !in hidden }
+                .sortedByDescending { it.added }
+                .take(ROW_SIZE)
+                .map { SeriesItem(it.id, it.name, it.image, it.added, it.categoryId) }
+                .toList()
+            m to sr
+        }
+        withContext(Dispatchers.IO) { cache.save(movies, series) }
+        _state.update { it.copy(movies = movies, series = series) }
     }
 
     private fun indexSummary(failed: List<String>): String {
@@ -538,9 +579,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val ROW_SIZE = 40
         // kept low on purpose: the provider locks the account after too many requests
-        const val CATALOG_MAX_AGE_MS = 6 * 60 * 60 * 1000L
-        const val EPG_MAX_AGE_MS = 15 * 60 * 1000L
-        const val EPG_MAX_CHANNELS = 15
-        const val INDEX_MAX_AGE_MS = 24 * 60 * 60 * 1000L
+        const val SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000L       // whole catalogue: once a day
+        const val MIN_MANUAL_SYNC_GAP_MS = 10 * 60 * 1000L     // "jetzt abgleichen" not more often
+        const val EPG_MAX_AGE_MS = 30 * 60 * 1000L             // "Jetzt läuft": every 30 minutes …
+        const val EPG_MAX_CHANNELS = 8                         // … for the first 8 favourites
     }
 }

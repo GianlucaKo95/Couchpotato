@@ -16,6 +16,7 @@ data class SearchEntry(
     val ext: String,
     val norm: String,
     val categoryId: String? = null,
+    val added: Long = 0L,          // movies: "added", series: "last_modified" (unix seconds)
 ) {
     /** Same key format as SettingsStore.hiddenCategories(). */
     val categoryKey: String get() = "$kind:${categoryId ?: ""}"
@@ -37,24 +38,64 @@ data class SearchResults(
 }
 
 /**
- * The provider has no search API, so all titles are downloaded once (streamed, never held
- * as JSON) and written to a compact tab-separated file. Searching is then local and instant.
+ * The whole provider catalogue on the stick.
+ *
+ * The provider locks the account after too many requests, so Couchpotato downloads everything
+ * in ONE sync (6 requests: categories + lists for movies, series and live TV), at most once a
+ * day, and writes it to a compact tab-separated file. "Neue Filme/Serien", the Mediathek,
+ * "Sender verwalten", hiding categories and the search are all computed locally from it.
  */
 class SearchIndex(context: Context) {
 
-    private val file = File(context.filesDir, "search_index_v2.tsv")   // v2: with category column
+    private val file = File(context.filesDir, "catalog_v3.tsv")          // v3: + date column
+    private val catFile = File(context.filesDir, "categories_v3.json")
 
-    fun exists(): Boolean = file.exists() && file.length() > 0
+    fun exists(): Boolean = file.exists() && file.length() > 0 && catFile.exists()
     fun ageMs(): Long = if (file.exists()) System.currentTimeMillis() - file.lastModified() else Long.MAX_VALUE
-    fun clear() { file.delete() }
+    fun lastSync(): Long = if (file.exists()) file.lastModified() else 0L
+    fun clear() {
+        file.delete()
+        catFile.delete()
+    }
+
+    fun loadCategories(): Map<Char, List<LiveCategory>> = runCatching {
+        val o = org.json.JSONObject(catFile.readText())
+        listOf(SearchEntry.KIND_MOVIE, SearchEntry.KIND_SERIES, SearchEntry.KIND_LIVE).associateWith { k ->
+            o.optJSONArray(k.toString())?.mapObjects { c ->
+                c.str("id")?.let { LiveCategory(it, c.str("name") ?: it) }
+            }?.filterNotNull().orEmpty()
+        }
+    }.getOrDefault(emptyMap())
 
     /** Rebuilds the index; returns the kinds that could not be loaded (empty = all fine). */
     suspend fun rebuild(client: XtreamClient): List<String> = withContext(Dispatchers.IO) {
         val tmp = File(file.path + ".tmp")
         val failed = mutableListOf<String>()
         var count = 0
+
+        // category names (3 small requests)
+        val cats = org.json.JSONObject()
+        for ((kind, label) in listOf(
+            SearchEntry.KIND_MOVIE to "Film-Kategorien",
+            SearchEntry.KIND_SERIES to "Serien-Kategorien",
+            SearchEntry.KIND_LIVE to "Live-Kategorien",
+        )) {
+            try {
+                val list = client.categories(kind)
+                cats.put(kind.toString(), org.json.JSONArray(list.map {
+                    org.json.JSONObject().put("id", it.id).put("name", it.name)
+                }))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failed += label
+                if (e is ProviderBlockedException) throw e   // no point in going on
+            }
+        }
+
+        // all titles (3 big requests, streamed straight into the file)
         tmp.bufferedWriter(Charsets.UTF_8).use { w ->
-            failed += client.dumpCatalog { kind, id, name, image, ext, cat ->
+            failed += client.dumpCatalog { kind, id, name, image, ext, cat, added ->
                 val clean = name.sanitize()
                 if (clean.isEmpty()) return@dumpCatalog
                 w.append(kind).append('\t')
@@ -63,13 +104,15 @@ class SearchIndex(context: Context) {
                     .append(image?.sanitize() ?: "").append('\t')
                     .append(clean).append('\t')
                     .append(normalize(clean)).append('\t')
-                    .append(cat?.sanitize() ?: "").append('\n')
+                    .append(cat?.sanitize() ?: "").append('\t')
+                    .append(added.toString()).append('\n')
                 count++
             }
         }
         if (count > 0) {
             file.delete()
             tmp.renameTo(file)
+            catFile.writeText(cats.toString())
         } else {
             tmp.delete()
         }
@@ -90,6 +133,7 @@ class SearchIndex(context: Context) {
                     name = p[4],
                     norm = p[5],
                     categoryId = p.getOrNull(6)?.ifEmpty { null },
+                    added = p.getOrNull(7)?.toLongOrNull() ?: 0L,
                 )
             }.toList()
         }

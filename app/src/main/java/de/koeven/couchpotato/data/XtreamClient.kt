@@ -24,7 +24,11 @@ import java.util.PriorityQueue
  * read as a stream and only the newest N items are kept in memory –
  * important on a Fire TV Stick with little RAM.
  */
-class XtreamClient(private val cfg: XtreamConfig) {
+/**
+ * @param background requests nobody is waiting for (daily sync, "Jetzt läuft"). They get a
+ *        smaller hourly budget and are simply skipped when it is used up.
+ */
+class XtreamClient(private val cfg: XtreamConfig, private val background: Boolean = false) {
 
     private val base = XtreamConfig.normalizeBase(cfg.baseUrl)
 
@@ -61,12 +65,16 @@ class XtreamClient(private val cfg: XtreamConfig) {
     private fun <T> gated(block: () -> T): T = synchronized(GATE) {
         val now = System.currentTimeMillis()
         if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
+        while (requestLog.isNotEmpty() && now - requestLog.first() > HOUR_MS) requestLog.removeFirst()
+        val limit = if (background) BACKGROUND_PER_HOUR else MAX_PER_HOUR
+        if (requestLog.size >= limit) throw RequestBudgetException(background)
         val wait = lastRequestAt + MIN_GAP_MS - now
         if (wait > 0) Thread.sleep(wait)
         try {
             block()
         } finally {
             lastRequestAt = System.currentTimeMillis()
+            requestLog.addLast(lastRequestAt)
         }
     }
 
@@ -245,7 +253,7 @@ class XtreamClient(private val cfg: XtreamConfig) {
      * Streams every movie, series and live channel to [onItem] (kind, id, name, image, ext),
      * for the search index. Returns the names of the lists that could not be loaded.
      */
-    suspend fun dumpCatalog(onItem: (Char, Long, String, String?, String, String?) -> Unit): List<String> =
+    suspend fun dumpCatalog(onItem: (Char, Long, String, String?, String, String?, Long) -> Unit): List<String> =
         withContext(Dispatchers.IO) {
             data class Spec(val action: String, val kind: Char, val idField: String, val imageField: String, val label: String)
             val specs = listOf(
@@ -262,6 +270,7 @@ class XtreamClient(private val cfg: XtreamConfig) {
                         var image: String? = null
                         var ext = if (spec.kind == SearchEntry.KIND_LIVE) "ts" else "mp4"
                         var cat: String? = null
+                        var added = 0L
                         r.beginObject()
                         while (r.hasNext()) {
                             when (r.nextName()) {
@@ -270,14 +279,17 @@ class XtreamClient(private val cfg: XtreamConfig) {
                                 spec.imageField -> image = r.nextLenient()?.takeIf { it.startsWith("http") }
                                 "container_extension" -> ext = r.nextLenient()?.takeIf { it.isNotBlank() } ?: ext
                                 "category_id" -> cat = r.nextLenient()
+                                "added", "last_modified" -> added = r.nextLenient()?.toLongOrNull() ?: added
                                 else -> r.skipValue()
                             }
                         }
                         r.endObject()
-                        id?.let { onItem(spec.kind, it, name.trim(), image, ext, cat) }
+                        id?.let { onItem(spec.kind, it, name.trim(), image, ext, cat, added) }
                     }) { Unit }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
+                } catch (e: ProviderBlockedException) {
+                    throw e   // stop right away, don't fire the remaining requests
                 } catch (e: Exception) {
                     failed += spec.label
                 }
@@ -351,7 +363,19 @@ class XtreamClient(private val cfg: XtreamConfig) {
         const val USER_AGENT = "Couchpotato/0.1"
 
         private val GATE = Any()
-        private const val MIN_GAP_MS = 1_500L
+        private const val MIN_GAP_MS = 2_500L
+        private const val HOUR_MS = 60 * 60 * 1000L
+        /** Hard cap for everything in one hour (a normal day needs ~6 for the sync). */
+        private const val MAX_PER_HOUR = 40
+        /** Background work (sync, "Jetzt läuft") stops earlier, so you still have room to browse. */
+        private const val BACKGROUND_PER_HOUR = 20
+        private val requestLog = ArrayDeque<Long>()
+
+        /** For the settings screen. */
+        fun requestsLastHour(): Int = synchronized(GATE) {
+            val now = System.currentTimeMillis()
+            requestLog.count { now - it <= HOUR_MS }
+        }
         private const val COOLDOWN_MS = 15 * 60 * 1000L
         private val BLOCK_CODES = setOf(401, 403, 404, 429, 509)
 
@@ -393,4 +417,10 @@ class ProviderBlockedException(code: Int?, val until: Long) : IOException(
         append(" – vermutlich wegen zu vieler Anfragen. Couchpotato pausiert und versucht es ab $time Uhr wieder.")
         append(" Bleibt es danach so, bitte die Zugangsdaten prüfen.")
     }
+)
+
+/** Couchpotato's own hourly request budget is used up (protects the account from a lock). */
+class RequestBudgetException(background: Boolean) : IOException(
+    if (background) "Hintergrund-Abfragen pausiert (Stundenlimit erreicht) – geht später automatisch weiter."
+    else "Zu viele Anfragen in der letzten Stunde – Couchpotato bremst, um eine Sperre beim Anbieter zu vermeiden. Bitte etwas später erneut versuchen."
 )

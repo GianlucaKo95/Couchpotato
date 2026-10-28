@@ -9,7 +9,7 @@ Werbefreier Startbildschirm mit einer gemeinsamen **„Weiterschauen“-Reihe**,
 |---|---|
 | **Weiterschauen** | IPTV-Filme/-Folgen aus dem eigenen Player (Position wird alle 10 s gespeichert, nach einer Folge steht automatisch die nächste drin) + experimentell die Android-„Watch Next“-Einträge anderer Apps (Netflix, Prime, RTL+ …), nach Zeit gemischt |
 | **Apps** | alle installierten Apps, sortiert nach zuletzt geöffnet, plus Kachel „Fire TV Einstellungen“ |
-| **Neue Filme / Neue Serien** | die 40 neuesten Einträge deines Anbieters (Xtream-API), auf dem Stick gecacht |
+| **Neue Filme / Neue Serien** | die 40 neuesten Einträge aus dem lokalen Katalog (ausgeblendete Kategorien fehlen) |
 
 - Serien-Detail: Staffeln, Folgen, „Fortsetzen“/„Weiter mit …“; Folgen laufen am Stück durch.
 - Lange **OK** auf einer App, einem Sender oder einem Titel in „Weiterschauen“ öffnet ein Menü:
@@ -91,3 +91,16 @@ app/src/main/java/de/koeven/couchpotato/
 
 Mindestversion Android 7.1 (Fire OS 6). Ideen für später: Kategorien & Suche, Live-TV-Reihe mit
 EPG, Home-Assistant-Kacheln.
+
+## Schonender Umgang mit dem Anbieter
+
+Der Anbieter sperrt das Konto zeitweise, wenn zu viele Anfragen kommen. Deshalb:
+
+- **Ein Abgleich pro Tag** (6 Anfragen: Kategorien + Listen für Filme, Serien, Live-TV) – der komplette
+  Katalog liegt danach auf dem Stick. Neue Filme/Serien, Mediathek, Sender verwalten, Suche und das
+  Ausblenden von Kategorien brauchen **keine** Anfrage.
+- Weitere Anfragen nur beim Öffnen einer Serie (Folgenliste, im Speicher gehalten) und für
+  „Jetzt läuft“ (die ersten 8 Favoriten, alle 30 Minuten).
+- Alle Anfragen nacheinander, mindestens 2,5 s Abstand, Stundenlimit (Hintergrund 20, gesamt 40).
+- Bei HTTP 401/403/404/429/509 pausiert Couchpotato 15 Minuten komplett.
+- Unter *Einstellungen → Katalog & Anfragen* stehen letzter Abgleich und Anfragen der letzten Stunde.

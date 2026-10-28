@@ -168,6 +168,20 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
             }
 
             Spacer(Modifier.height(16.dp))
+            val sync by vm.state.collectAsState()
+            Text("Katalog & Anfragen", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
+            Text(sync.syncInfo, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Couchpotato gleicht den Katalog deines Anbieters höchstens einmal am Tag ab (6 Anfragen). " +
+                    "Neue Filme/Serien, Mediathek, Sender, Suche und das Ausblenden von Kategorien laufen danach " +
+                    "komplett auf dem Stick. Anfragen gehen einzeln mit Pause raus, mit Stundenlimit; " +
+                    "bei einer Sperre pausiert die App 15 Minuten.",
+                style = MaterialTheme.typography.bodySmall,
+                color = CpColors.TextMuted,
+            )
+            Button(onClick = { status = vm.syncNow() }) { Text("Katalog jetzt abgleichen") }
+
+            Spacer(Modifier.height(16.dp))
             val wn by vm.state.collectAsState()
             Text("Weiterschauen aus anderen Apps", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
             Text(
