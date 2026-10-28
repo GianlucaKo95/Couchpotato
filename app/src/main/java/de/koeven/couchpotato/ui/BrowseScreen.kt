@@ -280,7 +280,7 @@ fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
                         Text("Keine Filme in dieser Kategorie.", color = CpColors.TextMuted)
                     } else {
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(160.dp),
+                            columns = GridCells.Adaptive(PosterWidth + 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalArrangement = Arrangement.spacedBy(20.dp),
                             contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp, end = 8.dp),
@@ -298,7 +298,7 @@ fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
                         Text("Keine Serien in dieser Kategorie.", color = CpColors.TextMuted)
                     } else {
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(160.dp),
+                            columns = GridCells.Adaptive(PosterWidth + 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalArrangement = Arrangement.spacedBy(20.dp),
                             contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp, end = 8.dp),
@@ -316,7 +316,7 @@ fun BrowseScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit) {
                         Text("Keine Sender in dieser Kategorie.", color = CpColors.TextMuted)
                     } else {
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(232.dp),
+                            columns = GridCells.Adaptive(ChannelWidth + 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp, end = 8.dp),

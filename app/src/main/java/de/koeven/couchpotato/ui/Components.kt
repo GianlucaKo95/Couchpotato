@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -46,8 +47,18 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-val ScreenPadding = 56.dp
-private val CardShape = RoundedCornerShape(10.dp)
+/*
+ * Sizes follow the Fire OS 8 home screen. A Fire TV draws 1080p at ~960 x 540 dp, so with
+ * 48 dp side margins about 7 app tiles and 7-8 posters fit in one row.
+ */
+val ScreenPadding = 48.dp
+private val CardShape = RoundedCornerShape(8.dp)
+private val RowGap = 12.dp
+
+val AppTileWidth = 112.dp          // 16:9  -> ~7 per row
+val PosterWidth = 104.dp           // 2:3   -> ~7-8 per row
+val ContinueWidth = 184.dp         // 16:9  -> ~4-5 per row
+val ChannelWidth = 140.dp          // 16:9  -> ~6 per row
 
 @Composable
 fun Shelf(
@@ -59,9 +70,9 @@ fun Shelf(
     Column {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = ScreenPadding, bottom = if (hint == null) 8.dp else 2.dp),
+            modifier = Modifier.padding(start = ScreenPadding, bottom = if (hint == null) 2.dp else 0.dp),
         )
         hint?.let {
             Text(
@@ -73,8 +84,9 @@ fun Shelf(
         }
         LazyRow(
             state = state,
-            contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            // vertical padding leaves room for the focus zoom of the cards
+            contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(RowGap),
             content = content,
         )
     }
@@ -87,7 +99,7 @@ fun PosterCard(
     image: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    width: Dp = 140.dp,
+    width: Dp = PosterWidth,
 ) {
     Column(Modifier.width(width)) {
         Card(
@@ -101,9 +113,9 @@ fun PosterCard(
                 if (image == null) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.labelMedium,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.align(Alignment.Center).padding(10.dp),
+                        modifier = Modifier.align(Alignment.Center).padding(6.dp),
                     )
                 } else {
                     AsyncImage(
@@ -117,11 +129,11 @@ fun PosterCard(
         }
         Text(
             text = title,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelSmall,
             color = CpColors.TextMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier.padding(top = 6.dp),
         )
     }
 }
@@ -142,7 +154,7 @@ fun ContinueCard(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier
-            .width(300.dp)
+            .width(ContinueWidth)
             .aspectRatio(16f / 9f),
         shape = CardDefaults.shape(CardShape),
     ) {
@@ -158,29 +170,29 @@ fun ContinueCard(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000)), startY = 80f))
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000)), startY = 40f))
             )
             Column(
                 Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 badge?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = CpColors.Accent, maxLines = 1)
                 }
-                Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 subtitle?.let {
                     Text(
                         it,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                         color = CpColors.TextMuted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (fraction > 0f) ProgressBar(fraction, Modifier.padding(top = 6.dp))
+                if (fraction > 0f) ProgressBar(fraction, Modifier.padding(top = 4.dp))
             }
         }
     }
@@ -191,13 +203,13 @@ fun ProgressBar(fraction: Float, modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
-            .height(4.dp)
+            .height(3.dp)
             .background(Color(0x55FFFFFF), RoundedCornerShape(2.dp))
     ) {
         Box(
             Modifier
                 .fillMaxWidth(fraction)
-                .height(4.dp)
+                .height(3.dp)
                 .background(CpColors.Accent, RoundedCornerShape(2.dp))
         )
     }
@@ -211,13 +223,16 @@ fun AppCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(Modifier.width(192.dp)) {
+    // like Fire OS 8: compact banner tiles, the app name only shows on the focused one
+    var focused by remember { mutableStateOf(false) }
+    Column(Modifier.width(AppTileWidth)) {
         Card(
             onClick = onClick,
             onLongClick = onLongClick,
             modifier = modifier
-                .width(192.dp)
-                .aspectRatio(16f / 9f),
+                .width(AppTileWidth)
+                .aspectRatio(16f / 9f)
+                .onFocusChanged { focused = it.isFocused },
             shape = CardDefaults.shape(CardShape),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh), contentAlignment = Alignment.Center) {
@@ -233,19 +248,27 @@ fun AppCard(
                         bitmap = app.icon,
                         contentDescription = app.label,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(64.dp),
+                        modifier = Modifier.size(40.dp),
                     )
-                    else -> Text(app.label, textAlign = TextAlign.Center, modifier = Modifier.padding(8.dp))
+                    else -> Text(
+                        app.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(4.dp),
+                    )
                 }
             }
         }
         Text(
             text = app.label,
-            style = MaterialTheme.typography.bodySmall,
-            color = CpColors.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (focused) CpColors.Text else Color.Transparent,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
         )
     }
 }
@@ -260,12 +283,12 @@ fun ChannelCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(Modifier.width(208.dp)) {
+    Column(Modifier.width(ChannelWidth)) {
         Card(
             onClick = onClick,
             onLongClick = onLongClick,
             modifier = modifier
-                .width(208.dp)
+                .width(ChannelWidth)
                 .aspectRatio(16f / 9f),
             shape = CardDefaults.shape(CardShape),
         ) {
@@ -275,19 +298,19 @@ fun ChannelCard(
                         model = logo,
                         contentDescription = name,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp),
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp),
                     )
                 } else {
-                    Text(name, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(10.dp))
+                    Text(name, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(6.dp))
                 }
             }
         }
         Text(
             text = name,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier.padding(top = 6.dp),
         )
         Text(
             text = nowPlaying?.let { "Jetzt: $it" } ?: " ",
@@ -301,7 +324,7 @@ fun ChannelCard(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun TileCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, width: Dp = 192.dp) {
+fun TileCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, width: Dp = AppTileWidth) {
     Column(Modifier.width(width)) {
         Card(
             onClick = onClick,
@@ -311,7 +334,7 @@ fun TileCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, 
             shape = CardDefaults.shape(CardShape),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.Surface), contentAlignment = Alignment.Center) {
-                Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleSmall)
+                Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -332,7 +355,7 @@ fun Clock(modifier: Modifier = Modifier) {
         }
     }
     Column(modifier, horizontalAlignment = Alignment.End) {
-        Text(value.first, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        Text(value.second, style = MaterialTheme.typography.bodySmall, color = CpColors.TextMuted)
+        Text(value.first, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Text(value.second, style = MaterialTheme.typography.labelSmall, color = CpColors.TextMuted)
     }
 }

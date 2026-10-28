@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
+import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import de.koeven.couchpotato.R
@@ -95,7 +98,7 @@ fun HomeScreen(
         val m = moving
         if (m == null || m.row != row || m.key != key) return this
         return this
-            .border(3.dp, CpColors.Accent, RoundedCornerShape(12.dp))
+            .border(3.dp, CpColors.Accent, RoundedCornerShape(8.dp))
             .onPreviewKeyEvent { e ->
                 val finishKeys = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Back, Key.Escape)
                 when {
@@ -134,8 +137,8 @@ fun HomeScreen(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 32.dp, bottom = 64.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(top = 20.dp, bottom = 48.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
             Row(
@@ -148,7 +151,7 @@ fun HomeScreen(
                     painter = painterResource(R.drawable.logo_mark),
                     contentDescription = "Couchpotato",
                     modifier = Modifier
-                        .height(76.dp)
+                        .height(56.dp)
                         .aspectRatio(228f / 148f),
                 )
                 if (state.loading) {
@@ -159,15 +162,15 @@ fun HomeScreen(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                Clock()
-                Spacer(Modifier.width(24.dp))
                 if (state.configured) {
                     Button(onClick = onOpenBrowse) { Text("Mediathek") }
                     Spacer(Modifier.width(12.dp))
                 }
-                Button(onClick = onOpenSearch) { Text("Suchen") }
-                Spacer(Modifier.width(12.dp))
-                Button(onClick = onOpenSettings) { Text("Einstellungen") }
+                HeaderIcon(R.drawable.ic_search, "Suchen", onOpenSearch)
+                Spacer(Modifier.width(8.dp))
+                HeaderIcon(R.drawable.ic_settings, "Einstellungen", onOpenSettings)
+                Spacer(Modifier.width(20.dp))
+                Clock()
             }
         }
 
@@ -251,7 +254,7 @@ fun HomeScreen(
                                 TileCard(
                                     label = if (state.favorites.isEmpty()) "Sender\nauswählen" else "Sender\nverwalten",
                                     onClick = onOpenLive,
-                                    width = 208.dp,
+                                    width = ChannelWidth,
                                     modifier = if (state.favorites.isEmpty() && firstRow == HomeRows.LIVE) Modifier.focusRequester(firstFocus) else Modifier,
                                 )
                             }
@@ -383,5 +386,18 @@ private suspend fun LazyListState.keepVisible(index: Int) {
     when {
         index <= first -> animateScrollToItem((index - 1).coerceAtLeast(0))
         index >= last -> animateScrollToItem((index - visible.size + 2).coerceAtLeast(0))
+    }
+}
+
+/** Round icon button for the header (magnifier, gear). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun HeaderIcon(icon: Int, description: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = description,
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
