@@ -5,6 +5,24 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
+object HomeRows {
+    const val CONTINUE = "continue"
+    const val LIVE = "live"
+    const val APPS = "apps"
+    const val MOVIES = "movies"
+    const val SERIES = "series"
+    val ALL = listOf(CONTINUE, LIVE, APPS, MOVIES, SERIES)
+
+    fun label(id: String) = when (id) {
+        CONTINUE -> "Weiterschauen"
+        LIVE -> "Live-TV – Favoriten"
+        APPS -> "Apps"
+        MOVIES -> "Neue Filme"
+        SERIES -> "Neue Serien"
+        else -> id
+    }
+}
+
 class SettingsStore(context: Context) {
     private val p = context.getSharedPreferences("couchpotato", Context.MODE_PRIVATE)
 
@@ -52,6 +70,27 @@ class SettingsStore(context: Context) {
     var liveInExternalApp: Boolean
         get() = p.getBoolean("liveExternal", false)
         set(value) = p.edit().putBoolean("liveExternal", value).apply()
+
+    /** true = apps in the user's own order, false = most recently used first. */
+    var appsCustomOrder: Boolean
+        get() = p.getBoolean("appsCustom", false)
+        set(value) = p.edit().putBoolean("appsCustom", value).apply()
+
+    fun appOrder(): List<String> = runCatching {
+        val arr = JSONArray(p.getString("appOrder", null) ?: "[]")
+        (0 until arr.length()).map { arr.getString(it) }
+    }.getOrDefault(emptyList())
+
+    fun setAppOrder(pkgs: List<String>) = p.edit().putString("appOrder", JSONArray(pkgs).toString()).apply()
+
+    /** Order of the rows on the home screen (ids from [HomeRows]). */
+    fun rowOrder(): List<String> = runCatching {
+        val arr = JSONArray(p.getString("rowOrder", null) ?: "[]")
+        val saved = (0 until arr.length()).map { arr.getString(it) }.filter { it in HomeRows.ALL }
+        saved + HomeRows.ALL.filterNot { it in saved }   // rows added in later versions go to the end
+    }.getOrDefault(HomeRows.ALL)
+
+    fun setRowOrder(ids: List<String>) = p.edit().putString("rowOrder", JSONArray(ids).toString()).apply()
 
     fun markLaunched(pkg: String) = p.edit().putLong("launch:$pkg", System.currentTimeMillis()).apply()
     fun lastLaunched(pkg: String): Long = p.getLong("launch:$pkg", 0L)

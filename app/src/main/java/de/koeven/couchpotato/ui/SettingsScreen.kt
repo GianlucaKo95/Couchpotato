@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -30,6 +31,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.FilterChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import de.koeven.couchpotato.data.HomeRows
 import de.koeven.couchpotato.data.XtreamConfig
 import kotlinx.coroutines.launch
 import androidx.compose.material3.MaterialTheme as M3Theme
@@ -165,12 +167,28 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text("Startbildschirm", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
             Text(
-                "Lange OK drücken auf einer App blendet sie aus, auf einem Titel in „Weiterschauen“ entfernt ihn. " +
-                    "Apps sind nach zuletzt geöffnet sortiert.",
+                "Lange OK auf einer App, einem Sender oder einem Titel in „Weiterschauen“ öffnet ein Menü " +
+                    "(Verschieben, Ausblenden, Entfernen). Beim Verschieben mit ◀ ▶ schieben, OK = fertig.",
                 style = MaterialTheme.typography.bodySmall,
                 color = CpColors.TextMuted,
             )
             val home by vm.state.collectAsState()
+
+            Button(onClick = { vm.setAppsCustomOrder(!home.appsCustomOrder) }) {
+                Text("Apps sortieren: " + if (home.appsCustomOrder) "eigene Reihenfolge" else "zuletzt genutzt zuerst")
+            }
+
+            Text("Reihenfolge der Reihen", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+            home.rowOrder.forEachIndexed { i, id ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("${i + 1}. ${HomeRows.label(id)}", modifier = Modifier.width(260.dp))
+                    Button(onClick = { vm.moveRow(id, -1) }, enabled = i > 0) { Text("▲ nach oben") }
+                    Button(onClick = { vm.moveRow(id, 1) }, enabled = i < home.rowOrder.lastIndex) { Text("▼ nach unten") }
+                }
+            }
             Spacer(Modifier.height(16.dp))
             Text("Live-TV", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
             Button(onClick = { vm.setLiveInExternalApp(!home.liveInExternalApp) }) {

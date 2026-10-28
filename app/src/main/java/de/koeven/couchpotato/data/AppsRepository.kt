@@ -4,6 +4,8 @@ import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
+import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 
@@ -32,11 +34,22 @@ object AppsRepository {
                 AppEntry(
                     packageName = ai.packageName,
                     label = ri.loadLabel(pm).toString(),
-                    banner = banner?.let { runCatching { it.toBitmap(320, 180).asImageBitmap() }.getOrNull() },
-                    icon = icon?.let { runCatching { it.toBitmap(144, 144).asImageBitmap() }.getOrNull() },
+                    banner = banner?.let { runCatching { it.toBitmapKeepingRatio(480).asImageBitmap() }.getOrNull() },
+                    icon = icon?.let { runCatching { it.toBitmapKeepingRatio(192).asImageBitmap() }.getOrNull() },
                 ).also { cache[ai.packageName] = updated to it }
             }
         }
+    }
+
+    /**
+     * Renders a drawable at its own aspect ratio (longest side = [maxSide] px). Forcing every banner
+     * into 320x180 stretched those that aren't exactly 16:9.
+     */
+    private fun Drawable.toBitmapKeepingRatio(maxSide: Int): Bitmap {
+        val w = intrinsicWidth.takeIf { it > 0 } ?: maxSide
+        val h = intrinsicHeight.takeIf { it > 0 } ?: maxSide
+        val scale = maxSide.toFloat() / maxOf(w, h)
+        return toBitmap((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
     }
 
     fun launch(context: Context, pkg: String): Boolean {

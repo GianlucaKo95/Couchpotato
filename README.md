@@ -12,11 +12,13 @@ Werbefreier Startbildschirm mit einer gemeinsamen **„Weiterschauen“-Reihe**,
 | **Neue Filme / Neue Serien** | die 40 neuesten Einträge deines Anbieters (Xtream-API), auf dem Stick gecacht |
 
 - Serien-Detail: Staffeln, Folgen, „Fortsetzen“/„Weiter mit …“; Folgen laufen am Stück durch.
-- Lange **OK** auf einer App: ausblenden. Auf „Weiterschauen“: entfernen.
+- Lange **OK** auf einer App, einem Sender oder einem Titel in „Weiterschauen“ öffnet ein Menü:
+  **Verschieben** (dann mit ◀ ▶ schieben, OK = fertig), **Ausblenden** bzw. **Entfernen**.
+  Die Reihenfolge der Reihen selbst und „Apps: eigene Reihenfolge / zuletzt genutzt“ stellst du
+  unter *Einstellungen* ein.
 - **Home**-Taste springt immer zurück an den Anfang, **Zurück** schließt den Launcher nie.
 - **Live-TV – Favoriten**: Sender über die Kachel „Sender verwalten“ auswählen (OK = Favorit an/aus,
-  lange OK = sofort ansehen). Auf der Startseite zeigt jede Kachel, was gerade läuft; lange OK schiebt
-  einen Sender nach vorne. Im Couchpotato-Player schaltest du mit Hoch/Runter bzw. den Kanaltasten durch die
+  lange OK = sofort ansehen). Auf der Startseite zeigt jede Kachel, was gerade läuft. Im Couchpotato-Player schaltest du mit Hoch/Runter bzw. den Kanaltasten durch die
   Favoriten. Unter *Einstellungen* kannst du stattdessen „Sender öffnen mit: IsiPro“ wählen (IsiPro
   bekommt dann den Stream-Link – ob es den annimmt, musst du testen).
 

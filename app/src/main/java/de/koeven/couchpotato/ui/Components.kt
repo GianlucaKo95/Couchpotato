@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,15 +50,29 @@ val ScreenPadding = 56.dp
 private val CardShape = RoundedCornerShape(10.dp)
 
 @Composable
-fun Shelf(title: String, content: LazyListScope.() -> Unit) {
+fun Shelf(
+    title: String,
+    state: LazyListState = rememberLazyListState(),
+    hint: String? = null,
+    content: LazyListScope.() -> Unit,
+) {
     Column {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = ScreenPadding, bottom = 8.dp),
+            modifier = Modifier.padding(start = ScreenPadding, bottom = if (hint == null) 8.dp else 2.dp),
         )
+        hint?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = CpColors.Accent,
+                modifier = Modifier.padding(start = ScreenPadding, bottom = 6.dp),
+            )
+        }
         LazyRow(
+            state = state,
             contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             content = content,
@@ -206,16 +222,18 @@ fun AppCard(
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh), contentAlignment = Alignment.Center) {
                 when {
+                    // Fit keeps the banner's own proportions (no stretching, nothing cut off)
                     app.banner != null -> Image(
                         bitmap = app.banner,
                         contentDescription = app.label,
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )
                     app.icon != null -> Image(
                         bitmap = app.icon,
                         contentDescription = app.label,
-                        modifier = Modifier.size(56.dp),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(64.dp),
                     )
                     else -> Text(app.label, textAlign = TextAlign.Center, modifier = Modifier.padding(8.dp))
                 }

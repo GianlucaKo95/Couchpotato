@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import de.koeven.couchpotato.data.AppEntry
 import de.koeven.couchpotato.data.AppsRepository
 import de.koeven.couchpotato.data.CatalogCache
+import de.koeven.couchpotato.data.HomeRows
 import de.koeven.couchpotato.data.LiveCategory
 import de.koeven.couchpotato.data.LiveChannel
 import de.koeven.couchpotato.data.PlayItem
@@ -70,6 +71,8 @@ data class HomeState(
     val liveInExternalApp: Boolean = false,
     val indexStatus: String = "",
     val searchApps: List<SearchApp> = emptyList(),
+    val rowOrder: List<String> = HomeRows.ALL,
+    val appsCustomOrder: Boolean = false,
 )
 
 /** An installed app in the "search in other apps" row; [acceptsQuery] = search term is handed over. */
@@ -117,12 +120,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun refreshLocal() {
         val hidden = settings.hiddenApps()
         val apps = withContext(Dispatchers.IO) {
-            AppsRepository.load(getApplication())
-                .filterNot { it.packageName in hidden }
-                .sortedWith(
-                    compareByDescending<AppEntry> { settings.lastLaunched(it.packageName) }
-                        .thenBy { it.label.lowercase() }
-                )
+            sortApps(AppsRepository.load(getApplication()).filterNot { it.packageName in hidden })
         }
         val labels = apps.associate { it.packageName to it.label }
         val hiddenCw = settings.hiddenContinue()
@@ -145,6 +143,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 externalStatus = WatchNextSource.lastResult,
                 favorites = settings.favorites(),
                 liveInExternalApp = settings.liveInExternalApp,
+                rowOrder = settings.rowOrder(),
+                appsCustomOrder = settings.appsCustomOrder,
             )
         }
     }
@@ -233,14 +233,72 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         refreshEpg(force = true)
     }
 
-    /** Moves a favourite one place to the left (towards the start of the row). */
-    fun moveFavoriteLeft(channel: LiveChannel) {
+    /** Moves a favourite by [delta] places; returns its new index. */
+    fun moveFavorite(channelId: Long, delta: Int): Int {
         val list = settings.favorites().toMutableList()
-        val i = list.indexOfFirst { it.id == channel.id }
-        if (i <= 0) return
-        list.add(i - 1, list.removeAt(i))
-        settings.setFavorites(list)
-        _state.update { it.copy(favorites = list) }
+        val i = list.indexOfFirst { it.id == channelId }
+        if (i < 0) return 0
+        val j = (i + delta).coerceIn(0, list.lastIndex)
+        if (j != i) {
+            list.add(j, list.removeAt(i))
+            settings.setFavorites(list)
+            _state.update { it.copy(favorites = list) }
+        }
+        return j
+    }
+
+    // ---------------- Reihenfolge ----------------
+
+    private fun sortApps(apps: List<AppEntry>): List<AppEntry> {
+        if (settings.appsCustomOrder) {
+            val order = settings.appOrder().withIndex().associate { (i, pkg) -> pkg to i }
+            // apps not in the saved order (newly installed) go to the end, alphabetically
+            return apps.sortedWith(
+                compareBy<AppEntry> { order[it.packageName] ?: Int.MAX_VALUE }.thenBy { it.label.lowercase() }
+            )
+        }
+        return apps.sortedWith(
+            compareByDescending<AppEntry> { settings.lastLaunched(it.packageName) }.thenBy { it.label.lowercase() }
+        )
+    }
+
+    /** Moves an app by [delta]; switches to the user's own order on first use. Returns the new index. */
+    fun moveApp(pkg: String, delta: Int): Int {
+        val list = _state.value.apps.toMutableList()
+        val i = list.indexOfFirst { it.packageName == pkg }
+        if (i < 0) return 0
+        val j = (i + delta).coerceIn(0, list.lastIndex)
+        if (j != i) list.add(j, list.removeAt(i))
+        // keep hidden apps' positions in the saved order too
+        val shown = list.map { it.packageName }
+        settings.setAppOrder(shown + settings.appOrder().filterNot { it in shown })
+        settings.appsCustomOrder = true
+        _state.update { it.copy(apps = list, appsCustomOrder = true) }
+        return j
+    }
+
+    fun setAppsCustomOrder(custom: Boolean) {
+        if (custom && settings.appOrder().isEmpty()) {
+            settings.setAppOrder(_state.value.apps.map { it.packageName })
+        }
+        settings.appsCustomOrder = custom
+        viewModelScope.launch { refreshLocal() }
+    }
+
+    fun moveRow(id: String, delta: Int) {
+        val list = settings.rowOrder().toMutableList()
+        val i = list.indexOf(id)
+        val j = (i + delta).coerceIn(0, list.lastIndex)
+        if (i < 0 || i == j) return
+        list.add(j, list.removeAt(i))
+        settings.setRowOrder(list)
+        _state.update { it.copy(rowOrder = list) }
+    }
+
+    fun removeFavorite(channel: LiveChannel) {
+        val updated = settings.favorites().filterNot { it.id == channel.id }
+        settings.setFavorites(updated)
+        _state.update { it.copy(favorites = updated) }
     }
 
     fun setLiveInExternalApp(value: Boolean) {
