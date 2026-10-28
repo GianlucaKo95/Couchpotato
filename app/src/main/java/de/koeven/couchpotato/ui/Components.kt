@@ -1,5 +1,6 @@
 package de.koeven.couchpotato.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,12 +34,14 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -57,7 +60,31 @@ import java.util.Locale
  * so they look the same whatever density the stick reports.
  */
 val ScreenPadding = 48.dp
-private val CardShape = RoundedCornerShape(8.dp)
+private val CardShape = RoundedCornerShape(12.dp)
+
+/** Design B: focused tile gets a light frame and grows a little. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun cardBorder() = CardDefaults.border(
+    focusedBorder = Border(border = BorderStroke(3.dp, CpColors.Text), inset = 0.dp, shape = CardShape),
+)
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun cardScale() = CardDefaults.scale(focusedScale = 1.06f)
+
+/** Tells the background glow which picture is focused. */
+@Composable
+fun Modifier.glowFrom(image: String?): Modifier {
+    val backdrop = LocalBackdrop.current ?: return this
+    return onFocusChanged { if (it.isFocused) backdrop.focusImage(image) }
+}
+
+@Composable
+fun Modifier.glowFrom(key: String, bitmap: ImageBitmap?): Modifier {
+    val backdrop = LocalBackdrop.current ?: return this
+    return onFocusChanged { if (it.isFocused) backdrop.focusBitmap(key, bitmap) }
+}
 private val RowGap = 12.dp
 
 @Composable
@@ -82,8 +109,8 @@ fun Shelf(
     Column {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = ScreenPadding),
         )
         hint?.let {
@@ -118,8 +145,11 @@ fun PosterCard(
             onClick = onClick,
             modifier = modifier
                 .width(width)
-                .aspectRatio(2f / 3f),
+                .aspectRatio(2f / 3f)
+                .glowFrom(image),
             shape = CardDefaults.shape(CardShape),
+            border = cardBorder(),
+            scale = cardScale(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh)) {
                 if (image == null) {
@@ -168,8 +198,11 @@ fun LandscapePosterCard(
         onLongClick = onLongClick,
         modifier = modifier
             .width(ContentWidth)
-            .aspectRatio(16f / 9f),
+            .aspectRatio(16f / 9f)
+            .glowFrom(image),
         shape = CardDefaults.shape(CardShape),
+        border = cardBorder(),
+        scale = cardScale(),
     ) {
         Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh)) {
             if (image != null) {
@@ -224,51 +257,62 @@ fun ContinueCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        onClick = onClick,
-        onLongClick = onLongClick,
-        modifier = modifier
-            .width(ContinueWidth)
-            .aspectRatio(16f / 9f),
-        shape = CardDefaults.shape(CardShape),
-    ) {
-        Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh)) {
-            if (image != null) {
-                AsyncImage(
-                    model = image,
-                    contentDescription = title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000)), startY = 40f))
-            )
-            Column(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(1.dp),
-            ) {
-                badge?.let {
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = CpColors.Accent, maxLines = 1)
+    var focused by remember { mutableStateOf(false) }
+    Column(Modifier.width(ContinueWidth)) {
+        Card(
+            onClick = onClick,
+            onLongClick = onLongClick,
+            modifier = modifier
+                .width(ContinueWidth)
+                .aspectRatio(16f / 9f)
+                .onFocusChanged { focused = it.isFocused }
+                .glowFrom(image),
+            shape = CardDefaults.shape(CardShape),
+            border = cardBorder(),
+            scale = cardScale(),
+        ) {
+            Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh)) {
+                if (image != null) {
+                    AsyncImage(
+                        model = image,
+                        contentDescription = title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
-                Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                subtitle?.let {
+                badge?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.labelSmall,
-                        color = CpColors.TextMuted,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CpColors.Text,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .background(Color(0x99000000), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                 }
-                if (fraction > 0f) ProgressBar(fraction, Modifier.padding(top = 4.dp))
+                if (fraction > 0f) {
+                    ProgressBar(
+                        fraction,
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 8.dp, vertical = 7.dp),
+                    )
+                }
             }
         }
+        Text(
+            text = listOfNotNull(title, subtitle).joinToString(" · "),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (focused) CpColors.Text else CpColors.TextMuted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp),
+        )
     }
 }
 
@@ -277,13 +321,13 @@ fun ProgressBar(fraction: Float, modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
-            .height(3.dp)
-            .background(Color(0x55FFFFFF), RoundedCornerShape(2.dp))
+            .height(4.dp)
+            .background(Color(0x4DFFFFFF), RoundedCornerShape(2.dp))
     ) {
         Box(
             Modifier
                 .fillMaxWidth(fraction)
-                .height(3.dp)
+                .height(4.dp)
                 .background(CpColors.Accent, RoundedCornerShape(2.dp))
         )
     }
@@ -306,8 +350,11 @@ fun AppCard(
             modifier = modifier
                 .width(AppTileWidth)
                 .aspectRatio(16f / 9f)
-                .onFocusChanged { focused = it.isFocused },
+                .onFocusChanged { focused = it.isFocused }
+                .glowFrom(app.packageName, app.banner ?: app.icon),
             shape = CardDefaults.shape(CardShape),
+            border = cardBorder(),
+            scale = cardScale(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh), contentAlignment = Alignment.Center) {
                 when {
@@ -365,6 +412,8 @@ fun ChannelCard(
                 .width(ChannelWidth)
                 .aspectRatio(16f / 9f),
             shape = CardDefaults.shape(CardShape),
+            border = cardBorder(),
+            scale = cardScale(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh), contentAlignment = Alignment.Center) {
                 if (logo != null) {
@@ -406,6 +455,8 @@ fun TileCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, 
                 .width(width)
                 .aspectRatio(16f / 9f),
             shape = CardDefaults.shape(CardShape),
+            border = cardBorder(),
+            scale = cardScale(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.Surface), contentAlignment = Alignment.Center) {
                 Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
@@ -429,7 +480,6 @@ fun Clock(modifier: Modifier = Modifier) {
         }
     }
     Column(modifier, horizontalAlignment = Alignment.End) {
-        Text(value.first, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        Text(value.second, style = MaterialTheme.typography.labelSmall, color = CpColors.TextMuted)
+        Text(value.first, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
 }

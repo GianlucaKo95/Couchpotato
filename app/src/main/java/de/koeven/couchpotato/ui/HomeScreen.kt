@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -45,6 +46,8 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
+import androidx.tv.material3.IconButtonDefaults
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import de.koeven.couchpotato.R
@@ -53,6 +56,7 @@ import de.koeven.couchpotato.data.AppsRepository
 import de.koeven.couchpotato.data.HomeRows
 import de.koeven.couchpotato.data.LiveChannel
 import de.koeven.couchpotato.data.PlayItem
+import de.koeven.couchpotato.data.SearchEntry
 import de.koeven.couchpotato.data.SeriesItem
 import de.koeven.couchpotato.player.Playback
 import kotlinx.coroutines.delay
@@ -67,7 +71,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenLive: () -> Unit,
     onOpenSearch: () -> Unit,
-    onOpenBrowse: () -> Unit,
+    onOpenBrowse: (Char) -> Unit,
 ) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
@@ -137,7 +141,7 @@ fun HomeScreen(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp),
+        contentPadding = PaddingValues(top = 18.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),   // groups sit close together, like Fire OS
     ) {
         item {
@@ -151,27 +155,34 @@ fun HomeScreen(
                     painter = painterResource(R.drawable.logo_mark),
                     contentDescription = "Couchpotato",
                     modifier = Modifier
-                        .height(56.dp)
+                        .height(46.dp)
                         .aspectRatio(228f / 148f),
                 )
+                Spacer(Modifier.width(22.dp))
+                // design B: tab bar; Live-TV / Filme / Serien open the Mediathek on that tab
+                NavTab("Start", selected = true, onClick = {
+                    scope.launch { listState.animateScrollToItem(0) }
+                })
+                if (state.configured) {
+                    NavTab("Live-TV", selected = false, onClick = { onOpenBrowse(SearchEntry.KIND_LIVE) })
+                    NavTab("Filme", selected = false, onClick = { onOpenBrowse(SearchEntry.KIND_MOVIE) })
+                    NavTab("Serien", selected = false, onClick = { onOpenBrowse(SearchEntry.KIND_SERIES) })
+                }
                 if (state.loading) {
                     Text(
-                        "  · aktualisiere …",
-                        style = MaterialTheme.typography.bodySmall,
+                        "  aktualisiere …",
+                        style = MaterialTheme.typography.labelSmall,
                         color = CpColors.TextMuted,
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                if (state.configured) {
-                    Button(onClick = onOpenBrowse) { Text("Mediathek") }
-                    Spacer(Modifier.width(12.dp))
-                }
                 HeaderIcon(R.drawable.ic_search, "Suchen", onOpenSearch)
                 Spacer(Modifier.width(8.dp))
                 HeaderIcon(R.drawable.ic_settings, "Einstellungen", onOpenSettings)
-                Spacer(Modifier.width(20.dp))
+                Spacer(Modifier.width(18.dp))
                 Clock()
             }
+        item { Spacer(Modifier.height(18.dp)) }   // space between tab bar and the first row
         }
 
         if (!state.configured) {
@@ -393,11 +404,39 @@ private suspend fun LazyListState.keepVisible(index: Int) {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun HeaderIcon(icon: Int, description: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
+    IconButton(
+        onClick = onClick,
+        colors = IconButtonDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.10f),
+            contentColor = CpColors.Text,
+            focusedContainerColor = CpColors.Text,
+            focusedContentColor = CpColors.Background,
+        ),
+    ) {
         Icon(
             painter = painterResource(icon),
             contentDescription = description,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(20.dp),
         )
+    }
+}
+
+/** Pill-shaped tab of the top bar. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun NavTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        shape = ButtonDefaults.shape(RoundedCornerShape(50)),
+        colors = ButtonDefaults.colors(
+            containerColor = if (selected) CpColors.Text else Color.White.copy(alpha = 0.06f),
+            contentColor = if (selected) CpColors.Background else CpColors.Text,
+            focusedContainerColor = CpColors.Accent,
+            focusedContentColor = CpColors.OnAccent,
+        ),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier.padding(end = 6.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
     }
 }

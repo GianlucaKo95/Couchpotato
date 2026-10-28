@@ -97,7 +97,10 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
             onOpenSettings = { go(Screen.Settings) },
             onOpenLive = { go(Screen.Live) },
             onOpenSearch = { go(Screen.Search) },
-            onOpenBrowse = { go(Screen.Browse) },
+            onOpenBrowse = { kind ->
+                vm.browseKind = kind
+                go(Screen.Browse)
+            },
         )
         Screen.Browse -> BrowseScreen(vm = vm, onOpenSeries = { id, name -> go(Screen.Series(id, name)) })
         Screen.Live -> LiveScreen(vm = vm)
