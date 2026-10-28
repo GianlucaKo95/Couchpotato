@@ -175,7 +175,7 @@ class ProgressStore(context: Context) {
 
     fun continueWatching(): List<ProgressEntry> = all()
         .filter { e ->
-            e.upNext || (e.positionMs > 30_000 && (e.durationMs <= 0 || e.positionMs < e.durationMs * 0.95))
+            e.upNext || (e.positionMs > 10_000 && (e.durationMs <= 0 || e.positionMs < e.durationMs * 0.95))
         }
         .sortedByDescending { it.updatedAt }
         .take(30)

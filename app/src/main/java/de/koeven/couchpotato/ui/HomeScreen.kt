@@ -202,6 +202,19 @@ fun HomeScreen(
                                             modifier = focusMod,
                                         )
                                     }
+                                    is ContinueItem.AppTile -> {
+                                        ContinueCard(
+                                            title = item.app.label,
+                                            subtitle = "dort weiterschauen",
+                                            image = null,
+                                            bitmap = item.app.banner ?: item.app.icon,
+                                            fraction = 0f,
+                                            badge = null,
+                                            onClick = { vm.launchApp(item.app.packageName) },
+                                            onLongClick = onLong,
+                                            modifier = focusMod,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -337,6 +350,7 @@ fun HomeScreen(
             title = when (val c = m.item) {
                 is ContinueItem.Iptv -> c.entry.item.title
                 is ContinueItem.External -> c.program.title
+                is ContinueItem.AppTile -> c.app.label
             },
             actions = listOf(
                 MenuAction("Aus „Weiterschauen“ entfernen") { vm.removeFromContinue(m.item) },

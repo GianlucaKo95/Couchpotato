@@ -349,97 +349,31 @@ private fun LiveSection(vm: HomeViewModel, state: HomeState) {
 
 @Composable
 private fun ContinueSection(vm: HomeViewModel, state: HomeState) {
+    val context = LocalContext.current
+    var refresh by remember { mutableStateOf(0) }
+    val watching = remember(refresh) { MediaWatcher.isEnabled(context) }
     SectionTitle(
         "Weiterschauen",
-        "Filme und Folgen aus Couchpotato merken sich die Stelle selbst. Andere Apps erscheinen nur, " +
-            "wenn sie die offene Android-„Watch Next“-Liste nutzen – Netflix & Co. melden ihren Fortschritt " +
-            "nur an Amazon, und diese Liste kann keine andere App lesen.",
+        "Filme und Folgen aus Couchpotato merken sich die Stelle ab 10 Sekunden. Was du in IsiPro schaust, " +
+            "landet ebenfalls hier. Netflix & Co. melden ihren Fortschritt nur an Amazon – sie erscheinen " +
+            "deshalb als App-Kachel, die direkt die App öffnet.",
     )
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         StatCard("Einträge in Weiterschauen", state.continueWatching.size.toString(), " ", Modifier.weight(1f))
-        StatCard("Andere Apps", state.externalStatus.ifBlank { "–" }, " ", Modifier.weight(2f), small = true)
+        StatCard("IsiPro mitlesen", if (watching) "aktiv" else "Freigabe fehlt", " ", Modifier.weight(1f))
     }
-    SettingRow(title = "Andere Apps erneut prüfen", value = "Prüfen") { vm.onResume() }
-    MediaTestPanel()
-}
-
-/** TEST: shows what other apps reported to the system while playing (see data/MediaWatcher). */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun MediaTestPanel() {
-    val context = LocalContext.current
-    var refresh by remember { mutableStateOf(0) }
-    val enabled = remember(refresh) { MediaWatcher.isEnabled(context) }
-    val log = remember(refresh) { MediaWatcher.log(context) }
-    val time = remember { SimpleDateFormat("dd.MM. HH:mm:ss", Locale.GERMANY) }
-
-    Text(
-        "Test: Was melden andere Apps beim Abspielen?",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 12.dp),
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        StatCard("Freigabe Mitlesen", if (enabled) "erteilt" else "fehlt", " ", Modifier.weight(1f))
-        StatCard("Gesammelte Meldungen", log.size.toString(), " ", Modifier.weight(1f))
-    }
-    if (!enabled) {
+    if (!watching) {
         Hint(
-            "Einmalig per PowerShell freigeben, danach hier „Aktualisieren“:\n" +
-                "adb shell cmd notification allow_listener " +
+            "Einmalig per PowerShell freigeben:\nadb shell cmd notification allow_listener " +
                 "de.koeven.couchpotato/de.koeven.couchpotato.data.MediaWatcher"
         )
-    } else {
-        Hint("Spiel kurz etwas in Netflix (oder einer anderen App) ab, komm zurück und drück „Aktualisieren“.")
     }
-    SettingRow(title = "Meldungen neu laden", value = "Aktualisieren") { refresh++ }
-    if (log.isNotEmpty()) {
-        SettingRow(title = "Meldungen löschen", value = "Leeren") {
-            MediaWatcher.clear(context)
-            refresh++
-        }
-    }
-    log.forEach { e ->
-        val label = remember(e.pkg) {
-            runCatching {
-                context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(e.pkg, 0)).toString()
-            }.getOrDefault(e.pkg)
-        }
-        val canOpen = MediaWatcher.lastActivity.containsKey(e.pkg)
-        ListItem(
-            selected = false,
-            onClick = {
-                if (!MediaWatcher.openLast(e.pkg)) {
-                    android.widget.Toast.makeText(
-                        context, "$label hat keinen Absprung-Link geliefert", android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                }
-            },
-            shape = ListItemDefaults.shape(RoundedCornerShape(12.dp)),
-            colors = ListItemDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.06f),
-                contentColor = CpColors.Text,
-                focusedContainerColor = Color.White.copy(alpha = 0.22f),
-                focusedContentColor = CpColors.Text,
-            ),
-            scale = ListItemDefaults.scale(focusedScale = 1f),
-            overlineContent = { Text("${time.format(Date(e.time))} · ${e.source} · ${e.pkg}") },
-            headlineContent = {
-                Text(
-                    label + if (canOpen) "   ·  OK = über Absprung-Link öffnen" else "",
-                    fontWeight = FontWeight.Bold,
-                )
-            },
-            supportingContent = {
-                Text(
-                    e.fields.entries.joinToString("\n") { "${it.key} = ${it.value}" },
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-        )
+    SettingRow(title = "Status neu prüfen", value = "Prüfen") {
+        refresh++
+        vm.onResume()
     }
 }
+
 
 @Composable
 private fun AboutSection(state: HomeState) {

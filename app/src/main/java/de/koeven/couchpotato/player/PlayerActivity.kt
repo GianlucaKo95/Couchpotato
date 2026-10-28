@@ -141,6 +141,12 @@ class PlayerActivity : Activity() {
         }
     }
 
+    // saved here too: onPause runs before the launcher comes back, onStop only afterwards
+    override fun onPause() {
+        saveCurrent()
+        super.onPause()
+    }
+
     override fun onStart() {
         super.onStart()
         handler.postDelayed(saveTask, SAVE_INTERVAL_MS)

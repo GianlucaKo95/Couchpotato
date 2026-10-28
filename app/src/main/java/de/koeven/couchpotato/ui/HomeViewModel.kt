@@ -52,7 +52,16 @@ sealed interface ContinueItem {
         override val key: String get() = program.key
         override val sortTime: Long get() = program.lastEngagement
     }
+
+    /** Streaming app whose progress we can't read (Netflix …): a tile that opens the app. */
+    data class AppTile(val app: AppEntry, val lastUsed: Long) : ContinueItem {
+        override val key: String get() = "app:${app.packageName}"
+        override val sortTime: Long get() = lastUsed
+    }
 }
+
+/** Streaming apps shown as a tile in "Weiterschauen" (if installed). */
+private val STREAMING_APPS = listOf("com.netflix.ninja", "com.disney.disneyplus")
 
 data class HomeState(
     val continueWatching: List<ContinueItem> = emptyList(),
@@ -129,6 +138,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         refreshEpg(force = false)
     }
 
+    /** Titles started in IsiPro carry no cover: take name and cover from the local catalogue. */
+    private fun enrich(e: ProgressEntry): ProgressEntry {
+        if (e.item.image != null || e.item.kind != PlayItem.KIND_MOVIE) return e
+        val hit = indexEntries?.firstOrNull { it.kind == SearchEntry.KIND_MOVIE && it.id == e.item.streamId } ?: return e
+        return e.copy(item = e.item.copy(title = hit.name, image = hit.image))
+    }
+
     private suspend fun refreshLocal() {
         val hidden = settings.hiddenApps()
         val apps = withContext(Dispatchers.IO) {
@@ -137,11 +153,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val labels = apps.associate { it.packageName to it.label }
         val hiddenCw = settings.hiddenContinue()
         val cw = withContext(Dispatchers.IO) {
-            val iptv = progress.continueWatching().map { ContinueItem.Iptv(it) }
+            val iptv = progress.continueWatching().map { ContinueItem.Iptv(enrich(it)) }
+            val tiles = STREAMING_APPS.mapNotNull { pkg -> apps.firstOrNull { it.packageName == pkg } }
+                .map { ContinueItem.AppTile(it, settings.lastLaunched(it.packageName)) }
             val external = watchNextCache.merge(WatchNextSource.load(getApplication())) { pkg -> settings.lastLaunched(pkg) }
                 .filter { it.packageName != getApplication<Application>().packageName }
                 .map { ContinueItem.External(it, it.packageName?.let { pkg -> labels[pkg] }) }
-            (iptv + external)
+            (iptv + external + tiles)
                 .filterNot { it.key in hiddenCw }
                 .sortedByDescending { it.sortTime }
                 .take(40)
@@ -524,6 +542,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
         recomputeRows()
         runSearch(searchQuery.value)
+        refreshLocal()      // names and covers for titles started in IsiPro
     }
 
     /** "Neue Filme/Serien": the newest titles of the local catalogue, hidden categories left out. */
@@ -609,6 +628,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         when (item) {
             is ContinueItem.Iptv -> progress.remove(item.key)
             is ContinueItem.External -> settings.hideContinue(item.key)   // can't delete other apps' entries
+            is ContinueItem.AppTile -> settings.hideContinue(item.key)
         }
         viewModelScope.launch { refreshLocal() }
     }

@@ -256,8 +256,10 @@ fun ContinueCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    bitmap: ImageBitmap? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val glow = if (image == null && bitmap != null) Modifier.glowFrom(title, bitmap) else Modifier.glowFrom(image)
     Column(Modifier.width(ContinueWidth)) {
         Card(
             onClick = onClick,
@@ -266,7 +268,7 @@ fun ContinueCard(
                 .width(ContinueWidth)
                 .aspectRatio(16f / 9f)
                 .onFocusChanged { focused = it.isFocused }
-                .glowFrom(image),
+                .then(glow),
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
             scale = cardScale(),
@@ -277,6 +279,13 @@ fun ContinueCard(
                         model = image,
                         contentDescription = title,
                         contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = title,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
