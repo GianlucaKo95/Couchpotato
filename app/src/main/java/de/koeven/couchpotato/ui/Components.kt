@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -48,17 +52,25 @@ import java.util.Date
 import java.util.Locale
 
 /*
- * Sizes follow the Fire OS 8 home screen. A Fire TV draws 1080p at ~960 x 540 dp, so with
- * 48 dp side margins about 7 app tiles and 7-8 posters fit in one row.
+ * Sizes follow the Fire OS 8 home screen: small app tiles (~10 per row) and large
+ * landscape content tiles (~5 per row). They are computed from the real screen width,
+ * so they look the same whatever density the stick reports.
  */
 val ScreenPadding = 48.dp
 private val CardShape = RoundedCornerShape(8.dp)
 private val RowGap = 12.dp
 
-val AppTileWidth = 112.dp          // 16:9  -> ~7 per row
-val PosterWidth = 104.dp           // 2:3   -> ~7-8 per row
-val ContinueWidth = 184.dp         // 16:9  -> ~4-5 per row
-val ChannelWidth = 140.dp          // 16:9  -> ~6 per row
+@Composable
+private fun tileWidth(perRow: Float): Dp {
+    val usable = LocalConfiguration.current.screenWidthDp.dp - ScreenPadding * 2
+    return (usable - RowGap * (perRow - 1f)) / perRow
+}
+
+val AppTileWidth: Dp @Composable get() = tileWidth(10.4f)     // "Meine Apps und Sender"
+val ContentWidth: Dp @Composable get() = tileWidth(5.4f)      // Weiterschauen, Filme, Serien (16:9)
+val ContinueWidth: Dp @Composable get() = ContentWidth
+val ChannelWidth: Dp @Composable get() = tileWidth(7.4f)      // Live-TV
+val PosterWidth: Dp @Composable get() = tileWidth(8.5f)       // portrait covers in the Mediathek grid
 
 @Composable
 fun Shelf(
@@ -72,7 +84,7 @@ fun Shelf(
             text = title,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = ScreenPadding, bottom = if (hint == null) 2.dp else 0.dp),
+            modifier = Modifier.padding(start = ScreenPadding),
         )
         hint?.let {
             Text(
@@ -84,8 +96,8 @@ fun Shelf(
         }
         LazyRow(
             state = state,
-            // vertical padding leaves room for the focus zoom of the cards
-            contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 10.dp),
+            // just enough vertical room for the focus zoom of the cards
+            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 6.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(RowGap),
             content = content,
         )
@@ -135,6 +147,68 @@ fun PosterCard(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 6.dp),
         )
+    }
+}
+
+/**
+ * Landscape 16:9 tile like Fire OS, built from a portrait IPTV cover:
+ * the cover dimmed as background, sharp on the left, the title next to it.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun LandscapePosterCard(
+    title: String,
+    image: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+) {
+    Card(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = modifier
+            .width(ContentWidth)
+            .aspectRatio(16f / 9f),
+        shape = CardDefaults.shape(CardShape),
+    ) {
+        Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh)) {
+            if (image != null) {
+                AsyncImage(
+                    model = image,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alpha = 0.35f,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (image != null) {
+                    AsyncImage(
+                        model = image,
+                        contentDescription = title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .aspectRatio(2f / 3f)
+                            .clip(RoundedCornerShape(6.dp)),
+                    )
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
     }
 }
 
@@ -248,7 +322,7 @@ fun AppCard(
                         bitmap = app.icon,
                         contentDescription = app.label,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.fillMaxHeight(0.7f).aspectRatio(1f),
                     )
                     else -> Text(
                         app.label,
@@ -334,7 +408,7 @@ fun TileCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, 
             shape = CardDefaults.shape(CardShape),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.Surface), contentAlignment = Alignment.Center) {
-                Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
+                Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
             }
         }
     }

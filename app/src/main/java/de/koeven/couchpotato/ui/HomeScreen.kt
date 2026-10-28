@@ -137,8 +137,8 @@ fun HomeScreen(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 20.dp, bottom = 48.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),   // groups sit close together, like Fire OS
     ) {
         item {
             Row(
@@ -293,7 +293,7 @@ fun HomeScreen(
                     item(key = HomeRows.MOVIES) {
                         Shelf(HomeRows.label(HomeRows.MOVIES)) {
                             itemsIndexed(state.movies, key = { _, m -> m.id }) { i, movie ->
-                                PosterCard(
+                                LandscapePosterCard(
                                     title = movie.name,
                                     image = movie.image,
                                     onClick = { Playback.start(context, listOf(PlayItem.movie(movie))) },
@@ -308,7 +308,7 @@ fun HomeScreen(
                     item(key = HomeRows.SERIES) {
                         Shelf(HomeRows.label(HomeRows.SERIES)) {
                             itemsIndexed(state.series, key = { _, s -> s.id }) { i, series ->
-                                PosterCard(
+                                LandscapePosterCard(
                                     title = series.name,
                                     image = series.image,
                                     onClick = { onOpenSeries(series) },

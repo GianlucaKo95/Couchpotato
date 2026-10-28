@@ -168,6 +168,21 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
             }
 
             Spacer(Modifier.height(16.dp))
+            val wn by vm.state.collectAsState()
+            Text("Weiterschauen aus anderen Apps", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
+            Text(
+                "Status: ${wn.externalStatus}",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "Couchpotato liest die offene Android-„Watch Next“-Liste. Die „Weiterschauen“-Reihe von Fire OS " +
+                    "ist dagegen Amazons eigene und für andere Apps nicht lesbar. Steht hier „0 Einträge“, " +
+                    "melden Netflix & Co. ihren Fortschritt nur an Amazon.",
+                style = MaterialTheme.typography.bodySmall,
+                color = CpColors.TextMuted,
+            )
+            Button(onClick = { vm.onResume() }) { Text("Erneut prüfen") }
+            Spacer(Modifier.height(16.dp))
             Text("Startbildschirm", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)
             Text(
                 "Lange OK auf einer App, einem Sender oder einem Titel in „Weiterschauen“ öffnet ein Menü " +
@@ -200,11 +215,6 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
             Text(
                 "Im Couchpotato-Player schaltest du mit Hoch/Runter durch deine Favoriten. " +
                     "IsiPro bekommt nur den Stream-Link – ob es den annimmt, hängt von IsiPro ab.",
-                style = MaterialTheme.typography.bodySmall,
-                color = CpColors.TextMuted,
-            )
-            Text(
-                "Andere Apps in „Weiterschauen“ (experimentell): ${home.externalStatus}",
                 style = MaterialTheme.typography.bodySmall,
                 color = CpColors.TextMuted,
             )
