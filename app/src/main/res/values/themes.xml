@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="cp_bg">#0F3B40</color>
+
+    <style name="Theme.Couchpotato" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/cp_bg</item>
+        <item name="android:colorBackground">@color/cp_bg</item>
+        <item name="android:statusBarColor">@color/cp_bg</item>
+        <item name="android:navigationBarColor">@color/cp_bg</item>
+    </style>
+</resources>
