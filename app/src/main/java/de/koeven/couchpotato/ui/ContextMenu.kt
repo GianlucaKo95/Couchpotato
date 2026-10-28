@@ -32,14 +32,18 @@ import kotlinx.coroutines.delay
 data class MenuAction(val label: String, val onClick: () -> Unit)
 
 /**
- * Small popup opened by a long OK press. Key-ups are ignored until a key-down was seen
- * inside the popup – otherwise releasing the long press would instantly trigger the first entry.
+ * Small popup opened by a long OK press.
+ *
+ * The popup appears while OK is still held. The remote keeps sending *repeated* key-downs
+ * until the button is released, followed by one key-up – all of which would land on the first
+ * entry and "click" it. So the popup stays deaf until the held button has been released
+ * (or a genuinely new press – repeatCount 0 – arrives).
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ContextMenu(title: String, actions: List<MenuAction>, onDismiss: () -> Unit) {
     val firstFocus = remember { FocusRequester() }
-    var sawKeyDown by remember { mutableStateOf(false) }
+    var armed by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay(50)
@@ -53,10 +57,15 @@ fun ContextMenu(title: String, actions: List<MenuAction>, onDismiss: () -> Unit)
                 .background(CpColors.Surface, RoundedCornerShape(16.dp))
                 .padding(24.dp)
                 .onPreviewKeyEvent { e ->
-                    when (e.type) {
-                        KeyEventType.KeyDown -> { sawKeyDown = true; false }
-                        KeyEventType.KeyUp -> !sawKeyDown   // swallow the release of the long press
-                        else -> false
+                    if (armed) return@onPreviewKeyEvent false
+                    when {
+                        // release of the long press: swallow it, from now on the menu reacts
+                        e.type == KeyEventType.KeyUp -> { armed = true; true }
+                        // repeats of the still-held button: swallow
+                        e.nativeKeyEvent.repeatCount > 0 -> true
+                        // a fresh press (the long press was already released before the menu showed)
+                        e.type == KeyEventType.KeyDown -> { armed = true; false }
+                        else -> true
                     }
                 },
             verticalArrangement = Arrangement.spacedBy(10.dp),
