@@ -74,48 +74,88 @@ class MediaWatcher : NotificationListenerService() {
         }
     }
 
-    /** Film or episode from the provider playing in another app → into "Weiterschauen". */
     private fun record(c: MediaController) {
         runCatching {
             val md = c.metadata ?: return
-            val uri = md.description?.mediaUri?.toString() ?: md.getString(MediaMetadata.METADATA_KEY_MEDIA_URI) ?: return
-            val m = VOD_URL.find(uri) ?: return             // live channels have no "weiter"
-            val kind = m.groupValues[1]
-            val id = m.groupValues[2].toLongOrNull() ?: return
-            val ext = m.groupValues[3]
             val state = c.playbackState ?: return
             var pos = state.position
             if (state.state == PlaybackState.STATE_PLAYING && state.lastPositionUpdateTime > 0) {
                 pos += ((SystemClock.elapsedRealtime() - state.lastPositionUpdateTime) * state.playbackSpeed).toLong()
             }
             val dur = md.getLong(MediaMetadata.METADATA_KEY_DURATION).coerceAtLeast(0)
-            if (pos <= 5_000) return
-            val title = (md.description?.title ?: md.getString(MediaMetadata.METADATA_KEY_TITLE))
-                ?.toString()?.takeIf { it.isNotBlank() }
-            val item = if (kind == "movie") {
-                PlayItem(
-                    key = "vod:$id", kind = PlayItem.KIND_MOVIE, streamId = id, ext = ext,
-                    title = title ?: "Film", subtitle = null, image = null, seriesId = null,
-                )
+            val uri = md.description?.mediaUri?.toString() ?: md.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
+            if (uri != null && PROVIDER_URL.containsMatchIn(uri)) {
+                recordIptv(md, uri, pos, dur)
             } else {
-                PlayItem(
-                    key = "ep:$id", kind = PlayItem.KIND_EPISODE, streamId = id, ext = ext,
-                    title = title ?: "Folge", subtitle = null, image = null, seriesId = null,
-                )
+                recordOther(c, md, state, pos, dur)
             }
-            // keep what Couchpotato already knows about this title (name, cover, series)
-            val known = progress.get(item.key)?.item
-            val merged = if (known != null) item.copy(
-                title = known.title, subtitle = known.subtitle, image = known.image, seriesId = known.seriesId,
-            ) else item
-            if (dur > 0 && pos >= dur * 0.95) progress.finished(merged, null)
-            else progress.save(merged, pos, dur)
         }.onFailure { Log.w(TAG, "record failed", it) }
+    }
+
+    /** Film or episode from the provider playing in another app (IsiPro) → Couchpotato's own progress. */
+    private fun recordIptv(md: MediaMetadata, uri: String, pos: Long, dur: Long) {
+        val m = VOD_URL.find(uri) ?: return             // live channels have no "weiter"
+        val kind = m.groupValues[1]
+        val id = m.groupValues[2].toLongOrNull() ?: return
+        val ext = m.groupValues[3]
+        if (pos <= 5_000) return
+        val title = (md.description?.title ?: md.getString(MediaMetadata.METADATA_KEY_TITLE))
+            ?.toString()?.takeIf { it.isNotBlank() }
+        val item = if (kind == "movie") {
+            PlayItem(
+                key = "vod:$id", kind = PlayItem.KIND_MOVIE, streamId = id, ext = ext,
+                title = title ?: "Film", subtitle = null, image = null, seriesId = null,
+            )
+        } else {
+            PlayItem(
+                key = "ep:$id", kind = PlayItem.KIND_EPISODE, streamId = id, ext = ext,
+                title = title ?: "Folge", subtitle = null, image = null, seriesId = null,
+            )
+        }
+        // keep what Couchpotato already knows about this title (name, cover, series)
+        val known = progress.get(item.key)?.item
+        val merged = if (known != null) item.copy(
+            title = known.title, subtitle = known.subtitle, image = known.image, seriesId = known.seriesId,
+        ) else item
+        if (dur > 0 && pos >= dur * 0.95) progress.finished(merged, null)
+        else progress.save(merged, pos, dur)
+    }
+
+    /** Any other app (ARD Mediathek, Disney+ …): title, show and picture for "Weiterschauen". */
+    private fun recordOther(c: MediaController, md: MediaMetadata, state: PlaybackState, pos: Long, dur: Long) {
+        if (state.state != PlaybackState.STATE_PLAYING && state.state != PlaybackState.STATE_PAUSED) return
+        val d = md.description
+        val title = (d?.title ?: md.getText(MediaMetadata.METADATA_KEY_TITLE)
+            ?: md.getText(MediaMetadata.METADATA_KEY_DISPLAY_TITLE))?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val subtitle = (d?.subtitle ?: md.getText(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
+            ?: md.getText(MediaMetadata.METADATA_KEY_ALBUM) ?: md.getText(MediaMetadata.METADATA_KEY_ARTIST))
+            ?.toString()?.trim()?.takeIf { it.isNotEmpty() && it != title }
+        val imageUrl = (d?.iconUri?.toString()
+            ?: md.getString(MediaMetadata.METADATA_KEY_ART_URI)
+            ?: md.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+            ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI))
+            ?.takeIf { it.startsWith("http") }
+        val art = if (imageUrl == null) {
+            d?.iconBitmap ?: md.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                ?: md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                ?: md.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+        } else null
+        // one entry per show: episodes of the same series replace each other
+        val show = (subtitle ?: title).lowercase()
+        val key = "media:${c.packageName}:${show.hashCode().toUInt()}"
+        MediaPlays.save(
+            this,
+            MediaPlay(key, c.packageName, title, subtitle, imageUrl, pos.coerceAtLeast(0), dur, System.currentTimeMillis()),
+            art,
+            c.sessionActivity,
+        )
     }
 
     companion object {
         private const val TAG = "MediaWatcher"
         /** …/movie/USER/PASS/123.mkv  or  …/series/USER/PASS/456.mp4 */
+        /** Stream links of an Xtream provider (user and password in the path). */
+        private val PROVIDER_URL = Regex("""/(live|movie|series)/[^/]+/[^/]+/\d+""")
         private val VOD_URL = Regex("""/(movie|series)/[^/]+/[^/]+/(\d+)\.(\w+)""")
 
         fun isEnabled(context: Context): Boolean =

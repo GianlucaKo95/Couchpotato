@@ -13,6 +13,8 @@ import de.koeven.couchpotato.data.CatalogCache
 import de.koeven.couchpotato.data.HomeRows
 import de.koeven.couchpotato.data.LiveCategory
 import de.koeven.couchpotato.data.LiveChannel
+import de.koeven.couchpotato.data.MediaPlay
+import de.koeven.couchpotato.data.MediaPlays
 import de.koeven.couchpotato.data.PlayItem
 import de.koeven.couchpotato.data.ProgressEntry
 import de.koeven.couchpotato.data.ProgressStore
@@ -51,6 +53,12 @@ sealed interface ContinueItem {
     data class External(val program: WatchNextSource.Program, val appLabel: String?) : ContinueItem {
         override val key: String get() = program.key
         override val sortTime: Long get() = program.lastEngagement
+    }
+
+    /** Something another app reported while playing (ARD Mediathek, Disney+ …). */
+    data class Media(val play: MediaPlay, val appLabel: String?) : ContinueItem {
+        override val key: String get() = play.key
+        override val sortTime: Long get() = play.updatedAt
     }
 
     /** Streaming app whose progress we can't read (Netflix …): a tile that opens the app. */
@@ -154,12 +162,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val hiddenCw = settings.hiddenContinue()
         val cw = withContext(Dispatchers.IO) {
             val iptv = progress.continueWatching().map { ContinueItem.Iptv(enrich(it)) }
-            val tiles = STREAMING_APPS.mapNotNull { pkg -> apps.firstOrNull { it.packageName == pkg } }
+            val media = MediaPlays.all(getApplication())
+                .filter { it.packageName != getApplication<Application>().packageName }
+                .map { ContinueItem.Media(it, labels[it.packageName]) }
+            val reporting = media.map { it.play.packageName }.toSet()
+            // app tile only for apps that report nothing themselves
+            val tiles = STREAMING_APPS.filter { it !in reporting }
+                .mapNotNull { pkg -> apps.firstOrNull { it.packageName == pkg } }
                 .map { ContinueItem.AppTile(it, settings.lastLaunched(it.packageName)) }
             val external = watchNextCache.merge(WatchNextSource.load(getApplication())) { pkg -> settings.lastLaunched(pkg) }
                 .filter { it.packageName != getApplication<Application>().packageName }
                 .map { ContinueItem.External(it, it.packageName?.let { pkg -> labels[pkg] }) }
-            (iptv + external + tiles)
+            (iptv + external + media + tiles)
                 .filterNot { it.key in hiddenCw }
                 .sortedByDescending { it.sortTime }
                 .take(40)
@@ -629,8 +643,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             is ContinueItem.Iptv -> progress.remove(item.key)
             is ContinueItem.External -> settings.hideContinue(item.key)   // can't delete other apps' entries
             is ContinueItem.AppTile -> settings.hideContinue(item.key)
+            is ContinueItem.Media -> MediaPlays.remove(getApplication(), item.key)
         }
         viewModelScope.launch { refreshLocal() }
+    }
+
+    /** Back to where the other app was playing; if it gave no link, just start the app. */
+    fun openMedia(item: ContinueItem.Media) {
+        settings.markLaunched(item.play.packageName)
+        if (!MediaPlays.open(item.key)) AppsRepository.launch(getApplication(), item.play.packageName)
     }
 
     fun openExternal(item: ContinueItem.External) {

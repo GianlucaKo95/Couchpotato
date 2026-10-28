@@ -202,6 +202,20 @@ fun HomeScreen(
                                             modifier = focusMod,
                                         )
                                     }
+                                    is ContinueItem.Media -> {
+                                        val p = item.play
+                                        ContinueCard(
+                                            title = p.subtitle ?: p.title,
+                                            subtitle = if (p.subtitle != null) p.title else null,
+                                            image = p.image,
+                                            bitmap = if (p.image == null) state.apps.firstOrNull { it.packageName == p.packageName }?.let { it.banner ?: it.icon } else null,
+                                            fraction = p.fraction,
+                                            badge = item.appLabel,
+                                            onClick = { vm.openMedia(item) },
+                                            onLongClick = onLong,
+                                            modifier = focusMod,
+                                        )
+                                    }
                                     is ContinueItem.AppTile -> {
                                         ContinueCard(
                                             title = item.app.label,
@@ -351,6 +365,7 @@ fun HomeScreen(
                 is ContinueItem.Iptv -> c.entry.item.title
                 is ContinueItem.External -> c.program.title
                 is ContinueItem.AppTile -> c.app.label
+                is ContinueItem.Media -> c.play.subtitle ?: c.play.title
             },
             actions = listOf(
                 MenuAction("Aus „Weiterschauen“ entfernen") { vm.removeFromContinue(m.item) },

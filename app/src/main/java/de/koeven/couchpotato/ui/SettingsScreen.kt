@@ -354,13 +354,13 @@ private fun ContinueSection(vm: HomeViewModel, state: HomeState) {
     val watching = remember(refresh) { MediaWatcher.isEnabled(context) }
     SectionTitle(
         "Weiterschauen",
-        "Filme und Folgen aus Couchpotato merken sich die Stelle ab 10 Sekunden. Was du in IsiPro schaust, " +
-            "landet ebenfalls hier. Netflix & Co. melden ihren Fortschritt nur an Amazon – sie erscheinen " +
-            "deshalb als App-Kachel, die direkt die App öffnet.",
+        "Filme und Folgen aus Couchpotato merken sich die Stelle ab 10 Sekunden. Was du in IsiPro, der " +
+            "ARD Mediathek und anderen Apps schaust, die ihre Wiedergabe melden, landet ebenfalls hier. " +
+            "Netflix meldet nichts und erscheint deshalb als App-Kachel.",
     )
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         StatCard("Einträge in Weiterschauen", state.continueWatching.size.toString(), " ", Modifier.weight(1f))
-        StatCard("IsiPro mitlesen", if (watching) "aktiv" else "Freigabe fehlt", " ", Modifier.weight(1f))
+        StatCard("Andere Apps mitlesen", if (watching) "aktiv" else "Freigabe fehlt", " ", Modifier.weight(1f))
     }
     if (!watching) {
         Hint(
