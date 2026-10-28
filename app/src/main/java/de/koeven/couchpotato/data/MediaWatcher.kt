@@ -163,10 +163,8 @@ class MediaWatcher : NotificationListenerService() {
 
         @Synchronized
         private fun store(context: Context, pkg: String, source: String, fields: Map<String, String>) {
-            val old = log(context)
-            // same app + same content as the newest entry of that app: just refresh it
-            val sameAsLast = old.firstOrNull { it.pkg == pkg && it.source == source }?.fields == fields
-            val kept = if (sameAsLast) old.filterNot { it.pkg == pkg && it.source == source && it.fields == fields } else old
+            // one entry per app and kind of report: a chatty player must not push the others out
+            val kept = log(context).filterNot { it.pkg == pkg && it.source == source }
             val list = (listOf(Entry(System.currentTimeMillis(), pkg, source, fields)) + kept).take(MAX_ENTRIES)
             val arr = JSONArray()
             list.forEach { e ->
