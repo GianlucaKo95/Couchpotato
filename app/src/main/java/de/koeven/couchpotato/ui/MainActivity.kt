@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import de.koeven.couchpotato.data.ImageGate
 import de.koeven.couchpotato.data.SettingsStore
 import de.koeven.couchpotato.data.XtreamConfig
 
@@ -33,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ImageGate.start(this)          // request brake + picture loader, before anything goes online
         applyConfigExtras(intent)
         setContent {
             CouchpotatoTheme {
@@ -70,9 +72,12 @@ class MainActivity : ComponentActivity() {
                 if (url != null && user != null && pass != null) XtreamConfig(url, user, pass) else null
             }
             ?: return false
-        SettingsStore(this).save(cfg)
-        vm.refreshCatalog(force = true)
-        Toast.makeText(this, "IPTV-Zugang gespeichert", Toast.LENGTH_SHORT).show()
+        if (vm.applyLogin(cfg)) {
+            vm.refreshCatalog(force = true)
+            Toast.makeText(this, "IPTV-Zugang gespeichert", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "IPTV-Zugang unverändert", Toast.LENGTH_SHORT).show()
+        }
         return true
     }
 }

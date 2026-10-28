@@ -1,5 +1,7 @@
 package de.koeven.couchpotato.data
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
 import android.util.JsonReader
 import android.util.JsonToken
@@ -51,6 +53,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
                 // The provider locks the account for a while after too many requests (it answers 404).
                 // Stay away completely for a while instead of making it worse.
                 blockedUntil = System.currentTimeMillis() + COOLDOWN_MS
+                persist()
                 throw ProviderBlockedException(code, blockedUntil)
             }
             throw IOException("Server antwortet mit HTTP $code")
@@ -75,6 +78,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         } finally {
             lastRequestAt = System.currentTimeMillis()
             requestLog.addLast(lastRequestAt)
+            persist()
         }
     }
 
@@ -369,23 +373,83 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         private const val MAX_PER_HOUR = 40
         /** Background work (sync, "Jetzt läuft") stops earlier, so you still have room to browse. */
         private const val BACKGROUND_PER_HOUR = 20
+        private const val COOLDOWN_MS = 15 * 60 * 1000L
+        private val BLOCK_CODES = setOf(401, 403, 404, 429, 509)
+
+        /** Pictures that live on the provider's own server: one at a time, own hourly budget. */
+        private const val IMAGE_GAP_MS = 1_200L
+        private const val IMAGES_PER_HOUR = 60
+
         private val requestLog = ArrayDeque<Long>()
+        private val imageLog = ArrayDeque<Long>()
+        @Volatile private var lastRequestAt = 0L
+        @Volatile var blockedUntil = 0L
+            private set
+
+        /** Host of the provider (images from there are throttled); set from the login data. */
+        @Volatile var providerHost: String? = null
+        /** Settings switch: don't load pictures from the provider's server at all. */
+        @Volatile var loadProviderImages: Boolean = true
+
+        // ---- persisted, so the limits survive the stick rebooting with the TV ----
+        private var prefs: SharedPreferences? = null
+
+        fun init(context: Context) = synchronized(GATE) {
+            if (prefs != null) return@synchronized
+            val p = context.applicationContext.getSharedPreferences("netguard", Context.MODE_PRIVATE)
+            prefs = p
+            blockedUntil = p.getLong("blockedUntil", 0L)
+            lastRequestAt = p.getLong("lastRequestAt", 0L)
+            val now = System.currentTimeMillis()
+            fun restore(key: String, into: ArrayDeque<Long>) {
+                p.getString(key, null)?.split(',')?.mapNotNull { it.toLongOrNull() }
+                    ?.filter { now - it <= HOUR_MS }?.sorted()?.forEach { into.addLast(it) }
+            }
+            restore("requestLog", requestLog)
+            restore("imageLog", imageLog)
+        }
+
+        private fun persist() {
+            prefs?.edit()
+                ?.putLong("blockedUntil", blockedUntil)
+                ?.putLong("lastRequestAt", lastRequestAt)
+                ?.putString("requestLog", requestLog.joinToString(","))
+                ?.putString("imageLog", imageLog.joinToString(","))
+                ?.apply()
+        }
 
         /** For the settings screen. */
         fun requestsLastHour(): Int = synchronized(GATE) {
             val now = System.currentTimeMillis()
             requestLog.count { now - it <= HOUR_MS }
         }
-        private const val COOLDOWN_MS = 15 * 60 * 1000L
-        private val BLOCK_CODES = setOf(401, 403, 404, 429, 509)
 
-        @Volatile private var lastRequestAt = 0L
-        @Volatile var blockedUntil = 0L
-            private set
+        fun imagesLastHour(): Int = synchronized(GATE) {
+            val now = System.currentTimeMillis()
+            imageLog.count { now - it <= HOUR_MS }
+        }
 
-        /** After entering new login data the user wants an immediate try. */
-        fun clearBlock() {
+        /** Only when the login data really changed (a new account isn't locked). */
+        fun clearBlock() = synchronized(GATE) {
             blockedUntil = 0L
+            persist()
+        }
+
+        /** Runs a picture download from the provider's server through the same brake. */
+        fun <T> gateImage(block: () -> T): T = synchronized(GATE) {
+            val now = System.currentTimeMillis()
+            if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
+            while (imageLog.isNotEmpty() && now - imageLog.first() > HOUR_MS) imageLog.removeFirst()
+            if (imageLog.size >= IMAGES_PER_HOUR) throw RequestBudgetException(true)
+            val wait = lastRequestAt + IMAGE_GAP_MS - now
+            if (wait > 0) Thread.sleep(wait)
+            try {
+                block()
+            } finally {
+                lastRequestAt = System.currentTimeMillis()
+                imageLog.addLast(lastRequestAt)
+                persist()
+            }
         }
 
         fun streamUrl(cfg: XtreamConfig, item: PlayItem): String {

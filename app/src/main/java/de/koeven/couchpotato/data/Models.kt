@@ -55,6 +55,10 @@ data class XtreamConfig(val baseUrl: String, val user: String, val pass: String)
         private val PATH_PREFIXES = setOf("playlist", "get", "live", "movie", "series", "timeshift")
     }
 
+    /** Host name of the provider's server (pictures from there are throttled). */
+    val host: String?
+        get() = runCatching { Uri.parse(normalizeBase(baseUrl)).host?.lowercase() }.getOrNull()?.takeIf { it.isNotBlank() }
+
     /** The standard M3U link for these credentials (shown when the login is entered as a link). */
     fun toM3uLink(): String =
         if (!isValid) "" else

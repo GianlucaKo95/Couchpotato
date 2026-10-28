@@ -101,6 +101,38 @@ class SettingsStore(context: Context) {
         p.edit().putStringSet("hiddenCats", set).apply()
     }
 
+    // ---- request brake: kept on disk so it survives reboots ----
+
+    /** "Jetzt läuft": when it was last fetched and the titles, so a reboot doesn't refetch. */
+    var epgLoadedAt: Long
+        get() = p.getLong("epgAt", 0L)
+        set(value) = p.edit().putLong("epgAt", value).apply()
+
+    fun epgTitles(): Map<Long, String> = runCatching {
+        val o = JSONObject(p.getString("epgTitles", null) ?: "{}")
+        o.keys().asSequence().mapNotNull { k -> k.toLongOrNull()?.let { it to o.getString(k) } }.toMap()
+    }.getOrDefault(emptyMap())
+
+    fun setEpgTitles(map: Map<Long, String>) {
+        val o = JSONObject()
+        map.forEach { (id, title) -> o.put(id.toString(), title) }
+        p.edit().putString("epgTitles", o.toString()).apply()
+    }
+
+    /** Failed catalogue syncs in a row and when the last one was tried (for the back-off). */
+    var syncFailures: Int
+        get() = p.getInt("syncFailures", 0)
+        set(value) = p.edit().putInt("syncFailures", value).apply()
+
+    var lastSyncAttempt: Long
+        get() = p.getLong("syncAttemptAt", 0L)
+        set(value) = p.edit().putLong("syncAttemptAt", value).apply()
+
+    /** false = pictures from the provider's own server are not loaded at all. */
+    var loadProviderImages: Boolean
+        get() = p.getBoolean("providerImages", true)
+        set(value) = p.edit().putBoolean("providerImages", value).apply()
+
     fun markLaunched(pkg: String) = p.edit().putLong("launch:$pkg", System.currentTimeMillis()).apply()
     fun lastLaunched(pkg: String): Long = p.getLong("launch:$pkg", 0L)
 }

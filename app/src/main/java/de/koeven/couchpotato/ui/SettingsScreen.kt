@@ -181,6 +181,19 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
             )
             Button(onClick = { status = vm.syncNow() }) { Text("Katalog jetzt abgleichen") }
 
+            Text("Bilder", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+            Text(sync.imageInfo, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Jedes Bild wird nur einmal geladen und dann dauerhaft auf dem Stick gespeichert. Bilder vom " +
+                    "Server deines Anbieters laufen durch dieselbe Bremse (einzeln, mit Pause, max. 60 pro Stunde); " +
+                    "Bilder von anderen Diensten wie TMDB zählen beim Anbieter nicht.",
+                style = MaterialTheme.typography.bodySmall,
+                color = CpColors.TextMuted,
+            )
+            Button(onClick = { vm.setLoadProviderImages(!sync.loadProviderImages) }) {
+                Text("Bilder vom Anbieter-Server: " + if (sync.loadProviderImages) "laden (gebremst)" else "nicht laden")
+            }
+
             Spacer(Modifier.height(16.dp))
             val wn by vm.state.collectAsState()
             Text("Weiterschauen aus anderen Apps", style = MaterialTheme.typography.titleMedium, color = CpColors.Accent)

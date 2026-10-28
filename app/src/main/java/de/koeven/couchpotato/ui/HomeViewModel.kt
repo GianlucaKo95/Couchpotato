@@ -73,6 +73,8 @@ data class HomeState(
     val hiddenCategories: Set<String> = emptySet(),
     val appsCustomOrder: Boolean = false,
     val syncInfo: String = "",
+    val imageInfo: String = "",
+    val loadProviderImages: Boolean = true,
 )
 
 /** An installed app in the "search in other apps" row; [acceptsQuery] = search term is handed over. */
@@ -86,7 +88,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val watchNextCache = WatchNextCache(app)
     private val seriesCache = HashMap<Long, SeriesInfo>()
     private var epgJob: Job? = null
-    private var epgLoadedAt = 0L
     private var categoriesByKind: Map<Char, List<LiveCategory>> = emptyMap()
 
     private val searchIndex = SearchIndex(app)
@@ -100,6 +101,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<HomeState> = _state
 
     init {
+        XtreamClient.init(app)
+        if (System.currentTimeMillis() - settings.epgLoadedAt < EPG_KEEP_MS) {
+            _state.update { it.copy(nowPlaying = settings.epgTitles()) }
+        }
         val hidden = settings.hiddenCategories()
         _state.update { it.copy(hiddenCategories = hidden) }
         cache.load()?.let { c ->
@@ -153,6 +158,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 rowOrder = settings.rowOrder(),
                 appsCustomOrder = settings.appsCustomOrder,
                 syncInfo = syncInfo(),
+                imageInfo = imageInfo(),
+                loadProviderImages = settings.loadProviderImages,
             )
         }
     }
@@ -161,23 +168,49 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val last = searchIndex.lastSync()
         val lastText = if (last == 0L) "noch nie" else
             java.text.SimpleDateFormat("dd.MM. HH:mm", java.util.Locale.GERMANY).format(java.util.Date(last)) + " Uhr"
-        return "Letzter Abgleich: $lastText · Anfragen in der letzten Stunde: ${XtreamClient.requestsLastHour()}"
+        return "Letzter Abgleich: $lastText · Anfragen in der letzten Stunde: ${XtreamClient.requestsLastHour()}" +
+            " · Bilder vom Anbieter: ${XtreamClient.imagesLastHour()}"
+    }
+
+    private fun imageInfo(): String =
+        searchIndex.imageStats() ?: "Bildquellen werden beim nächsten Abgleich ausgewertet."
+
+    fun setLoadProviderImages(value: Boolean) {
+        settings.loadProviderImages = value
+        XtreamClient.loadProviderImages = value
+        _state.update { it.copy(loadProviderImages = value) }
     }
 
     /** "Neue Filme/Serien" come from the local catalogue; this only syncs if it is older than a day. */
     fun refreshCatalog(force: Boolean) = ensureIndex(force)
 
-    suspend fun saveAndTest(cfg: XtreamConfig): String {
+    /**
+     * Saves the login. Only if it really changed are the lock pause and the catalogue reset –
+     * pressing "Speichern & testen" again and again must not hammer a provider that locked us.
+     * Returns true if the login changed.
+     */
+    fun applyLogin(cfg: XtreamConfig): Boolean {
+        val before = settings.config()
         settings.save(cfg)
+        val after = settings.config()
+        XtreamClient.providerHost = after.host
+        _state.update { it.copy(configured = after.isValid) }
+        if (before == after) return false
         XtreamClient.clearBlock()
         seriesCache.clear()
         searchIndex.clear()
         indexEntries = null
         categoriesByKind = emptyMap()
-        _state.update { it.copy(configured = settings.config().isValid) }
+        settings.syncFailures = 0
+        settings.lastSyncAttempt = 0L
+        return true
+    }
+
+    suspend fun saveAndTest(cfg: XtreamConfig): String {
+        val changed = applyLogin(cfg)
         return try {
-            val msg = XtreamClient(settings.config()).checkAuth()
-            refreshCatalog(force = true)
+            val msg = XtreamClient(settings.config()).checkAuth()   // 1 request
+            if (changed) ensureIndex(force = true)
             msg
         } catch (e: CancellationException) {
             throw e
@@ -193,7 +226,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val cfg = settings.config()
         val favs = settings.favorites()
         if (!cfg.isValid || favs.isEmpty() || epgJob?.isActive == true) return
-        if (!force && System.currentTimeMillis() - epgLoadedAt < EPG_MAX_AGE_MS) return
+        if (!force && System.currentTimeMillis() - settings.epgLoadedAt < EPG_MAX_AGE_MS) return
+        settings.epgLoadedAt = System.currentTimeMillis()   // also on failure: no retry before 30 min
         epgJob = viewModelScope.launch {
             val client = XtreamClient(cfg, background = true)
             val result = coroutineScope {
@@ -202,9 +236,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     ch.id to runCatching { client.nowPlaying(ch.id) }.getOrNull()
                 }
             }
-            epgLoadedAt = System.currentTimeMillis()
             val map = result.mapNotNull { (id, title) -> title?.let { id to it } }.toMap()
-            _state.update { it.copy(nowPlaying = map) }
+            if (map.isNotEmpty()) settings.setEpgTitles(map)
+            _state.update { it.copy(nowPlaying = if (map.isEmpty()) it.nowPlaying else map) }
         }
     }
 
@@ -416,7 +450,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     /** "Katalog jetzt abgleichen" in the settings. */
     fun syncNow(): String {
-        if (searchIndex.exists() && searchIndex.ageMs() < MIN_MANUAL_SYNC_GAP_MS) {
+        val sinceAttempt = System.currentTimeMillis() - settings.lastSyncAttempt
+        if (sinceAttempt < MIN_MANUAL_SYNC_GAP_MS ||
+            (searchIndex.exists() && searchIndex.ageMs() < MIN_MANUAL_SYNC_GAP_MS)
+        ) {
             return "Der Katalog wurde gerade erst abgeglichen – bitte in ein paar Minuten wieder."
         }
         if (indexJob?.isActive == true) return "Abgleich läuft bereits …"
@@ -433,6 +470,16 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
         val stale = !searchIndex.exists() || searchIndex.ageMs() > SYNC_MAX_AGE_MS
         if (!force && !stale) return
+        val now = System.currentTimeMillis()
+        if (!force && settings.syncFailures > 0) {
+            val next = settings.lastSyncAttempt + backoffMs(settings.syncFailures)
+            if (now < next) {
+                val at = java.text.SimpleDateFormat("HH:mm", java.util.Locale.GERMANY).format(java.util.Date(next))
+                setIndexStatus("Letzter Abgleich fehlgeschlagen – nächster Versuch automatisch um $at Uhr.")
+                return
+            }
+        }
+        settings.lastSyncAttempt = now
         _state.update { it.copy(loading = true, error = null) }
         setIndexStatus(
             if (indexEntries.isNullOrEmpty()) "Katalog wird geladen … (einmal am Tag, 6 Anfragen)"
@@ -441,6 +488,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         try {
             // automatic daily sync = background budget; asked for by the user = normal budget
             val failed = searchIndex.rebuild(XtreamClient(cfg, background = !force))
+            if (searchIndex.lastSync() >= now) settings.syncFailures = 0 else settings.syncFailures += 1
             indexEntries = null
             loadLocalCatalog()
             setIndexStatus(indexSummary(failed))
@@ -450,10 +498,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            settings.syncFailures += 1
             _state.update { it.copy(loading = false, error = e.message ?: e.javaClass.simpleName) }
             setIndexStatus("Katalog konnte nicht abgeglichen werden: ${e.message ?: e.javaClass.simpleName}")
         } finally {
-            _state.update { it.copy(syncInfo = syncInfo()) }
+            _state.update { it.copy(syncInfo = syncInfo(), imageInfo = imageInfo()) }
         }
     }
 
@@ -583,5 +632,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         const val MIN_MANUAL_SYNC_GAP_MS = 10 * 60 * 1000L     // "jetzt abgleichen" not more often
         const val EPG_MAX_AGE_MS = 30 * 60 * 1000L             // "Jetzt läuft": every 30 minutes …
         const val EPG_MAX_CHANNELS = 8                         // … for the first 8 favourites
+        const val EPG_KEEP_MS = 2 * 60 * 60 * 1000L            // show stored titles after a reboot
+
+        /** Failed syncs: retry after 1 h, 2 h, 4 h, 8 h, then every 12 h. */
+        fun backoffMs(failures: Int): Long =
+            (60 * 60 * 1000L shl (failures - 1).coerceIn(0, 3)).coerceAtMost(12 * 60 * 60 * 1000L)
     }
 }

@@ -58,6 +58,22 @@ class SearchIndex(context: Context) {
         catFile.delete()
     }
 
+    /** e.g. "12.345 Bilder · 8 % vom Anbieter-Server · sonst v. a. image.tmdb.org" */
+    fun imageStats(): String? = runCatching {
+        val img = org.json.JSONObject(catFile.readText()).optJSONObject("img") ?: return null
+        val total = img.optInt("total")
+        if (total == 0) return "Keine Bilder im Katalog"
+        val provider = img.optInt("provider")
+        val pct = provider * 100 / total
+        val others = img.optJSONArray("hosts")?.mapObjects { it.str("host") }?.filterNotNull()
+            ?.filter { it != XtreamClient.providerHost?.lowercase() }.orEmpty()
+        val nf = java.text.NumberFormat.getIntegerInstance(java.util.Locale.GERMANY)
+        buildString {
+            append("${nf.format(total)} Bilder · $pct % vom Anbieter-Server")
+            if (others.isNotEmpty()) append(" · sonst v. a. ${others.take(2).joinToString()}")
+        }
+    }.getOrNull()
+
     fun loadCategories(): Map<Char, List<LiveCategory>> = runCatching {
         val o = org.json.JSONObject(catFile.readText())
         listOf(SearchEntry.KIND_MOVIE, SearchEntry.KIND_SERIES, SearchEntry.KIND_LIVE).associateWith { k ->
@@ -94,10 +110,19 @@ class SearchIndex(context: Context) {
         }
 
         // all titles (3 big requests, streamed straight into the file)
+        val providerHost = XtreamClient.providerHost
+        val hostCounts = HashMap<String, Int>()
+        var images = 0
         tmp.bufferedWriter(Charsets.UTF_8).use { w ->
             failed += client.dumpCatalog { kind, id, name, image, ext, cat, added ->
                 val clean = name.sanitize()
                 if (clean.isEmpty()) return@dumpCatalog
+                // where do the pictures live? (provider's own server = throttled)
+                image?.let { url ->
+                    images++
+                    val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase() ?: "?"
+                    hostCounts[host] = (hostCounts[host] ?: 0) + 1
+                }
                 w.append(kind).append('\t')
                     .append(id.toString()).append('\t')
                     .append(ext.sanitize()).append('\t')
@@ -112,6 +137,12 @@ class SearchIndex(context: Context) {
         if (count > 0) {
             file.delete()
             tmp.renameTo(file)
+            val fromProvider = providerHost?.let { hostCounts[it.lowercase()] } ?: 0
+            val top = hostCounts.entries.sortedByDescending { it.value }.take(3)
+            cats.put("img", org.json.JSONObject()
+                .put("total", images)
+                .put("provider", fromProvider)
+                .put("hosts", org.json.JSONArray(top.map { org.json.JSONObject().put("host", it.key).put("n", it.value) })))
             catFile.writeText(cats.toString())
         } else {
             tmp.delete()

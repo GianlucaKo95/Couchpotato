@@ -154,6 +154,7 @@ class PlayerActivity : Activity() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(zapCommit)
         handler.removeCallbacks(saveTask)
         if (::player.isInitialized) player.release()
         super.onDestroy()
@@ -179,17 +180,35 @@ class PlayerActivity : Activity() {
         return super.dispatchKeyEvent(event)
     }
 
+    /**
+     * Zapping: every key press only moves the target and shows its name; the stream is switched
+     * once you stay on a channel for a moment. Hammering up/down therefore opens ONE connection
+     * to the provider instead of one per channel you skip over.
+     */
+    private var zapTarget = -1
+    private var zapToast: Toast? = null
+    private val zapCommit = Runnable {
+        val target = zapTarget
+        zapTarget = -1
+        if (target < 0 || target == player.currentMediaItemIndex) return@Runnable
+        player.seekToDefaultPosition(target)
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+        player.playWhenReady = true
+    }
+
     private fun zap(step: Int) {
         if (items.size < 2) return
         val n = items.size
-        val next = ((player.currentMediaItemIndex + step) % n + n) % n
-        player.seekToDefaultPosition(next)
-        if (player.playbackState == Player.STATE_IDLE) player.prepare()
-        player.playWhenReady = true
-        Toast.makeText(this, items[next].title, Toast.LENGTH_SHORT).show()
+        val from = if (zapTarget >= 0) zapTarget else player.currentMediaItemIndex
+        zapTarget = ((from + step) % n + n) % n
+        zapToast?.cancel()
+        zapToast = Toast.makeText(this, items[zapTarget].title, Toast.LENGTH_SHORT).also { it.show() }
+        handler.removeCallbacks(zapCommit)
+        handler.postDelayed(zapCommit, ZAP_DELAY_MS)
     }
 
     private companion object {
+        const val ZAP_DELAY_MS = 800L
         const val SAVE_INTERVAL_MS = 10_000L
     }
 }

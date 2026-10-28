@@ -103,4 +103,12 @@ Der Anbieter sperrt das Konto zeitweise, wenn zu viele Anfragen kommen. Deshalb:
   „Jetzt läuft“ (die ersten 8 Favoriten, alle 30 Minuten).
 - Alle Anfragen nacheinander, mindestens 2,5 s Abstand, Stundenlimit (Hintergrund 20, gesamt 40).
 - Bei HTTP 401/403/404/429/509 pausiert Couchpotato 15 Minuten komplett.
+- Zähler, Sperrpause und „Jetzt läuft“-Zeitpunkt liegen auf dem Stick und **überstehen Neustarts**
+  (der Stick bootet mit jedem Einschalten des Fernsehers).
+- Fehlgeschlagener Abgleich: neuer Versuch erst nach 1 h, 2 h, 4 h, 8 h, danach alle 12 h.
+- „Speichern & testen“ hebt Sperrpause und Katalog nur auf, wenn sich die Zugangsdaten geändert haben.
+- **Bilder** werden dauerhaft auf dem Stick gespeichert (je Bild max. ein Download). Bilder vom
+  Anbieter-Server laufen durch dieselbe Bremse (einzeln, 1,2 s Pause, max. 60/h) oder lassen sich
+  ganz abschalten; die Einstellungen zeigen, wie viele Bilder überhaupt vom Anbieter kommen.
+- **Zappen**: umgeschaltet wird erst, wenn man 0,8 s auf einem Sender bleibt.
 - Unter *Einstellungen → Katalog & Anfragen* stehen letzter Abgleich und Anfragen der letzten Stunde.
