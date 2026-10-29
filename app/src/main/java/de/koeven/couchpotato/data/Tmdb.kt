@@ -162,6 +162,81 @@ class Tmdb(context: Context) {
 
     private val searchCache = LinkedHashMap<String, List<StreamHit>>()
 
+    // ---------------- themes ("Weihnachten", "Fußball") ----------------
+
+    /** A film/series TMDB tags with a theme. */
+    data class ThemeHit(
+        val tmdbId: Long,
+        val tv: Boolean,
+        val title: String,
+        val originalTitle: String?,
+        val year: String?,
+        val poster: String?,
+    )
+
+    private val keywordCache = HashMap<String, List<Long>>()
+    private val themeCache = LinkedHashMap<String, List<ThemeHit>>()
+
+    /** TMDB keyword ids for a word ("christmas" → 207317 …). */
+    private fun keywordIds(name: String, exact: Boolean): List<Long> = synchronized(keywordCache) { keywordCache[name] } ?: run {
+        val res = get("search/keyword?query=${URLEncoder.encode(name, "UTF-8")}").optJSONArray("results").objects()
+        val ids = (if (exact) res.filter { it.str("name").equals(name, ignoreCase = true) }.ifEmpty { res.take(1) } else res.take(2))
+            .map { it.optLong("id") }.filter { it > 0 }
+        synchronized(keywordCache) { keywordCache[name] = ids }
+        ids
+    }
+
+    /**
+     * Popular films and series on a theme: keywords and/or genres from [theme], or – without a theme –
+     * a free keyword lookup of [freeWords]. About 4–8 small TMDB requests, never the IPTV provider.
+     */
+    suspend fun themeTitles(theme: Theme?, freeWords: String?): List<ThemeHit> = withContext(Dispatchers.IO) {
+        if (!enabled) return@withContext emptyList()
+        val cacheKey = theme?.label ?: "free:$freeWords"
+        synchronized(themeCache) { themeCache[cacheKey] }?.let { return@withContext it }
+        val kw = when {
+            theme != null -> theme.keywords.flatMap { keywordIds(it, exact = true) }
+            !freeWords.isNullOrBlank() -> keywordIds(freeWords, exact = false)
+            else -> emptyList()
+        }.distinct()
+        val mg = theme?.movieGenres.orEmpty()
+        val tg = theme?.tvGenres.orEmpty()
+        if (kw.isEmpty() && mg.isEmpty() && tg.isEmpty()) return@withContext emptyList()
+        val kwParam = if (kw.isNotEmpty()) "&with_keywords=" + kw.joinToString("|") else ""
+        fun discover(tv: Boolean, genres: List<Int>, pages: Int): List<ThemeHit> {
+            if (kw.isEmpty() && genres.isEmpty()) return emptyList()
+            val gParam = if (genres.isNotEmpty()) "&with_genres=" + genres.joinToString("|") else ""
+            val type = if (tv) "tv" else "movie"
+            return (1..pages).flatMap { page ->
+                runCatching {
+                    get("discover/$type?language=de-DE&sort_by=popularity.desc&include_adult=false&vote_count.gte=15$kwParam$gParam&page=$page")
+                        .optJSONArray("results").objects()
+                }.getOrDefault(emptyList())
+            }.map { o ->
+                ThemeHit(
+                    tmdbId = o.optLong("id"), tv = tv,
+                    title = (if (tv) o.str("name") else o.str("title")) ?: "",
+                    originalTitle = if (tv) o.str("original_name") else o.str("original_title"),
+                    year = (if (tv) o.str("first_air_date") else o.str("release_date"))?.take(4)?.takeIf { it.length == 4 },
+                    poster = o.str("poster_path")?.let { "$IMG/w342$it" },
+                )
+            }
+        }
+        // genre-only themes (Komödie …) are huge: keep to the most popular; keyword themes go deeper
+        val moviePages = if (kw.isNotEmpty()) 4 else 3
+        val tvPages = if (kw.isNotEmpty()) 2 else 2
+        val hits = coroutineScope {
+            val m = async { discover(false, mg, moviePages) }
+            val t = async { if (kw.isNotEmpty() || tg.isNotEmpty()) discover(true, tg, tvPages) else emptyList() }
+            m.await() + t.await()
+        }.filter { it.title.isNotBlank() }.distinctBy { "${it.tv}${it.tmdbId}" }
+        synchronized(themeCache) {
+            if (themeCache.size > 30) themeCache.remove(themeCache.keys.first())
+            themeCache[cacheKey] = hits
+        }
+        hits
+    }
+
     // ---------------------------------------------------------------------------------
 
     private fun search(tv: Boolean, rawName: String, year: String?): Long? {

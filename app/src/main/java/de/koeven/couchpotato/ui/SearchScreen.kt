@@ -99,6 +99,13 @@ fun SearchScreen(
     // cross-app search via TMDB/JustWatch: only after a short pause in typing (internet round trip)
     var streams by remember { mutableStateOf<List<HomeViewModel.StreamResult>>(emptyList()) }
     var streamMenu by remember { mutableStateOf<HomeViewModel.StreamResult?>(null) }
+    // theme search ("Weihnachtsfilm", "Film mit Fußball") via TMDB keywords
+    var themed by remember { mutableStateOf<HomeViewModel.ThemeResult?>(null) }
+    LaunchedEffect(query) {
+        if (query.trim().length < 4) { themed = null; return@LaunchedEffect }
+        delay(800)
+        themed = vm.themeSearch(query)
+    }
     LaunchedEffect(query) {
         if (query.trim().length < 3) { streams = emptyList(); return@LaunchedEffect }
         delay(700)
@@ -252,6 +259,51 @@ fun SearchScreen(
                             }
                         }
                     }
+                    themed?.let { t ->
+                        if (t.iptv.isNotEmpty()) {
+                            item(key = "theme-iptv") {
+                                Section("Thema „${t.label}“ in deinem IPTV (${t.iptv.size})") {
+                                    items(t.iptv, key = { "th${it.kind}${it.id}" }) { e ->
+                                        PosterCard(
+                                            title = e.name,
+                                            image = e.image,
+                                            onClick = {
+                                                saveQuery()
+                                                if (e.kind == SearchEntry.KIND_SERIES) onOpenSeries(e.id, e.name) else onOpenMovie(e.id, e.name)
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (t.streaming.isNotEmpty()) {
+                            item(key = "theme-streams") {
+                                Section("Thema „${t.label}“ bei deinen Streamingdiensten") {
+                                    items(t.streaming, key = { "ts${it.hit.tv}${it.hit.tmdbId}" }) { r ->
+                                        Column(Modifier.width(PosterWidth)) {
+                                            PosterCard(
+                                                title = r.hit.title,
+                                                image = r.hit.poster,
+                                                onClick = {
+                                                    saveQuery()
+                                                    if (r.apps.size == 1) vm.openInStreamingApp(context, r.apps[0], r.hit.title)
+                                                    else streamMenu = r
+                                                },
+                                            )
+                                            Text(
+                                                r.apps.joinToString(" · ") { it.label },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = CpColors.Accent,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (streams.isNotEmpty()) {
                         item(key = "streams") {
                             Section("Bei deinen Streamingdiensten") {
@@ -311,7 +363,7 @@ fun SearchScreen(
                             }
                         }
                     }
-                    if (results.isEmpty && results.query == query && state.configured) {
+                    if (results.isEmpty && results.query == query && state.configured && themed?.iptv.isNullOrEmpty()) {
                         item(key = "none") {
                             Text("Keine Treffer bei deinem IPTV-Anbieter.", color = CpColors.TextMuted)
                         }

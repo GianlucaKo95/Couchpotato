@@ -17,6 +17,7 @@ import de.koeven.couchpotato.data.MovieInfo
 import de.koeven.couchpotato.data.Profile
 import de.koeven.couchpotato.data.Profiles
 import de.koeven.couchpotato.data.TitleDetails
+import de.koeven.couchpotato.data.Themes
 import de.koeven.couchpotato.data.Tmdb
 import de.koeven.couchpotato.data.Recommender
 import de.koeven.couchpotato.data.WatchHistory
@@ -38,6 +39,8 @@ import de.koeven.couchpotato.data.XtreamClient
 import de.koeven.couchpotato.data.XtreamConfig
 import de.koeven.couchpotato.player.Playback
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -887,6 +890,81 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         return runCatching { tmdb.searchStreaming(query) }.getOrDefault(emptyList())
             .map { StreamResult(it, appsFor(it.providers)) }
             .filter { it.apps.isNotEmpty() }
+    }
+
+    // ---------------- Themensuche ----------------
+
+    data class ThemeResult(val label: String, val iptv: List<SearchEntry>, val streaming: List<StreamResult>)
+
+    private var matchIndexOf: List<SearchEntry>? = null
+    private var byTmdb: Map<String, SearchEntry> = emptyMap()
+    private var byName: Map<String, List<SearchEntry>> = emptyMap()
+
+    /** Lookup tables to find TMDB titles in the IPTV catalogue (by TMDB id, else by cleaned name). */
+    private fun ensureMatchIndex(entries: List<SearchEntry>) {
+        if (matchIndexOf === entries) return
+        val t = HashMap<String, SearchEntry>()
+        val n = HashMap<String, MutableList<SearchEntry>>()
+        for (e in entries) {
+            if (e.kind == SearchEntry.KIND_LIVE) continue
+            e.tmdbId?.let { t["${e.kind}:$it"] = e }
+            val clean = SearchIndex.normalize(Tmdb.cleanName(e.name).first)
+            if (clean.isNotEmpty()) n.getOrPut("${e.kind}:$clean") { mutableListOf() } += e
+        }
+        byTmdb = t
+        byName = n
+        matchIndexOf = entries
+    }
+
+    private fun findInCatalog(h: Tmdb.ThemeHit): SearchEntry? {
+        val kind = if (h.tv) SearchEntry.KIND_SERIES else SearchEntry.KIND_MOVIE
+        byTmdb["$kind:${h.tmdbId}"]?.let { return it }
+        val hy = h.year?.toIntOrNull()
+        for (name in listOfNotNull(h.title, h.originalTitle)) {
+            val list = byName["$kind:${SearchIndex.normalize(Tmdb.cleanName(name).first)}"] ?: continue
+            val hit = list.firstOrNull { e ->
+                val ey = (e.year ?: Tmdb.cleanName(e.name).second)?.toIntOrNull()
+                hy == null || ey == null || kotlin.math.abs(ey - hy) <= 1
+            }
+            if (hit != null) return hit
+        }
+        return null
+    }
+
+    /**
+     * "Weihnachtsfilm", "Film mit Fußball": popular titles on that theme from TMDB, split into what is
+     * in the IPTV catalogue (matched on the stick) and what runs at installed streaming services.
+     */
+    suspend fun themeSearch(query: String): ThemeResult? {
+        if (!tmdb.enabled) return null
+        val theme = Themes.match(query)
+        val free = if (theme == null) {
+            Themes.freeWords(query).takeIf { it.length >= 3 && it != SearchIndex.normalize(query) }   // only "Film über X"
+        } else null
+        if (theme == null && free == null) return null
+        val hits = runCatching { tmdb.themeTitles(theme, free) }.getOrDefault(emptyList())
+        if (hits.isEmpty()) return null
+        val entries = indexEntries.orEmpty()
+        val hidden = effectiveHidden()
+        val kid = Profiles.active(app).kid
+        return withContext(Dispatchers.Default) {
+            ensureMatchIndex(entries)
+            val matched = HashSet<String>()
+            val iptv = hits.mapNotNull { h ->
+                findInCatalog(h)?.takeIf { it.categoryKey !in hidden }?.also { matched += "${h.tv}${h.tmdbId}" }
+            }.distinctBy { "${it.kind}${it.id}" }.take(40)
+            val streaming = if (kid) emptyList() else coroutineScope {
+                hits.filterNot { "${it.tv}${it.tmdbId}" in matched }.take(24).map { h ->
+                    async {
+                        val provs = runCatching { tmdb.providers(h.tv, h.tmdbId) }.getOrDefault(emptyList())
+                        val apps = appsFor(provs)
+                        if (apps.isEmpty()) null
+                        else StreamResult(Tmdb.StreamHit(h.tmdbId, h.tv, h.title, h.year, h.poster, provs), apps)
+                    }
+                }.awaitAll().filterNotNull()
+            }
+            ThemeResult(theme?.label ?: free!!.replaceFirstChar { it.uppercase() }, iptv, streaming)
+        }
     }
 
     /** Where a title from the info screen also streams (installed apps only). */
