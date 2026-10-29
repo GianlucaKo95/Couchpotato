@@ -301,6 +301,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         seriesCache.clear()
         seriesDir.deleteRecursively()     // other provider: other ids
         movieDir.deleteRecursively()
+        // TMDB details are filed under the provider's ids (m_123 / s_45): those belong to the old provider
+        java.io.File(app.filesDir, "tmdb").listFiles { f -> f.name.startsWith("m_") || f.name.startsWith("s_") }?.forEach { it.delete() }
         history.clear()
         searchIndex.clear()
         indexEntries = null
@@ -1089,7 +1091,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val client = XtreamClient(settings.config())
         val f = java.io.File(seriesDir, "$seriesId.json")
         val stale = if (f.exists()) runCatching { client.parseSeriesInfo(f.readText(), seriesId, fallbackName) }.getOrNull() else null
-        if (stale != null && System.currentTimeMillis() - f.lastModified() < SERIES_MAX_AGE_MS) return@withContext stale
+        if (stale != null) {
+            // The catalogue says when a series last changed (new episodes). As long as our copy is newer
+            // than that, it is up to date – no request at all. Without that date: refresh after 3 days.
+            val changedAt = (indexEntries?.firstOrNull { it.kind == SearchEntry.KIND_SERIES && it.id == seriesId }?.added ?: 0L) * 1000
+            val age = System.currentTimeMillis() - f.lastModified()
+            val upToDate = if (changedAt > 0) f.lastModified() >= changedAt && age < SERIES_SAFETY_MS
+            else age < SERIES_MAX_AGE_MS
+            if (upToDate) return@withContext stale
+        }
         try {
             val text = client.seriesInfoRaw(seriesId)
             seriesDir.mkdirs()
@@ -1115,7 +1125,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val ROW_SIZE = 40
-        const val SERIES_MAX_AGE_MS = 24 * 60 * 60 * 1000L     // series info: once a day at most
+        const val SERIES_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000L  // series info without a change date in the catalogue
+        const val SERIES_SAFETY_MS = 14 * 24 * 60 * 60 * 1000L  // …and with one: still re-check every 2 weeks
         // kept low on purpose: the provider locks the account after too many requests
         const val SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000L       // whole catalogue: once a day
         const val MIN_MANUAL_SYNC_GAP_MS = 10 * 60 * 1000L     // "jetzt abgleichen" not more often

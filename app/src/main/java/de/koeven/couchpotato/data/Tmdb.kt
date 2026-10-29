@@ -114,7 +114,11 @@ class Tmdb(context: Context) {
     suspend fun searchStreaming(query: String, limit: Int = 14): List<StreamHit> = withContext(Dispatchers.IO) {
         if (!enabled) return@withContext emptyList()
         val q = query.trim()
-        searchCache[q.lowercase()]?.let { return@withContext it }
+        synchronized(searchCache) { searchCache[q.lowercase()] }?.let { return@withContext it }
+        readHits(diskFile("search", q), 3 * DAY)?.let { cached ->
+            synchronized(searchCache) { searchCache[q.lowercase()] = cached }
+            return@withContext cached
+        }
         val res = get("search/multi?query=${URLEncoder.encode(q, "UTF-8")}&language=de-DE&include_adult=false")
             .optJSONArray("results").objects()
             .filter { it.str("media_type") == "movie" || it.str("media_type") == "tv" }
@@ -139,6 +143,7 @@ class Tmdb(context: Context) {
             if (searchCache.size > 40) searchCache.remove(searchCache.keys.first())
             searchCache[q.lowercase()] = hits
         }
+        writeHits(diskFile("search", q), hits)
         hits
     }
 
@@ -178,12 +183,23 @@ class Tmdb(context: Context) {
     private val themeCache = LinkedHashMap<String, List<ThemeHit>>()
 
     /** TMDB keyword ids for a word ("christmas" → 207317 …). */
-    private fun keywordIds(name: String, exact: Boolean): List<Long> = synchronized(keywordCache) { keywordCache[name] } ?: run {
+    private fun keywordIds(name: String, exact: Boolean): List<Long> {
+        synchronized(keywordCache) { keywordCache[name] }?.let { return it }
+        // keyword ids never change: kept on the stick for good
+        val f = diskFile("kw", "$exact:$name")
+        if (f.exists()) runCatching {
+            val a = JSONArray(f.readText())
+            val ids = (0 until a.length()).map { a.getLong(it) }
+            synchronized(keywordCache) { keywordCache[name] = ids }
+            return ids
+        }
         val res = get("search/keyword?query=${URLEncoder.encode(name, "UTF-8")}").optJSONArray("results").objects()
         val ids = (if (exact) res.filter { it.str("name").equals(name, ignoreCase = true) }.ifEmpty { res.take(1) } else res.take(2))
             .map { it.optLong("id") }.filter { it > 0 }
         synchronized(keywordCache) { keywordCache[name] = ids }
-        ids
+        f.parentFile?.mkdirs()
+        f.writeText(JSONArray(ids).toString())
+        return ids
     }
 
     /**
@@ -194,6 +210,10 @@ class Tmdb(context: Context) {
         if (!enabled) return@withContext emptyList()
         val cacheKey = theme?.label ?: "free:$freeWords"
         synchronized(themeCache) { themeCache[cacheKey] }?.let { return@withContext it }
+        readThemes(diskFile("theme", cacheKey), 14 * DAY)?.let { cached ->
+            synchronized(themeCache) { themeCache[cacheKey] = cached }
+            return@withContext cached
+        }
         val kw = when {
             theme != null -> theme.keywords.flatMap { keywordIds(it, exact = true) }
             !freeWords.isNullOrBlank() -> keywordIds(freeWords, exact = false)
@@ -234,7 +254,48 @@ class Tmdb(context: Context) {
             if (themeCache.size > 30) themeCache.remove(themeCache.keys.first())
             themeCache[cacheKey] = hits
         }
+        if (hits.isNotEmpty()) writeThemes(diskFile("theme", cacheKey), hits)
         hits
+    }
+
+    // ---------------- results kept on the stick ----------------
+
+    private fun diskFile(kind: String, key: String): File =
+        File(dir, "$kind/${key.lowercase().trim().hashCode().toUInt()}.json")
+
+    private fun fresh(f: File, maxAge: Long) = f.exists() && System.currentTimeMillis() - f.lastModified() < maxAge
+
+    private fun readHits(f: File, maxAge: Long): List<StreamHit>? = if (!fresh(f, maxAge)) null else runCatching {
+        JSONArray(f.readText()).objects().map { o ->
+            StreamHit(
+                o.getLong("id"), o.optBoolean("tv"), o.getString("title"), o.str("year"), o.str("poster"),
+                o.optJSONArray("prov")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
+            )
+        }
+    }.getOrNull()
+
+    private fun writeHits(f: File, hits: List<StreamHit>) = runCatching {
+        f.parentFile?.mkdirs()
+        f.writeText(JSONArray(hits.map {
+            JSONObject().put("id", it.tmdbId).put("tv", it.tv).put("title", it.title)
+                .put("year", it.year ?: JSONObject.NULL).put("poster", it.poster ?: JSONObject.NULL)
+                .put("prov", JSONArray(it.providers))
+        }).toString())
+    }
+
+    private fun readThemes(f: File, maxAge: Long): List<ThemeHit>? = if (!fresh(f, maxAge)) null else runCatching {
+        JSONArray(f.readText()).objects().map { o ->
+            ThemeHit(o.getLong("id"), o.optBoolean("tv"), o.getString("title"), o.str("orig"), o.str("year"), o.str("poster"))
+        }
+    }.getOrNull()
+
+    private fun writeThemes(f: File, hits: List<ThemeHit>) = runCatching {
+        f.parentFile?.mkdirs()
+        f.writeText(JSONArray(hits.map {
+            JSONObject().put("id", it.tmdbId).put("tv", it.tv).put("title", it.title)
+                .put("orig", it.originalTitle ?: JSONObject.NULL).put("year", it.year ?: JSONObject.NULL)
+                .put("poster", it.poster ?: JSONObject.NULL)
+        }).toString())
     }
 
     // ---------------------------------------------------------------------------------
