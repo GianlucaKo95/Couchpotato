@@ -120,7 +120,7 @@ fun MovieScreen(
     }
 
     LazyColumn(Modifier.fillMaxSize()) {
-        item { TopBar(active = NavTab.Movies) }
+        item { ScreenTop(NavTab.Movies, "Filme") }
         item { Spacer(Modifier.height(24.dp)) }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = ScreenPadding)) {
@@ -162,29 +162,37 @@ fun MovieScreen(
                     info?.cast?.takeIf { it.isNotEmpty() }?.let { Credits("Mit", it.take(5).joinToString(", ")) }
                     info?.director?.let { Credits("Regie", it) }
                     Spacer(Modifier.height(18.dp))
+                    if (state.profile.kid && gate is HomeViewModel.Gate.Blocked) {
+                        KidLockedBubble("Dieser Film ist noch nichts für dich. Frag Mama oder Papa!")
+                        Spacer(Modifier.height(12.dp))
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         val remain = progress?.let { p ->
                             if (p.durationMs > 0) ((p.durationMs - p.positionMs) / 60_000).coerceAtLeast(1) else null
                         }
+                        val kid = state.profile.kid
                         when (val g = gate) {
-                            HomeViewModel.Gate.Allowed -> PrimaryPill(
-                                if (progress != null) "▶  Fortsetzen" + (remain?.let { " · noch $it Min." } ?: "") else "▶  Abspielen",
+                            HomeViewModel.Gate.Allowed -> MainAction(
+                                when {
+                                    progress != null -> "▶  " + (if (kid) "Weiterschauen" else "Fortsetzen") + (remain?.let { " · noch $it Min." } ?: "")
+                                    kid -> "▶  Los geht’s!"
+                                    else -> "▶  Abspielen"
+                                },
                                 Modifier.focusRequester(playFocus),
                             ) { Playback.start(context, listOf(item)) }
-                            HomeViewModel.Gate.Checking -> PrimaryPill("Prüfe Freigabe …", Modifier.focusRequester(playFocus)) {}
-                            is HomeViewModel.Gate.Blocked -> PrimaryPill(
-                                "🔒  Gesperrt · ${g.reason}",
-                                Modifier.focusRequester(playFocus),
-                            ) { askPin = true }
+                            HomeViewModel.Gate.Checking -> MainAction(if (kid) "Moment …" else "Prüfe Freigabe …", Modifier.focusRequester(playFocus)) {}
+                            is HomeViewModel.Gate.Blocked ->
+                                if (kid) SideAction("Eltern-PIN eingeben", Modifier.focusRequester(playFocus), icon = de.koeven.couchpotato.R.drawable.ic_lock) { askPin = true }
+                                else PrimaryPill("🔒  Gesperrt · ${g.reason}", Modifier.focusRequester(playFocus)) { askPin = true }
                         }
                         if (progress != null && gate == HomeViewModel.Gate.Allowed) {
-                            SecondaryPill("Von vorne") {
+                            SideAction("Von vorne") {
                                 vm.restartFromBeginning(key)
                                 Playback.start(context, listOf(item))
                             }
                         }
                         info?.trailer?.takeIf { gate == HomeViewModel.Gate.Allowed }?.let { yt ->
-                            SecondaryPill("Trailer") {
+                            SideAction("Trailer") {
                                 val ok = runCatching {
                                     context.startActivity(
                                         Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$yt"))

@@ -139,7 +139,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 40.dp),
     ) {
-        item { TopBar(active = NavTab.Series) }
+        item { ScreenTop(NavTab.Series, "Serien") }
         item { Spacer(Modifier.height(26.dp)) }
 
         // ---------------- header ----------------
@@ -198,8 +198,14 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                         error != null -> Text(error ?: "", color = CpColors.Error)
                         loaded == null -> Text("Lade Folgen …", color = CpColors.TextMuted)
                         loaded.episodes.isEmpty() -> Text("Keine Folgen gefunden.", color = CpColors.TextMuted)
-                        else -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        else -> Column {
+                        if (state.profile.kid && gate is HomeViewModel.Gate.Blocked) {
+                            KidLockedBubble("Diese Serie ist noch nichts für dich. Frag Mama oder Papa!")
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             val first = loaded.episodes.first()
+                            val kid = state.profile.kid
                             val primary = if (resume != null && resumeEp != null) {
                                 val code = "S${resumeEp.season} E${resumeEp.number}"
                                 if (resume.upNext) "▶  Weiter mit $code"
@@ -210,19 +216,23 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                             val label = when (val g = gate) {
                                 HomeViewModel.Gate.Allowed -> primary
                                 HomeViewModel.Gate.Checking -> "Prüfe Freigabe …"
-                                is HomeViewModel.Gate.Blocked -> "🔒  Gesperrt · ${g.reason}"
+                                is HomeViewModel.Gate.Blocked -> if (kid) "Eltern-PIN eingeben" else "🔒  Gesperrt · ${g.reason}"
                             }
-                            PrimaryPill(label, Modifier.focusRequester(focus)) {
+                            MainAction(
+                                if (kid && gate == HomeViewModel.Gate.Allowed && resume == null) "▶  Los geht’s!" else label,
+                                Modifier.focusRequester(focus),
+                            ) {
                                 guardedPlay {
                                     val start = resumeEp?.id ?: first.id
                                     Playback.start(context, Playback.episodePlaylist(loaded, start))
                                 }
                             }
                             if (resumeEp != null && resumeEp.id != first.id && gate == HomeViewModel.Gate.Allowed) {
-                                SecondaryPill("Von vorne") {
+                                SideAction("Von vorne") {
                                     Playback.start(context, Playback.episodePlaylist(loaded, first.id))
                                 }
                             }
+                        }
                         }
                     }
                 }

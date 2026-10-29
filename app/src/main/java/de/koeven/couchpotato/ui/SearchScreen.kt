@@ -129,7 +129,7 @@ fun SearchScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(SearchBackground)
+            .background(if (LocalProfile.current?.kid == true) KidColors.Sky else SearchBackground)
     ) {
         Row(Modifier.fillMaxSize().padding(start = ScreenPadding, top = 32.dp)) {
             // ---------------- search field + keyboard ----------------

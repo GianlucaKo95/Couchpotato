@@ -753,6 +753,25 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Titles of a kind for the kids' Mediathek: one category or all visible ones, newest first – local. */
+    suspend fun visibleTitles(kind: Char, categoryId: String?, limit: Int = 300): List<SearchEntry> {
+        val entries = indexEntries ?: return emptyList()
+        val hidden = effectiveHidden()
+        return withContext(Dispatchers.Default) {
+            entries.asSequence()
+                .filter { it.kind == kind && it.categoryKey !in hidden && (categoryId == null || it.categoryId == categoryId) }
+                .sortedByDescending { it.added }
+                .take(limit)
+                .toList()
+        }
+    }
+
+    /** Visible categories of a kind for the active profile (kids: only released ones). */
+    suspend fun visibleCategories(kind: Char): List<LiveCategory> {
+        val hidden = effectiveHidden()
+        return allCategories(kind).filterNot { "$kind:${it.id}" in hidden }
+    }
+
     /** All categories of a kind (also hidden ones) – for the kids release list. */
     fun categoriesFor(kind: Char): List<LiveCategory> = categoriesByKind[kind].orEmpty()
 

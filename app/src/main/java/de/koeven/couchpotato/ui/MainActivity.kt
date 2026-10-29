@@ -163,9 +163,16 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
         return
     }
 
+    val kid = state.profile.kid
     CompositionLocalProvider(LocalNav provides nav, LocalProfile provides state.profile) {
+      KidThemeIf(kid) {
         when (val s = stack.last()) {
-            Screen.Home -> HomeScreen(
+            Screen.Home -> if (kid) KidHomeScreen(
+                vm = vm,
+                homeTick = homeTick,
+                onOpenSeries = { go(Screen.Series(it.id, it.name)) },
+                onOpenMovie = { id, name -> go(Screen.Movie(id, name)) },
+            ) else HomeScreen(
                 vm = vm,
                 homeTick = homeTick,
                 onOpenSeries = { go(Screen.Series(it.id, it.name)) },
@@ -176,7 +183,12 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
                 onOpenMovie = { id, name -> go(Screen.Movie(id, name)) },
             )
             is Screen.Browse -> key(s.kind) {
-                BrowseScreen(
+                if (kid) KidBrowseScreen(
+                    vm = vm,
+                    kind = s.kind,
+                    onOpenSeries = { id, name -> go(Screen.Series(id, name)) },
+                    onOpenMovie = { id, name -> go(Screen.Movie(id, name)) },
+                ) else BrowseScreen(
                     vm = vm,
                     kind = s.kind,
                     onOpenSeries = { id, name -> go(Screen.Series(id, name)) },
@@ -195,5 +207,12 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
                 MovieScreen(vm = vm, movieId = s.id, name = s.name, onOpenMovie = { id, name -> go(Screen.Movie(id, name)) })
             }
         }
+      }
     }
+}
+
+/** Kids profile: sky background and the kids' font around every screen. */
+@Composable
+private fun KidThemeIf(kid: Boolean, content: @Composable () -> Unit) {
+    if (kid) KidTheme(content) else content()
 }
