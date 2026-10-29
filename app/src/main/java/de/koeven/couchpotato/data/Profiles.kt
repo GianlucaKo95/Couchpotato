@@ -100,6 +100,18 @@ object Profiles {
         }
     }
 
+    /**
+     * True once after every start of the stick (the TV switches it off and on), so
+     * "Wer schaut?" comes up then – but not when Android merely restarts the app in between.
+     */
+    fun firstStartSinceBoot(context: Context): Boolean {
+        val bootedAt = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()
+        val last = prefs(context).getLong("bootedAt", 0L)
+        if (kotlin.math.abs(bootedAt - last) < 60_000L) return false   // same boot (clock jitter tolerated)
+        prefs(context).edit().putLong("bootedAt", bootedAt).apply()
+        return true
+    }
+
     // ---------------- parents' PIN ----------------
 
     fun hasPin(context: Context): Boolean = prefs(context).getString("pin", null) != null

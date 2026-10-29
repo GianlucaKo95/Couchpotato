@@ -150,7 +150,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 profile = Profiles.active(app),
                 profiles = profiles,
-                needsProfilePick = profiles.size > 1,     // "Wer schaut?" after every start
+                // "Wer schaut?" as start screen after every start of the stick
+                needsProfilePick = Profiles.firstStartSinceBoot(app) && profiles.size > 1,
                 hasPin = Profiles.hasPin(app),
                 kidCategories = Profiles.kidCategories(app),
                 kidApps = Profiles.kidApps(app),
