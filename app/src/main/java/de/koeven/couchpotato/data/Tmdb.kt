@@ -54,6 +54,7 @@ data class TitleDetails(
  * Every answer (also "not found") is kept on the stick, so each title is asked for once.
  */
 class Tmdb(context: Context) {
+    init { TmdbGate.init(context) }
     private val settings = SettingsStore(context)
     private val dir = File(context.filesDir, "tmdb")
 
@@ -324,19 +325,27 @@ class Tmdb(context: Context) {
         val v4 = t.length > 40      // long "read access token" (v4) vs. short API key (v3)
         val sep = if ('?' in path) '&' else '?'
         val url = "https://api.themoviedb.org/3/$path" + if (v4) "" else "${sep}api_key=$t"
-        val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = 10_000
-        c.readTimeout = 15_000
-        c.setRequestProperty("Accept", "application/json")
-        if (v4) c.setRequestProperty("Authorization", "Bearer $t")
-        try {
-            val code = c.responseCode
-            if (code == 401) throw IOException("TMDB-Schlüssel ungültig")
-            if (code !in 200..299) throw IOException("TMDB antwortet mit HTTP $code")
-            return JSONObject(c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-        } finally {
-            c.disconnect()
-        }
+        var retryAfter: Long? = null
+        // through the brake: max. 4 at a time, 20 per second, pause on "429 too many requests"
+        return TmdbGate.run({
+            val c = URL(url).openConnection() as HttpURLConnection
+            c.connectTimeout = 10_000
+            c.readTimeout = 15_000
+            c.setRequestProperty("Accept", "application/json")
+            if (v4) c.setRequestProperty("Authorization", "Bearer $t")
+            try {
+                val code = c.responseCode
+                retryAfter = c.getHeaderField("Retry-After")?.trim()?.toLongOrNull()
+                when {
+                    code == 429 -> code to null
+                    code == 401 -> throw IOException("TMDB-Schlüssel ungültig")
+                    code !in 200..299 -> throw IOException("TMDB antwortet mit HTTP $code")
+                    else -> code to JSONObject(c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+                }
+            } finally {
+                c.disconnect()
+            }
+        }, { retryAfter })
     }
 
     private fun parse(o: JSONObject, tv: Boolean): TitleDetails {

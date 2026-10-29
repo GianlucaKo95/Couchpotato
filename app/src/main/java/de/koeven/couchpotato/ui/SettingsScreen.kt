@@ -285,6 +285,20 @@ private fun CatalogSection(vm: HomeViewModel, state: HomeState, setStatus: (Stri
             Modifier.weight(1f),
         )
     }
+    if (state.tmdbOn) {
+        val tmdbHour = remember(state.syncInfo, state.tick) { de.koeven.couchpotato.data.TmdbGate.lastHour() }
+        val tmdbToday = remember(state.syncInfo, state.tick) { de.koeven.couchpotato.data.TmdbGate.today() }
+        val last429 = de.koeven.couchpotato.data.TmdbGate.last429
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatCard("TMDB-Anfragen", "$tmdbHour / Std.", "heute $tmdbToday · Grenze ~40 pro Sekunde", Modifier.weight(2f))
+            StatCard(
+                "TMDB gebremst",
+                if (last429 == 0L) "nie" else SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(Date(last429)),
+                if (last429 == 0L) "alles im grünen Bereich" else "danach kurz pausiert",
+                Modifier.weight(1f),
+            )
+        }
+    }
     Spacer(Modifier.height(4.dp))
     SettingRow(
         title = "Katalog jetzt abgleichen",
