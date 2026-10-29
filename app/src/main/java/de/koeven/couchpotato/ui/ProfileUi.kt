@@ -45,12 +45,8 @@ import kotlinx.coroutines.delay
 
 /** Soft backgrounds that suit the animals. */
 private val AVATAR_COLORS = listOf(
-    // soft (kids)
     Color(0xFFF6D9A8), Color(0xFFF7C1C1), Color(0xFFBFD9F2), Color(0xFFC8E6C0),
     Color(0xFFDCC7EE), Color(0xFFFBE3B5), Color(0xFFBDE9EE), Color(0xFFF8C9DE),
-    // dark (grown-ups)
-    Color(0xFF2F3B4C), Color(0xFF3B2F4C), Color(0xFF24413A), Color(0xFF4C3A2A),
-    Color(0xFF1F3A55), Color(0xFF41303A), Color(0xFF2E4440), Color(0xFF3C3C46),
 )
 
 /** The avatar animals (drawn in res/drawable/animal_*.xml). */
@@ -59,11 +55,6 @@ val ANIMALS = listOf(
     "Panda" to R.drawable.animal_panda, "Hase" to R.drawable.animal_hase, "Eule" to R.drawable.animal_eule,
     "Frosch" to R.drawable.animal_frosch, "Pinguin" to R.drawable.animal_pinguin, "Löwe" to R.drawable.animal_loewe,
     "Maus" to R.drawable.animal_maus, "Schwein" to R.drawable.animal_schwein, "Koala" to R.drawable.animal_koala,
-    // grown-ups (semi-realistic)
-    "Wolf" to R.drawable.animal_wolf, "Tiger" to R.drawable.animal_tiger, "Panther" to R.drawable.animal_panther,
-    "Roboter" to R.drawable.animal_roboter, "Adler" to R.drawable.animal_adler, "Hirsch" to R.drawable.animal_hirsch,
-    "Superheld" to R.drawable.animal_held, "Eisbär" to R.drawable.animal_eisbaer,
-    "Astronaut" to R.drawable.animal_astronaut, "Ninja" to R.drawable.animal_ninja,
 )
 
 fun animalName(p: Profile): String = ANIMALS[Math.floorMod(p.animalIndex, ANIMALS.size)].first

@@ -23,9 +23,9 @@ data class Profile(
     companion object {
         const val MAIN = "main"
         val FSK_STEPS = listOf(0, 6, 12, 16)
-        const val ANIMAL_COUNT = 22      // 0–11 kids' animals, 12–21 grown-up figures
+        const val ANIMAL_COUNT = 12
         const val KID_ANIMALS = 12
-        const val COLOR_COUNT = 16       // 0–7 soft (kids), 8–15 dark (grown-ups)
+        const val COLOR_COUNT = 8
     }
 }
 
@@ -77,11 +77,11 @@ object Profiles {
         val p = Profile(
             id = "p" + System.currentTimeMillis().toString(36),
             name = name.trim().ifEmpty { if (kid) "Kinder" else "Profil ${list.size + 1}" },
-            color = if (kid) (0 until 8).random() else (8 until 16).random(),
+            color = (0 until Profile.COLOR_COUNT).random(),
             kid = kid,
             // a fresh animal nobody else has yet: cute ones for kids, cool ones for grown-ups
             animal = run {
-                val pool = if (kid) (0 until Profile.KID_ANIMALS).toList() else (Profile.KID_ANIMALS until Profile.ANIMAL_COUNT).toList()
+                val pool = (0 until Profile.ANIMAL_COUNT).toList()
                 (pool - list.map { it.animalIndex }.toSet()).ifEmpty { pool }.random()
             },
         )
