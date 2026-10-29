@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
-import de.koeven.couchpotato.data.MovieInfo
+import de.koeven.couchpotato.data.TitleDetails
 import de.koeven.couchpotato.data.PlayItem
 import de.koeven.couchpotato.data.ProviderBlockedException
 import de.koeven.couchpotato.data.RequestBudgetException
@@ -62,16 +62,17 @@ fun MovieScreen(
     val state by vm.state.collectAsState()
     val backdrop = LocalBackdrop.current
     val entry = remember(movieId) { vm.catalogEntry(SearchEntry.KIND_MOVIE, movieId) }
-    var info by remember(movieId) { mutableStateOf<MovieInfo?>(null) }
+    var info by remember(movieId) { mutableStateOf<TitleDetails?>(null) }
     var note by remember(movieId) { mutableStateOf<String?>(null) }
     var similar by remember(movieId) { mutableStateOf<List<SearchEntry>>(emptyList()) }
     val playFocus = remember { FocusRequester() }
 
     LaunchedEffect(movieId) {
         similar = vm.similarTo(SearchEntry.KIND_MOVIE, movieId)
-        val r = vm.movieInfo(movieId)
+        val r = vm.titleDetails(SearchEntry.KIND_MOVIE, movieId, name)
         when {
-            r == null -> note = "Details sind ausgeschaltet (Einstellungen → Katalog & Anfragen)."
+            r == null -> note = if (vm.tmdb.enabled) "Keine Details zu diesem Film gefunden."
+                else "Details sind ausgeschaltet (Einstellungen → Katalog & Anfragen)."
             r.isSuccess -> info = r.getOrNull()
             else -> note = when (val e = r.exceptionOrNull()) {
                 is ProviderBlockedException, is RequestBudgetException ->
@@ -81,7 +82,7 @@ fun MovieScreen(
         }
     }
 
-    val cover = info?.cover ?: entry?.image
+    val cover = entry?.image ?: info?.poster
     LaunchedEffect(cover) { cover?.let { backdrop?.focusImage(it) } }
     LaunchedEffect(Unit) {
         delay(150)
@@ -95,7 +96,7 @@ fun MovieScreen(
         PlayItem.movie(VodItem(movieId, title, entry?.image, entry?.added ?: 0, entry?.ext ?: "mp4", entry?.categoryId))
     }
     val rating = info?.rating?.takeIf { it > 0f } ?: entry?.rating?.takeIf { it > 0f }
-    val genre = info?.genre ?: entry?.genre
+    val genre = info?.genres?.firstOrNull() ?: entry?.genre?.split(',', '/')?.firstOrNull()?.trim()
     val year = info?.year ?: entry?.year
 
     LazyColumn(Modifier.fillMaxSize()) {
@@ -106,9 +107,9 @@ fun MovieScreen(
                 Column(Modifier.weight(1f).padding(end = 36.dp)) {
                     val label = buildList {
                         add("FILM")
-                        genre?.split(',', '/')?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it.uppercase()) }
+                        genre?.takeIf { it.isNotEmpty() }?.let { add(it.uppercase()) }
                         year?.let { add(it) }
-                        info?.durationMin?.takeIf { it > 0 }?.let { add(duration(it)) }
+                        info?.runtimeMin?.takeIf { it > 0 }?.let { add(duration(it)) }
                     }.joinToString("  ·  ")
                     Text(label, style = MaterialTheme.typography.labelMedium, color = CpColors.Accent, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
@@ -119,15 +120,15 @@ fun MovieScreen(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (rating != null || info?.country != null) {
-                        Spacer(Modifier.height(6.dp))
+                    FactsLine(info?.fsk, rating, info?.votes ?: 0, info?.country)
+                    info?.tagline?.let {
                         Text(
-                            listOfNotNull(
-                                rating?.let { "★ " + "%.1f".format(java.util.Locale.GERMANY, it) + " / 10" },
-                                info?.country,
-                            ).joinToString("   ·   "),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
+                            "„$it“",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = CpColors.Accent,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                     Spacer(Modifier.height(10.dp))
@@ -138,7 +139,7 @@ fun MovieScreen(
                         maxLines = 4,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    info?.cast?.let { Credits("Mit", it) }
+                    info?.cast?.takeIf { it.isNotEmpty() }?.let { Credits("Mit", it.take(5).joinToString(", ")) }
                     info?.director?.let { Credits("Regie", it) }
                     Spacer(Modifier.height(18.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -192,10 +193,67 @@ fun MovieScreen(
                         PosterCard(title = e.name, image = e.image, onClick = { onOpenMovie(e.id, e.name) })
                     }
                 }
-                Spacer(Modifier.height(32.dp))
             }
         }
+        if (info?.fromTmdb == true) item { TmdbNote() }
+        item { Spacer(Modifier.height(32.dp)) }
     }
+}
+
+/** "FSK 12   ★ 7,4 (12.345)   US" */
+@Composable
+fun FactsLine(fsk: String?, rating: Float?, votes: Int, country: String?) {
+    if (fsk == null && rating == null && country == null) return
+    androidx.compose.foundation.layout.Row(
+        Modifier.padding(top = 8.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        fsk?.let { FskBadge(it) }
+        rating?.let {
+            Text(
+                "★ " + "%.1f".format(java.util.Locale.GERMANY, it) +
+                    (if (votes > 0) "  (" + java.text.NumberFormat.getIntegerInstance(java.util.Locale.GERMANY).format(votes) + ")" else ""),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        country?.let { Text(it, style = MaterialTheme.typography.titleSmall, color = CpColors.TextMuted) }
+    }
+}
+
+/** FSK in the official colours (0 white, 6 yellow, 12 green, 16 blue, 18 red). */
+@Composable
+fun FskBadge(fsk: String) {
+    val bg = when (fsk) {
+        "0" -> androidx.compose.ui.graphics.Color(0xFFFFFFFF)
+        "6" -> androidx.compose.ui.graphics.Color(0xFFFFD500)
+        "12" -> androidx.compose.ui.graphics.Color(0xFF2BA84A)
+        "16" -> androidx.compose.ui.graphics.Color(0xFF1E88E5)
+        "18" -> androidx.compose.ui.graphics.Color(0xFFE53935)
+        else -> CpColors.SurfaceHigh
+    }
+    val fg = if (fsk == "0" || fsk == "6") androidx.compose.ui.graphics.Color.Black else androidx.compose.ui.graphics.Color.White
+    Text(
+        "FSK $fsk",
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold,
+        color = fg,
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
+}
+
+/** Required by TMDB's terms when their data is shown. */
+@Composable
+fun TmdbNote() {
+    Text(
+        "Beschreibung, Besetzung, FSK und Bewertung: TMDB (themoviedb.org)",
+        style = MaterialTheme.typography.labelSmall,
+        color = CpColors.TextMuted,
+        modifier = Modifier.padding(start = ScreenPadding, top = 16.dp),
+    )
 }
 
 @Composable

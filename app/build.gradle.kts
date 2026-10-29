@@ -8,6 +8,8 @@ plugins {
 val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 val keystorePath: String? = System.getenv("CP_KEYSTORE")
 val keystorePassword: String? = System.getenv("CP_KEYSTORE_PASSWORD")
+// TMDB key/token from the repo secret TMDB_TOKEN (empty = TMDB off, unless set on the stick)
+val tmdbToken: String = (System.getenv("TMDB_TOKEN") ?: "").trim().replace("\"", "")
 
 android {
     namespace = "de.koeven.couchpotato"
@@ -19,6 +21,7 @@ android {
         targetSdk = 34
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"
+        buildConfigField("String", "TMDB_TOKEN", "\"$tmdbToken\"")
     }
 
     signingConfigs {
@@ -49,6 +52,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

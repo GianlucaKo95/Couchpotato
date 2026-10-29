@@ -20,6 +20,7 @@ data class SearchEntry(
     val rating: Float = 0f,        // 0–10 as the provider lists it (0 = unknown)
     val genre: String? = null,
     val year: String? = null,
+    val tmdbId: Long? = null,      // if the provider lists it (saves a search at TMDB)
 ) {
     /** Same key format as SettingsStore.hiddenCategories(). */
     val categoryKey: String get() = "$kind:${categoryId ?: ""}"
@@ -136,7 +137,8 @@ class SearchIndex(context: Context) {
                     .append(added.toString()).append('\t')
                     .append(if (facts.rating > 0f) "%.1f".format(Locale.ROOT, facts.rating) else "").append('\t')
                     .append(facts.genre?.sanitize() ?: "").append('\t')
-                    .append(facts.year ?: "").append('\n')
+                    .append(facts.year ?: "").append('\t')
+                    .append(facts.tmdb?.toString() ?: "").append('\n')
                 count++
             }
         }
@@ -174,6 +176,7 @@ class SearchIndex(context: Context) {
                     rating = p.getOrNull(8)?.toFloatOrNull() ?: 0f,
                     genre = p.getOrNull(9)?.ifEmpty { null },
                     year = p.getOrNull(10)?.ifEmpty { null },
+                    tmdbId = p.getOrNull(11)?.toLongOrNull(),
                 )
             }.toList()
         }

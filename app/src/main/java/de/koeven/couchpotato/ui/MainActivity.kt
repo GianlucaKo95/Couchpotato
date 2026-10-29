@@ -67,6 +67,13 @@ class MainActivity : ComponentActivity() {
      */
     private fun applyConfigExtras(intent: Intent?): Boolean {
         intent ?: return false
+        // TMDB key/token: adb shell am start -n de.koeven.couchpotato/.ui.MainActivity --es tmdb 'TOKEN'
+        intent.getStringExtra("tmdb")?.let { t ->
+            vm.setTmdbToken(t)
+            Toast.makeText(this, if (t.isBlank()) "TMDB-Schlüssel entfernt" else "TMDB-Schlüssel gespeichert", Toast.LENGTH_SHORT).show()
+            intent.removeExtra("tmdb")
+            if (intent.getStringExtra("m3u") == null && intent.getStringExtra("xtream_url") == null) return true
+        }
         val cfg = intent.getStringExtra("m3u")?.let { XtreamConfig.fromLink(it) }
             ?: run {
                 val url = intent.getStringExtra("xtream_url")

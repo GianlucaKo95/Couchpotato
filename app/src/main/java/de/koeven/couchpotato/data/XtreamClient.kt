@@ -258,7 +258,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
      * for the search index. Returns the names of the lists that could not be loaded.
      */
     /** Extra facts the lists already carry (no extra request): rating 0–10, genre, year. */
-    data class Facts(val rating: Float, val genre: String?, val year: String?)
+    data class Facts(val rating: Float, val genre: String?, val year: String?, val tmdb: Long?)
 
     suspend fun dumpCatalog(onItem: (Char, Long, String, String?, String, String?, Long, Facts) -> Unit): List<String> =
         withContext(Dispatchers.IO) {
@@ -282,9 +282,11 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
                         var rating5 = 0f
                         var genre: String? = null
                         var year: String? = null
+                        var tmdb: Long? = null
                         r.beginObject()
                         while (r.hasNext()) {
                             when (r.nextName()) {
+                                "tmdb", "tmdb_id" -> tmdb = r.nextLenient()?.toLongOrNull()?.takeIf { it > 0 } ?: tmdb
                                 "rating" -> rating = r.nextLenient()?.replace(',', '.')?.toFloatOrNull() ?: rating
                                 "rating_5based" -> rating5 = r.nextLenient()?.replace(',', '.')?.toFloatOrNull() ?: rating5
                                 "genre" -> genre = r.nextLenient()?.trim()?.takeIf { it.isNotEmpty() }
@@ -301,7 +303,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
                         }
                         r.endObject()
                         val score = (if (rating > 0f) rating else rating5 * 2f).coerceIn(0f, 10f)
-                        id?.let { onItem(spec.kind, it, name.trim(), image, ext, cat, added, Facts(score, genre, year)) }
+                        id?.let { onItem(spec.kind, it, name.trim(), image, ext, cat, added, Facts(score, genre, year, tmdb)) }
                     }) { Unit }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e

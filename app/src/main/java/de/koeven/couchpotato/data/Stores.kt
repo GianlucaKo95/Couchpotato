@@ -141,6 +141,11 @@ class SettingsStore(context: Context) {
         get() = p.getBoolean("providerImages", true)
         set(value) = p.edit().putBoolean("providerImages", value).apply()
 
+    /** TMDB key/token set on the stick (adb … --es tmdb 'TOKEN'); otherwise the one from the build. */
+    var tmdbToken: String?
+        get() = p.getString("tmdbToken", null)
+        set(value) = p.edit().putString("tmdbToken", value?.trim()?.takeIf { it.isNotEmpty() }).apply()
+
     /** Film details (plot, cast …): one request per film, the first time it is opened. */
     var loadMovieDetails: Boolean
         get() = p.getBoolean("movieDetails", true)

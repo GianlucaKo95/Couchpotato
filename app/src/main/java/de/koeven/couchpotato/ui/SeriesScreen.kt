@@ -48,7 +48,9 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import de.koeven.couchpotato.data.Episode
 import de.koeven.couchpotato.data.ProgressEntry
+import de.koeven.couchpotato.data.SearchEntry
 import de.koeven.couchpotato.data.SeriesInfo
+import de.koeven.couchpotato.data.TitleDetails
 import de.koeven.couchpotato.player.Playback
 import kotlinx.coroutines.delay
 
@@ -62,6 +64,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
     var info by remember(seriesId) { mutableStateOf<SeriesInfo?>(null) }
     var error by remember(seriesId) { mutableStateOf<String?>(null) }
     var season by remember(seriesId) { mutableIntStateOf(-1) }
+    var details by remember(seriesId) { mutableStateOf<TitleDetails?>(null) }
     val focus = remember { FocusRequester() }
 
     LaunchedEffect(seriesId) {
@@ -75,6 +78,9 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
             error = e.message ?: "Serie konnte nicht geladen werden"
         }
     }
+
+    // FSK, German text, cast, rating: TMDB (costs the IPTV provider nothing)
+    LaunchedEffect(seriesId) { details = vm.titleDetails(SearchEntry.KIND_SERIES, seriesId, name)?.getOrNull() }
 
     // the series cover colours the background
     LaunchedEffect(info?.cover) { info?.cover?.let { backdrop?.focusImage(it) } }
@@ -110,10 +116,9 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                 Column(Modifier.weight(1f).padding(end = 40.dp)) {
                     val label = buildList {
                         add("SERIE")
-                        loaded?.genre?.substringBefore(',')?.substringBefore('/')?.trim()?.takeIf { it.isNotEmpty() }
-                            ?.let { add(it.uppercase()) }
-                        loaded?.year?.let { add(it) }
-                        loaded?.rating?.takeIf { it > 0f }?.let { add("★ " + "%.1f".format(java.util.Locale.GERMANY, it)) }
+                        (details?.genres?.firstOrNull() ?: loaded?.genre?.substringBefore(',')?.substringBefore('/')?.trim())
+                            ?.takeIf { it.isNotEmpty() }?.let { add(it.uppercase()) }
+                        (details?.year ?: loaded?.year)?.let { add(it) }
                         if (seasons.isNotEmpty()) add(if (seasons.size == 1) "1 STAFFEL" else "${seasons.size} STAFFELN")
                     }.joinToString("  ·  ")
                     Text(
@@ -130,7 +135,13 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    loaded?.plot?.let {
+                    FactsLine(
+                        fsk = details?.fsk,
+                        rating = details?.rating?.takeIf { it > 0f } ?: loaded?.rating?.takeIf { it > 0f },
+                        votes = details?.votes ?: 0,
+                        country = details?.country,
+                    )
+                    (details?.plot ?: loaded?.plot)?.let {
                         Spacer(Modifier.height(10.dp))
                         Text(
                             it,
@@ -140,7 +151,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    loaded?.cast?.let {
+                    (details?.cast?.takeIf { it.isNotEmpty() }?.take(5)?.joinToString(", ") ?: loaded?.cast)?.let {
                         Text(
                             "Mit: $it",
                             style = MaterialTheme.typography.bodySmall,
@@ -234,6 +245,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                 }
             }
         }
+        if (details?.fromTmdb == true) item { TmdbNote() }
     }
 }
 

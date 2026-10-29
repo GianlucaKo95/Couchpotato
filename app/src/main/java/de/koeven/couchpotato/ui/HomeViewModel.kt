@@ -14,6 +14,8 @@ import de.koeven.couchpotato.data.HomeRows
 import de.koeven.couchpotato.data.LiveCategory
 import de.koeven.couchpotato.data.LiveChannel
 import de.koeven.couchpotato.data.MovieInfo
+import de.koeven.couchpotato.data.TitleDetails
+import de.koeven.couchpotato.data.Tmdb
 import de.koeven.couchpotato.data.Recommender
 import de.koeven.couchpotato.data.WatchHistory
 import de.koeven.couchpotato.data.MediaPlay
@@ -98,6 +100,7 @@ data class HomeState(
     val recommended: List<SearchEntry> = emptyList(),
     val recommendedPersonal: Boolean = false,
     val loadMovieDetails: Boolean = true,
+    val tmdbOn: Boolean = false,
 )
 
 /** An installed app in the "search in other apps" row; [acceptsQuery] = search term is handed over. */
@@ -111,6 +114,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val watchNextCache = WatchNextCache(app)
     private val seriesCache = HashMap<Long, SeriesInfo>()
     private val history = WatchHistory(app)
+    val tmdb = Tmdb(app)
     private val seriesDir = java.io.File(app.filesDir, "seriesinfo")
     private val movieDir = java.io.File(app.filesDir, "vodinfo")
     private var epgJob: Job? = null
@@ -205,6 +209,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 imageInfo = imageInfo(),
                 loadProviderImages = settings.loadProviderImages,
                 loadMovieDetails = settings.loadMovieDetails,
+                tmdbOn = tmdb.enabled,
             )
         }
     }
@@ -638,6 +643,27 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             f.writeText(text)
             MovieInfo.fromInfo(org.json.JSONObject(text).getJSONObject("info"))
         }
+    }
+
+    /**
+     * Info screen data: TMDB first (separate service – costs the IPTV provider nothing),
+     * otherwise the provider's own details (one throttled request, kept for good).
+     * Failure carries the reason, null = nothing to show.
+     */
+    suspend fun titleDetails(kind: Char, id: Long, fallbackName: String): Result<TitleDetails>? {
+        val e = catalogEntry(kind, id)
+        if (tmdb.enabled) {
+            val r = runCatching { tmdb.details(kind, id, e?.name ?: fallbackName, e?.year, e?.tmdbId) }
+            r.getOrNull()?.let { return Result.success(it) }
+            if (kind == SearchEntry.KIND_SERIES) return r.exceptionOrNull()?.let { Result.failure(it) }
+        }
+        if (kind != SearchEntry.KIND_MOVIE) return null      // series: the provider data comes with the episodes
+        return movieInfo(id)?.map { TitleDetails.fromProvider(it) }
+    }
+
+    fun setTmdbToken(token: String) {
+        settings.tmdbToken = token
+        _state.update { it.copy(tmdbOn = tmdb.enabled) }
     }
 
     fun setLoadMovieDetails(value: Boolean) {

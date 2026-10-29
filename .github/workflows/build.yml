@@ -35,9 +35,11 @@ jobs:
 
       - name: Build
         env:
+          TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
           CP_KEYSTORE_PASSWORD: ${{ secrets.CP_KEYSTORE_PASSWORD }}
         run: |
           set -o pipefail
+          if [ -z "$TMDB_TOKEN" ]; then echo "::warning::TMDB_TOKEN secret not set - TMDB details off"; else echo "::notice::TMDB token present"; fi
           ./gradlew assembleRelease --no-daemon 2>&1 | tee build.log
 
       # Compiler errors as annotations, so they can be read without downloading the log

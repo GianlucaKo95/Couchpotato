@@ -290,6 +290,12 @@ private fun CatalogSection(vm: HomeViewModel, state: HomeState, setStatus: (Stri
         description = "1 Anfrage beim ersten Öffnen eines Films, danach dauerhaft auf dem Stick",
         value = if (state.loadMovieDetails) "laden" else "nicht laden",
     ) { vm.setLoadMovieDetails(!state.loadMovieDetails) }
+    Hint(
+        if (state.tmdbOn) "TMDB aktiv: Beschreibung, FSK, Besetzung und Bewertung kommen von themoviedb.org – " +
+            "das kostet deinen IPTV-Anbieter keine Anfrage. Der Anbieter wird nur gefragt, wenn TMDB einen Film nicht kennt."
+        else "TMDB aus (kein Schlüssel). Setzen per PowerShell: adb shell am start -n " +
+            "de.koeven.couchpotato/.ui.MainActivity --es tmdb 'SCHLÜSSEL' – oder als Repo-Secret TMDB_TOKEN."
+    )
     Hint(state.imageInfo)
     if (state.indexStatus.isNotBlank()) Hint(state.indexStatus)
 }
@@ -387,6 +393,10 @@ private fun AboutSection(state: HomeState) {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
     SectionTitle("Über Couchpotato", "Dein eigener Startbildschirm für Fire TV – ohne Werbung.")
+    Hint(
+        "Film- und Serieninfos: Dieses Produkt nutzt die TMDB-API, ist aber nicht von TMDB " +
+            "unterstützt oder zertifiziert (themoviedb.org)."
+    )
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         StatCard("Version", version, " ", Modifier.weight(1f))
         StatCard("IPTV", if (state.configured) "verbunden" else "nicht eingerichtet", " ", Modifier.weight(1f))
