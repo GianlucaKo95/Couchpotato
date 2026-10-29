@@ -15,6 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -176,22 +179,35 @@ fun SecondaryPill(label: String, modifier: Modifier = Modifier, onClick: () -> U
 @Composable
 private fun ProfileButton(onClick: () -> Unit) {
     val profile = LocalProfile.current ?: return
+    var focused by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val pill = RoundedCornerShape(50)
+    // just the animal; with the pointer on it, it opens into a pill with the profile's name
     androidx.tv.material3.Surface(
         onClick = onClick,
-        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.CircleShape),
+        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(pill),
         colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
-            focusedContainerColor = Color.Transparent,
+            focusedContainerColor = CpColors.Text,
+            contentColor = CpColors.Text,
+            focusedContentColor = CpColors.Background,
         ),
-        border = androidx.tv.material3.ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(
-                androidx.compose.foundation.BorderStroke(3.dp, CpColors.Text),
-                shape = androidx.compose.foundation.shape.CircleShape,
-            ),
-        ),
-        modifier = Modifier.size(40.dp),
+        scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+        modifier = Modifier
+            .height(40.dp)
+            .onFocusChanged { focused = it.isFocused },
     ) {
-        Avatar(profile, 40.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(profile, 40.dp)
+            if (focused) {
+                Text(
+                    profile.name,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 10.dp, end = 16.dp),
+                )
+            }
+        }
     }
 }
 
