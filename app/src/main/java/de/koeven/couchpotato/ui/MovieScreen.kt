@@ -90,6 +90,8 @@ fun MovieScreen(
     }
 
     val title = entry?.name ?: name
+    var also by remember(movieId) { mutableStateOf<List<de.koeven.couchpotato.data.AppEntry>>(emptyList()) }
+    LaunchedEffect(info) { also = vm.alsoOn(info) }
     var unlockTick by remember { mutableStateOf(0) }
     var askPin by remember { mutableStateOf(false) }
     val gate = remember(info, note, unlockTick, state.profile) {
@@ -161,6 +163,16 @@ fun MovieScreen(
                     )
                     info?.cast?.takeIf { it.isNotEmpty() }?.let { Credits("Mit", it.take(5).joinToString(", ")) }
                     info?.director?.let { Credits("Regie", it) }
+                    if (also.isNotEmpty()) {
+                        Row(
+                            Modifier.padding(top = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            Text("Auch bei", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted)
+                            also.forEach { a -> TabPill(a.label, false) { vm.openInStreamingApp(context, a, title) } }
+                        }
+                    }
                     Spacer(Modifier.height(18.dp))
                     if (state.profile.kid && gate is HomeViewModel.Gate.Blocked) {
                         KidLockedBubble("Dieser Film ist noch nichts für dich. Frag Mama oder Papa!")

@@ -81,6 +81,8 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
 
     // FSK, German text, cast, rating: TMDB (costs the IPTV provider nothing)
     var detailsDone by remember(seriesId) { mutableStateOf(false) }
+    var also by remember(seriesId) { mutableStateOf<List<de.koeven.couchpotato.data.AppEntry>>(emptyList()) }
+    LaunchedEffect(details) { also = vm.alsoOn(details) }
     LaunchedEffect(seriesId) {
         details = runCatching { vm.titleDetails(SearchEntry.KIND_SERIES, seriesId, name)?.getOrNull() }.getOrNull()
         detailsDone = true
@@ -182,6 +184,16 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    }
+                    if (also.isNotEmpty()) {
+                        Row(
+                            Modifier.padding(top = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            Text("Auch bei", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted)
+                            also.forEach { a -> TabPill(a.label, false) { vm.openInStreamingApp(context, a, loaded?.name ?: name) } }
+                        }
                     }
                     (details?.cast?.takeIf { it.isNotEmpty() }?.take(5)?.joinToString(", ") ?: loaded?.cast)?.let {
                         Text(

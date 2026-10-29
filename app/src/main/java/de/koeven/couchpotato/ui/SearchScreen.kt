@@ -96,6 +96,15 @@ fun SearchScreen(
         vm.runSearch(query)
     }
 
+    // cross-app search via TMDB/JustWatch: only after a short pause in typing (internet round trip)
+    var streams by remember { mutableStateOf<List<HomeViewModel.StreamResult>>(emptyList()) }
+    var streamMenu by remember { mutableStateOf<HomeViewModel.StreamResult?>(null) }
+    LaunchedEffect(query) {
+        if (query.trim().length < 3) { streams = emptyList(); return@LaunchedEffect }
+        delay(700)
+        streams = vm.streamingSearch(query)
+    }
+
     fun type(s: String) = vm.setQuery(query + s)
     fun saveQuery(q: String = query) {
         vm.rememberSearch(q)
@@ -243,6 +252,39 @@ fun SearchScreen(
                             }
                         }
                     }
+                    if (streams.isNotEmpty()) {
+                        item(key = "streams") {
+                            Section("Bei deinen Streamingdiensten") {
+                                items(streams, key = { "t${it.hit.tv}${it.hit.tmdbId}" }) { r ->
+                                    Column(Modifier.width(PosterWidth)) {
+                                        PosterCard(
+                                            title = r.hit.title,
+                                            image = r.hit.poster,
+                                            onClick = {
+                                                saveQuery()
+                                                if (r.apps.size == 1) vm.openInStreamingApp(context, r.apps[0], r.hit.title)
+                                                else streamMenu = r
+                                            },
+                                        )
+                                        Text(
+                                            r.apps.joinToString(" · ") { it.label },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = CpColors.Accent,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                "Wo es läuft: JustWatch über TMDB · ein Klick sucht den Titel in der App",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = CpColors.TextMuted,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
                     if (liveChannels.isNotEmpty()) {
                         item(key = "live") {
                             Section("Live-TV (${liveChannels.size}) · lange OK = Favorit") {
@@ -300,6 +342,13 @@ fun SearchScreen(
                 }
             }
         }
+    }
+    streamMenu?.let { r ->
+        ContextMenu(
+            title = r.hit.title,
+            actions = r.apps.map { a -> MenuAction("In ${a.label} öffnen") { vm.openInStreamingApp(context, a, r.hit.title) } },
+            onDismiss = { streamMenu = null },
+        )
     }
 }
 

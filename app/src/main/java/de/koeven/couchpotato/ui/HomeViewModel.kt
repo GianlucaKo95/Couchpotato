@@ -75,6 +75,24 @@ sealed interface ContinueItem {
     }
 }
 
+/** TMDB/JustWatch service name (normalised start) → words to find the installed app by its label. */
+private val PROVIDER_KEYS = linkedMapOf(
+    "amazon prime" to listOf("prime video", "amazon prime"),
+    "amazon video" to listOf("prime video"),
+    "disney plus" to listOf("disney"),
+    "apple tv" to listOf("apple tv"),
+    "paramount" to listOf("paramount"),
+    "ard" to listOf("ard"),
+    "zdf" to listOf("zdf"),
+    "rtl" to listOf("rtl"),
+    "joyn" to listOf("joyn"),
+    "wow" to listOf("wow"),
+    "sky" to listOf("sky", "wow"),
+    "magenta" to listOf("magenta"),
+    "youtube" to listOf("youtube"),
+    "netflix" to listOf("netflix"),
+)
+
 /** Streaming apps shown as a tile in "Weiterschauen" (if installed). */
 private val STREAMING_APPS = listOf("com.netflix.ninja", "com.disney.disneyplus")
 
@@ -843,6 +861,46 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (kind != SearchEntry.KIND_MOVIE) return null      // series: the provider data comes with the episodes
         return movieInfo(id)?.map { TitleDetails.fromProvider(it) }
+    }
+
+    // ---------------- Suche über Streamingdienste ----------------
+
+    /** A TMDB hit together with the installed apps that stream it. */
+    data class StreamResult(val hit: Tmdb.StreamHit, val apps: List<AppEntry>)
+
+    /** Installed app for a streaming service name from TMDB/JustWatch ("Disney Plus" → Disney+ app). */
+    fun appFor(provider: String): AppEntry? {
+        val p = SearchIndex.normalize(provider.replace("+", " plus"))
+        val keys = PROVIDER_KEYS.entries.firstOrNull { (k, _) -> p.startsWith(k) }?.value
+            ?: listOf(p.substringBefore(' '))
+        return _state.value.apps.firstOrNull { a ->
+            val label = SearchIndex.normalize(a.label.replace("+", " plus"))
+            keys.any { k -> " $label".contains(" $k") }   // at a word start: "ard" must not hit "Leonardo"
+        }
+    }
+
+    fun appsFor(providers: List<String>): List<AppEntry> = providers.mapNotNull { appFor(it) }.distinctBy { it.packageName }
+
+    /** Cross-app search (not in kids profiles: no FSK there). Only hits you can watch with an installed app. */
+    suspend fun streamingSearch(query: String): List<StreamResult> {
+        if (Profiles.active(app).kid || !tmdb.enabled || query.trim().length < 3) return emptyList()
+        return runCatching { tmdb.searchStreaming(query) }.getOrDefault(emptyList())
+            .map { StreamResult(it, appsFor(it.providers)) }
+            .filter { it.apps.isNotEmpty() }
+    }
+
+    /** Where a title from the info screen also streams (installed apps only). */
+    suspend fun alsoOn(details: TitleDetails?): List<AppEntry> {
+        val id = details?.tmdbId ?: return emptyList()
+        if (Profiles.active(app).kid || !tmdb.enabled) return emptyList()
+        return appsFor(runCatching { tmdb.providers(details.tv, id) }.getOrDefault(emptyList()))
+    }
+
+    /** Opens the streaming app and searches the title there (or just opens it). */
+    fun openInStreamingApp(context: Context, appEntry: AppEntry, title: String) {
+        val sa = _state.value.searchApps.firstOrNull { it.app.packageName == appEntry.packageName }
+            ?: SearchApp(appEntry, AppsRepository.searchablePackages(context).contains(appEntry.packageName))
+        searchInApp(context, sa, title)
     }
 
     fun setTmdbToken(token: String) {

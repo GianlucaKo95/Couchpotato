@@ -3,6 +3,9 @@ package de.koeven.couchpotato.data
 import android.content.Context
 import de.koeven.couchpotato.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -29,6 +32,8 @@ data class TitleDetails(
     val backdrop: String?,
     val poster: String?,
     val fromTmdb: Boolean,
+    val tmdbId: Long? = null,
+    val tv: Boolean = false,
 ) {
     companion object {
         /** Provider details (get_vod_info) in the same shape – used when TMDB is off or doesn't know the film. */
@@ -89,6 +94,73 @@ class Tmdb(context: Context) {
             f.writeText(json.toString())
             parse(json, tv)
         }
+
+    // ---------------- streaming services (data: JustWatch via TMDB) ----------------
+
+    /** A film/series found at TMDB, with the streaming services that have it in Germany (flatrate/free). */
+    data class StreamHit(
+        val tmdbId: Long,
+        val tv: Boolean,
+        val title: String,
+        val year: String?,
+        val poster: String?,
+        val providers: List<String>,
+    )
+
+    /**
+     * Cross-app search: films and series matching [query] and where they stream in Germany.
+     * Only TMDB is asked (1 search + 1 small request per hit), never the IPTV provider.
+     */
+    suspend fun searchStreaming(query: String, limit: Int = 14): List<StreamHit> = withContext(Dispatchers.IO) {
+        if (!enabled) return@withContext emptyList()
+        val q = query.trim()
+        searchCache[q.lowercase()]?.let { return@withContext it }
+        val res = get("search/multi?query=${URLEncoder.encode(q, "UTF-8")}&language=de-DE&include_adult=false")
+            .optJSONArray("results").objects()
+            .filter { it.str("media_type") == "movie" || it.str("media_type") == "tv" }
+            .take(limit)
+        val hits = coroutineScope {
+            res.map { o ->
+                async {
+                    val tv = o.str("media_type") == "tv"
+                    val id = o.optLong("id")
+                    val provs = runCatching { providers(tv, id) }.getOrDefault(emptyList())
+                    StreamHit(
+                        tmdbId = id, tv = tv,
+                        title = (if (tv) o.str("name") else o.str("title")) ?: "",
+                        year = (if (tv) o.str("first_air_date") else o.str("release_date"))?.take(4)?.takeIf { it.length == 4 },
+                        poster = o.str("poster_path")?.let { "$IMG/w342$it" },
+                        providers = provs,
+                    )
+                }
+            }.awaitAll()
+        }.filter { it.title.isNotBlank() && it.providers.isNotEmpty() }
+        synchronized(searchCache) {
+            if (searchCache.size > 40) searchCache.remove(searchCache.keys.first())
+            searchCache[q.lowercase()] = hits
+        }
+        hits
+    }
+
+    /** Streaming services (flatrate, free, with ads) in Germany; kept 3 days on the stick. */
+    suspend fun providers(tv: Boolean, tmdbId: Long): List<String> = withContext(Dispatchers.IO) {
+        if (!enabled) return@withContext emptyList()
+        val f = File(dir, "prov_${if (tv) "tv" else "movie"}_$tmdbId.json")
+        if (f.exists() && System.currentTimeMillis() - f.lastModified() < 3 * DAY) {
+            runCatching { return@withContext JSONArray(f.readText()).let { a -> (0 until a.length()).map { a.getString(it) } } }
+        }
+        val de = get("${if (tv) "tv" else "movie"}/$tmdbId/watch/providers").optJSONObject("results")?.optJSONObject("DE")
+        val list = listOf("flatrate", "free", "ads")
+            .flatMap { k -> de?.optJSONArray(k).objects() }
+            .sortedBy { it.optInt("display_priority", 99) }
+            .mapNotNull { it.str("provider_name") }
+            .distinct()
+        dir.mkdirs()
+        f.writeText(JSONArray(list).toString())
+        list
+    }
+
+    private val searchCache = LinkedHashMap<String, List<StreamHit>>()
 
     // ---------------------------------------------------------------------------------
 
@@ -181,6 +253,8 @@ class Tmdb(context: Context) {
             backdrop = o.str("backdrop_path")?.let { "$IMG/w1280$it" },
             poster = o.str("poster_path")?.let { "$IMG/w500$it" },
             fromTmdb = true,
+            tmdbId = o.optLong("id").takeIf { it > 0 },
+            tv = tv,
         )
     }
 
