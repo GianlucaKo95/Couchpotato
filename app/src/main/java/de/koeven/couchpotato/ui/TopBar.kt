@@ -38,6 +38,7 @@ class NavActions(
     val browse: (Char) -> Unit,
     val search: () -> Unit,
     val settings: () -> Unit,
+    val profiles: () -> Unit = {},
 )
 
 val LocalNav = staticCompositionLocalOf<NavActions?> { null }
@@ -79,6 +80,8 @@ fun TopBar(
             Text("  $it", style = MaterialTheme.typography.labelSmall, color = CpColors.TextMuted)
         }
         Spacer(Modifier.weight(1f))
+        ProfileButton { nav?.profiles?.invoke() }
+        Spacer(Modifier.width(8.dp))
         RoundIcon(R.drawable.ic_search, "Suchen", activeIcon == "search") { nav?.search?.invoke() }
         Spacer(Modifier.width(8.dp))
         RoundIcon(R.drawable.ic_settings, "Einstellungen", activeIcon == "settings") { nav?.settings?.invoke() }
@@ -167,3 +170,30 @@ fun SecondaryPill(label: String, modifier: Modifier = Modifier, onClick: () -> U
         Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
+
+/** Avatar of the active profile – opens "Wer schaut?". */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ProfileButton(onClick: () -> Unit) {
+    val profile = LocalProfile.current ?: return
+    androidx.tv.material3.Surface(
+        onClick = onClick,
+        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.CircleShape),
+        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent,
+        ),
+        border = androidx.tv.material3.ClickableSurfaceDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(
+                androidx.compose.foundation.BorderStroke(3.dp, CpColors.Text),
+                shape = androidx.compose.foundation.shape.CircleShape,
+            ),
+        ),
+        modifier = Modifier.size(40.dp),
+    ) {
+        Avatar(profile, 40.dp)
+    }
+}
+
+/** The active profile, for the avatar in the top bar. */
+val LocalProfile = staticCompositionLocalOf<de.koeven.couchpotato.data.Profile?> { null }

@@ -95,6 +95,7 @@ fun BrowseScreen(
     val selectedFocus = remember { FocusRequester() }
 
     val hiddenSet = state.hiddenCategories
+    val kidMode = state.profile.kid      // kids: only released categories, nothing to edit
     fun isHidden(c: LiveCategory) = "$kind:${c.id}" in hiddenSet
     val visibleCats = categories.orEmpty().filter { editing || showHidden || !isHidden(it) }
     val hiddenCount = categories.orEmpty().count { isHidden(it) }
@@ -183,7 +184,7 @@ fun BrowseScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
                     )
-                    if (categories.orEmpty().isNotEmpty()) {
+                    if (categories.orEmpty().isNotEmpty() && !kidMode) {
                         TabPill(if (editing) "Fertig" else "Bearbeiten", selected = editing) {
                             if (editing) finishEditing() else editing = true
                         }
@@ -230,13 +231,13 @@ fun BrowseScreen(
                                 if (editing) vm.setCategoriesHidden(kind, listOf(cat.id), !hidden, refresh = false)
                                 else selectedId = cat.id
                             },
-                            onLongClick = { if (!editing) menu = BrowseMenu.Category(cat, hidden) },
+                            onLongClick = { if (!editing && !kidMode) menu = BrowseMenu.Category(cat, hidden) },
                             modifier = Modifier
                                 .onFocusChanged { if (it.isFocused) focusedId = cat.id }
                                 .then(if (wantsFocus) Modifier.focusRequester(selectedFocus) else Modifier),
                         )
                     }
-                    if (!editing && categories != null && (hiddenCount > 0 || showHidden)) {
+                    if (!editing && !kidMode && categories != null && (hiddenCount > 0 || showHidden)) {
                         item(key = "toggle-hidden") {
                             Spacer(Modifier.height(8.dp))
                             CategoryRow(

@@ -14,6 +14,8 @@ import de.koeven.couchpotato.data.HomeRows
 import de.koeven.couchpotato.data.LiveCategory
 import de.koeven.couchpotato.data.LiveChannel
 import de.koeven.couchpotato.data.MovieInfo
+import de.koeven.couchpotato.data.Profile
+import de.koeven.couchpotato.data.Profiles
 import de.koeven.couchpotato.data.TitleDetails
 import de.koeven.couchpotato.data.Tmdb
 import de.koeven.couchpotato.data.Recommender
@@ -101,6 +103,13 @@ data class HomeState(
     val recommendedPersonal: Boolean = false,
     val loadMovieDetails: Boolean = true,
     val tmdbOn: Boolean = false,
+    val profile: Profile = Profile(Profile.MAIN, "Ich", 0, kid = false),
+    val profiles: List<Profile> = emptyList(),
+    val needsProfilePick: Boolean = false,
+    val hasPin: Boolean = false,
+    val kidCategories: Set<String> = emptySet(),
+    val kidApps: Set<String> = emptySet(),
+    val allApps: List<AppEntry> = emptyList(),
 )
 
 /** An installed app in the "search in other apps" row; [acceptsQuery] = search term is handed over. */
@@ -109,11 +118,12 @@ data class SearchApp(val app: AppEntry, val acceptsQuery: Boolean)
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val settings = SettingsStore(app)
-    private val progress = ProgressStore(app)
-    private val cache = CatalogCache(app)
+    private var progress = ProgressStore(app)
+    private var cache = CatalogCache(app)
     private val watchNextCache = WatchNextCache(app)
     private val seriesCache = HashMap<Long, SeriesInfo>()
-    private val history = WatchHistory(app)
+    private var history = WatchHistory(app)
+    private val app = app
     val tmdb = Tmdb(app)
     private val seriesDir = java.io.File(app.filesDir, "seriesinfo")
     private val movieDir = java.io.File(app.filesDir, "vodinfo")
@@ -135,7 +145,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         if (System.currentTimeMillis() - settings.epgLoadedAt < EPG_KEEP_MS) {
             _state.update { it.copy(nowPlaying = settings.epgTitles()) }
         }
-        val hidden = settings.hiddenCategories()
+        val profiles = Profiles.all(app)
+        _state.update {
+            it.copy(
+                profile = Profiles.active(app),
+                profiles = profiles,
+                needsProfilePick = profiles.size > 1,     // "Wer schaut?" after every start
+                hasPin = Profiles.hasPin(app),
+                kidCategories = Profiles.kidCategories(app),
+                kidApps = Profiles.kidApps(app),
+            )
+        }
+        val hidden = effectiveHidden()
         _state.update { it.copy(hiddenCategories = hidden) }
         cache.load()?.let { c ->
             _state.update {
@@ -171,9 +192,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun refreshLocal() {
         val hidden = settings.hiddenApps()
-        val apps = withContext(Dispatchers.IO) {
-            sortApps(AppsRepository.load(getApplication()).filterNot { it.packageName in hidden })
-        }
+        val kid = Profiles.active(app).kid
+        val kidApps = Profiles.kidApps(app)
+        val allApps = withContext(Dispatchers.IO) { AppsRepository.load(getApplication()) }
+        val apps = sortApps(
+            if (kid) allApps.filter { it.packageName in kidApps }      // kids: only released apps
+            else allApps.filterNot { it.packageName in hidden }
+        )
         val labels = apps.associate { it.packageName to it.label }
         val hiddenCw = settings.hiddenContinue()
         val cw = withContext(Dispatchers.IO) {
@@ -189,7 +214,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val external = watchNextCache.merge(WatchNextSource.load(getApplication())) { pkg -> settings.lastLaunched(pkg) }
                 .filter { it.packageName != getApplication<Application>().packageName }
                 .map { ContinueItem.External(it, it.packageName?.let { pkg -> labels[pkg] }) }
-            (iptv + external + media + tiles)
+            (if (kid) iptv else iptv + external + media + tiles)
                 .filterNot { it.key in hiddenCw }
                 .sortedByDescending { it.sortTime }
                 .take(40)
@@ -197,6 +222,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 apps = apps,
+                allApps = allApps.sortedBy { a -> a.label.lowercase() },
                 continueWatching = cw,
                 configured = settings.config().isValid,
                 tick = it.tick + 1,
@@ -300,7 +326,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Live categories without the hidden ones (used by "Sender verwalten") – local, no request. */
     suspend fun liveCategories(): List<LiveCategory> {
-        val hidden = settings.hiddenCategories()
+        val hidden = effectiveHidden()
         return allCategories(SearchEntry.KIND_LIVE).filterNot { "l:${it.id}" in hidden }
     }
 
@@ -358,7 +384,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun setCategoriesHidden(kind: Char, categoryIds: List<String>, hidden: Boolean, refresh: Boolean = true) {
         if (categoryIds.isEmpty()) return
         settings.setCategoriesHidden(categoryIds.map { "$kind:$it" }, hidden)
-        _state.update { it.copy(hiddenCategories = settings.hiddenCategories()) }
+        _state.update { it.copy(hiddenCategories = effectiveHidden()) }
         applyCategoryChanges()
     }
 
@@ -583,7 +609,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** "Neue Filme/Serien": the newest titles of the local catalogue, hidden categories left out. */
     private suspend fun recomputeRows() {
         val entries = indexEntries ?: return
-        val hidden = settings.hiddenCategories()
+        val hidden = effectiveHidden()
         val (movies, series) = withContext(Dispatchers.Default) {
             val m = entries.asSequence()
                 .filter { it.kind == SearchEntry.KIND_MOVIE && it.categoryKey !in hidden }
@@ -607,10 +633,148 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** "Für dich" – local, recomputed after every playback (the history changes). */
     private suspend fun recomputeRecommendations() {
         val entries = indexEntries ?: return
-        val hidden = settings.hiddenCategories()
+        val hidden = effectiveHidden()
         val r = withContext(Dispatchers.Default) { Recommender.recommend(entries, hidden, history.all()) }
         _state.update { it.copy(recommended = r.items, recommendedPersonal = r.personal) }
     }
+
+    // ---------------- Profile ----------------
+
+    private var categoryKeysOf: List<SearchEntry>? = null
+    private var categoryKeys: Set<String> = emptySet()
+
+    /**
+     * Hidden categories for the active profile: the globally hidden ones, and for kids
+     * additionally everything that is not released for kids.
+     */
+    private fun effectiveHidden(): Set<String> {
+        val hidden = settings.hiddenCategories()
+        if (!Profiles.active(app).kid) return hidden
+        val entries = indexEntries
+        if (entries !== categoryKeysOf) {
+            val all = HashSet<String>()
+            categoriesByKind.forEach { (k, list) -> list.forEach { c -> all += "$k:${c.id}" } }
+            entries?.forEach { all += it.categoryKey }
+            categoryKeys = all
+            categoryKeysOf = entries
+        }
+        return hidden + (categoryKeys - Profiles.kidCategories(app))
+    }
+
+    private fun refreshProfiles() {
+        _state.update {
+            it.copy(
+                profile = Profiles.active(app),
+                profiles = Profiles.all(app),
+                hasPin = Profiles.hasPin(app),
+                kidCategories = Profiles.kidCategories(app),
+                kidApps = Profiles.kidApps(app),
+            )
+        }
+    }
+
+    /** Switches profile: own "Weiterschauen", history, favourites; kids see only what is released. */
+    fun switchProfile(id: String) {
+        Profiles.setActive(app, id)
+        progress = ProgressStore(app)
+        history = WatchHistory(app)
+        cache = CatalogCache(app)
+        categoryKeysOf = null
+        refreshProfiles()
+        _state.update {
+            it.copy(
+                needsProfilePick = false,
+                hiddenCategories = effectiveHidden(),
+                favorites = settings.favorites(),
+                movies = emptyList(), series = emptyList(), recommended = emptyList(),
+            )
+        }
+        searchQuery.value = ""
+        _search.value = SearchResults()
+        viewModelScope.launch {
+            refreshLocal()
+            recomputeRows()
+        }
+    }
+
+    /** Section the settings should open with (e.g. "profiles" from "Profile verwalten"). */
+    var settingsSection: String? = null
+
+    fun showProfilePicker() = _state.update { it.copy(needsProfilePick = true) }
+    fun closeProfilePicker() = _state.update { it.copy(needsProfilePick = false) }
+
+    fun addProfile(name: String, kid: Boolean): Profile {
+        val p = Profiles.add(app, name, kid)
+        if (kid && Profiles.kidCategories(app).isEmpty()) suggestKidCategories()
+        refreshProfiles()
+        return p
+    }
+
+    fun updateProfile(p: Profile) {
+        Profiles.update(app, p)
+        refreshProfiles()
+        if (p.id == Profiles.active(app).id) switchProfile(p.id)
+    }
+
+    fun removeProfile(id: String) {
+        val wasActive = Profiles.active(app).id == id
+        Profiles.remove(app, id)
+        refreshProfiles()
+        if (wasActive) switchProfile(Profile.MAIN)
+    }
+
+    fun setPin(pin: String) {
+        Profiles.setPin(app, pin)
+        refreshProfiles()
+    }
+
+    fun checkPin(pin: String): Boolean = Profiles.hasPin(app) && Profiles.checkPin(app, pin)
+
+    /** PIN needed to leave a kids profile (and to open the settings there). */
+    fun pinNeeded(): Boolean = Profiles.active(app).kid && Profiles.hasPin(app)
+
+    fun setKidCategory(key: String, allowed: Boolean) {
+        Profiles.setKidCategory(app, key, allowed)
+        refreshProfiles()
+        if (Profiles.active(app).kid) applyCategoryChanges()
+    }
+
+    fun setKidApp(pkg: String, allowed: Boolean) {
+        Profiles.setKidApp(app, pkg, allowed)
+        refreshProfiles()
+        viewModelScope.launch { refreshLocal() }
+    }
+
+    /** First kids profile: pre-select categories whose names sound like kids' content. */
+    private fun suggestKidCategories() {
+        for ((k, list) in categoriesByKind) {
+            list.filter { Profiles.looksLikeKids(it.name) }.forEach { Profiles.setKidCategory(app, "$k:${it.id}", true) }
+        }
+    }
+
+    /** All categories of a kind (also hidden ones) – for the kids release list. */
+    fun categoriesFor(kind: Char): List<LiveCategory> = categoriesByKind[kind].orEmpty()
+
+    sealed interface Gate {
+        data object Allowed : Gate
+        data object Checking : Gate
+        data class Blocked(val reason: String) : Gate
+    }
+
+    /**
+     * May the active profile play this title? Adults: always. Kids: only with a known FSK up to
+     * the profile's limit – or if a parent released the title with the PIN.
+     */
+    fun gate(kind: Char, id: Long, fsk: String?, detailsLoaded: Boolean): Gate {
+        val p = Profiles.active(app)
+        if (!p.kid) return Gate.Allowed
+        if ("$kind:$id" in Profiles.unlocked(app)) return Gate.Allowed
+        if (!detailsLoaded) return Gate.Checking
+        val age = fsk?.toIntOrNull() ?: return Gate.Blocked("FSK unbekannt")
+        return if (age <= p.maxFsk) Gate.Allowed else Gate.Blocked("FSK $age")
+    }
+
+    fun unlockTitle(kind: Char, id: Long) = Profiles.unlock(app, "$kind:$id")
 
     // ---------------- Info-Screens ----------------
 
@@ -622,7 +786,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun similarTo(kind: Char, id: Long): List<SearchEntry> {
         val entries = indexEntries ?: return emptyList()
         val of = entries.firstOrNull { it.kind == kind && it.id == id } ?: return emptyList()
-        val hidden = settings.hiddenCategories()
+        val hidden = effectiveHidden()
         return withContext(Dispatchers.Default) { Recommender.similar(entries, of, hidden) }
     }
 
@@ -691,7 +855,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun runSearch(q: String) {
         val entries = indexEntries ?: return
-        val hidden = settings.hiddenCategories()
+        val hidden = effectiveHidden()
         _search.value = withContext(Dispatchers.Default) { SearchIndex.search(entries, q, hidden) }
     }
 

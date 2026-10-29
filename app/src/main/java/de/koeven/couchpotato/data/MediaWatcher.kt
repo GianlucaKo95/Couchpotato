@@ -28,7 +28,7 @@ class MediaWatcher : NotificationListenerService() {
     private val handler = Handler(Looper.getMainLooper())
     private val controllers = mutableMapOf<MediaSession.Token, Pair<MediaController, MediaController.Callback>>()
     private var sessionManager: MediaSessionManager? = null
-    private val progress by lazy { ProgressStore(this) }
+    private val progress: ProgressStore get() = ProgressStore(this)   // always the active profile
 
     private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { list ->
         attach(list.orEmpty())

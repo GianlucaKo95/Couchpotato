@@ -80,7 +80,39 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
     }
 
     // FSK, German text, cast, rating: TMDB (costs the IPTV provider nothing)
-    LaunchedEffect(seriesId) { details = vm.titleDetails(SearchEntry.KIND_SERIES, seriesId, name)?.getOrNull() }
+    var detailsDone by remember(seriesId) { mutableStateOf(false) }
+    LaunchedEffect(seriesId) {
+        details = runCatching { vm.titleDetails(SearchEntry.KIND_SERIES, seriesId, name)?.getOrNull() }.getOrNull()
+        detailsDone = true
+    }
+
+    // kids profile: FSK check before anything plays
+    var unlockTick by remember { mutableStateOf(0) }
+    var askPin by remember { mutableStateOf(false) }
+    val gate = remember(details, detailsDone, unlockTick, state.profile) {
+        vm.gate(SearchEntry.KIND_SERIES, seriesId, details?.fsk, detailsDone)
+    }
+    fun guardedPlay(action: () -> Unit) {
+        when (gate) {
+            HomeViewModel.Gate.Allowed -> action()
+            is HomeViewModel.Gate.Blocked -> askPin = true
+            HomeViewModel.Gate.Checking -> Unit
+        }
+    }
+    if (askPin) {
+        PinDialog(
+            title = "Für dieses Profil freigeben?",
+            hint = "„$name“ ist für dieses Kinderprofil gesperrt. Mit der Eltern-PIN wird die Serie dauerhaft freigegeben.",
+            onDismiss = { askPin = false },
+        ) { pin ->
+            if (vm.checkPin(pin)) {
+                vm.unlockTitle(SearchEntry.KIND_SERIES, seriesId)
+                askPin = false
+                unlockTick++
+                true
+            } else false
+        }
+    }
 
     // the series cover colours the background
     LaunchedEffect(info?.cover) { info?.cover?.let { backdrop?.focusImage(it) } }
@@ -175,11 +207,18 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                             } else {
                                 "▶  Abspielen · S${first.season} E${first.number}"
                             }
-                            PrimaryPill(primary, Modifier.focusRequester(focus)) {
-                                val start = resumeEp?.id ?: first.id
-                                Playback.start(context, Playback.episodePlaylist(loaded, start))
+                            val label = when (val g = gate) {
+                                HomeViewModel.Gate.Allowed -> primary
+                                HomeViewModel.Gate.Checking -> "Prüfe Freigabe …"
+                                is HomeViewModel.Gate.Blocked -> "🔒  Gesperrt · ${g.reason}"
                             }
-                            if (resumeEp != null && resumeEp.id != first.id) {
+                            PrimaryPill(label, Modifier.focusRequester(focus)) {
+                                guardedPlay {
+                                    val start = resumeEp?.id ?: first.id
+                                    Playback.start(context, Playback.episodePlaylist(loaded, start))
+                                }
+                            }
+                            if (resumeEp != null && resumeEp.id != first.id && gate == HomeViewModel.Gate.Allowed) {
                                 SecondaryPill("Von vorne") {
                                     Playback.start(context, Playback.episodePlaylist(loaded, first.id))
                                 }
@@ -238,7 +277,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                                 fallbackImage = loaded.cover,
                                 progress = progressMap[ep.id],
                                 width = episodeWidth,
-                                onClick = { Playback.start(context, Playback.episodePlaylist(loaded, ep.id)) },
+                                onClick = { guardedPlay { Playback.start(context, Playback.episodePlaylist(loaded, ep.id)) } },
                             )
                         }
                     }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -101,6 +102,11 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
 
     LaunchedEffect(homeTick) { stack = listOf(Screen.Home) }
 
+    val state by vm.state.collectAsState()
+    // something that needs the parents' PIN first (leaving a kids profile, settings in a kids profile)
+    var pinAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val guarded: (() -> Unit) -> Unit = { action -> if (vm.pinNeeded()) pinAction = action else action() }
+
     // The tabs of the top bar switch areas: Start = home, the others = Mediathek on that tab.
     val nav = remember {
         NavActions(
@@ -111,14 +117,53 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
                 stack = listOf(Screen.Home, Screen.Browse(kind))
             },
             search = { if (stack.lastOrNull() != Screen.Search) stack = stack + Screen.Search },
-            settings = { if (stack.lastOrNull() != Screen.Settings) stack = stack + Screen.Settings },
+            settings = {
+                guarded { if (stack.lastOrNull() != Screen.Settings) stack = stack + Screen.Settings }
+            },
+            profiles = { vm.showProfilePicker() },
         )
     }
 
     // A launcher must never close on Back; sub-screens go back one step.
     BackHandler(enabled = true) { back() }
 
-    CompositionLocalProvider(LocalNav provides nav) {
+    pinAction?.let { action ->
+        PinDialog(title = "Eltern-PIN", onDismiss = { pinAction = null }) { pin ->
+            if (vm.checkPin(pin)) {
+                pinAction = null
+                action()
+                true
+            } else false
+        }
+    }
+
+    if (state.needsProfilePick) {
+        BackHandler { vm.closeProfilePicker() }
+        ProfilePicker(
+            profiles = state.profiles,
+            active = state.profile,
+            onPick = { p ->
+                if (p.id == state.profile.id) {
+                    vm.closeProfilePicker()
+                } else {
+                    guarded {
+                        vm.switchProfile(p.id)
+                        stack = listOf(Screen.Home)
+                    }
+                }
+            },
+            onManage = {
+                guarded {
+                    vm.closeProfilePicker()
+                    vm.settingsSection = "profiles"
+                    stack = listOf(Screen.Home, Screen.Settings)
+                }
+            },
+        )
+        return
+    }
+
+    CompositionLocalProvider(LocalNav provides nav, LocalProfile provides state.profile) {
         when (val s = stack.last()) {
             Screen.Home -> HomeScreen(
                 vm = vm,

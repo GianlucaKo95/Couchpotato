@@ -27,6 +27,10 @@ object HomeRows {
 
 class SettingsStore(context: Context) {
     private val p = context.getSharedPreferences("couchpotato", Context.MODE_PRIVATE)
+    private val ctx = context.applicationContext
+
+    /** Key of a per-profile value (favourites, searches …) for the active profile. */
+    private fun mine(key: String) = key + Profiles.suffix(ctx)
 
     fun config() = XtreamConfig(
         p.getString("url", null) ?: "",
@@ -51,12 +55,12 @@ class SettingsStore(context: Context) {
     fun hideApp(pkg: String) = p.edit().putStringSet("hidden", hiddenApps() + pkg).apply()
     fun resetHiddenApps() = p.edit().remove("hidden").apply()
 
-    fun hiddenContinue(): Set<String> = p.getStringSet("hiddenContinue", null)?.toSet() ?: emptySet()
-    fun hideContinue(key: String) = p.edit().putStringSet("hiddenContinue", (hiddenContinue() + key).toList().takeLast(200).toSet()).apply()
+    fun hiddenContinue(): Set<String> = p.getStringSet(mine("hiddenContinue"), null)?.toSet() ?: emptySet()
+    fun hideContinue(key: String) = p.edit().putStringSet(mine("hiddenContinue"), (hiddenContinue() + key).toList().takeLast(200).toSet()).apply()
 
     /** Live-TV favourites, in the order they were added. */
     fun favorites(): List<LiveChannel> = runCatching {
-        JSONArray(p.getString("liveFavs", null) ?: "[]").mapObjects {
+        JSONArray(p.getString(mine("liveFavs"), null) ?: "[]").mapObjects {
             LiveChannel(it.getLong("id"), it.str("name") ?: "", it.str("logo"), it.str("cat"))
         }
     }.getOrDefault(emptyList())
@@ -65,7 +69,7 @@ class SettingsStore(context: Context) {
         val arr = JSONArray(list.map {
             JSONObject().put("id", it.id).put("name", it.name).put("logo", it.logo).put("cat", it.categoryId)
         })
-        p.edit().putString("liveFavs", arr.toString()).apply()
+        p.edit().putString(mine("liveFavs"), arr.toString()).apply()
     }
 
     /** true: hand live channels to IsiPro instead of Couchpotato's own player. */
@@ -153,13 +157,13 @@ class SettingsStore(context: Context) {
 
     /** Last searches (newest first), shown as suggestions in the search window. */
     fun recentSearches(): List<String> =
-        p.getString("recentSearches", null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
+        p.getString(mine("recentSearches"), null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
 
     fun addRecentSearch(q: String) {
         val t = q.trim()
         if (t.length < 2) return
         val list = (listOf(t) + recentSearches().filterNot { it.equals(t, ignoreCase = true) }).take(8)
-        p.edit().putString("recentSearches", list.joinToString("\n")).apply()
+        p.edit().putString(mine("recentSearches"), list.joinToString("\n")).apply()
     }
 
     fun markLaunched(pkg: String) = p.edit().putLong("launch:$pkg", System.currentTimeMillis()).apply()
@@ -167,8 +171,9 @@ class SettingsStore(context: Context) {
 }
 
 /** Playback positions. One entry per movie, and at most one per series. */
+/** Positions for "Weiterschauen" – one store per profile. */
 class ProgressStore(context: Context) {
-    private val p = context.getSharedPreferences("progress", Context.MODE_PRIVATE)
+    private val p = context.getSharedPreferences("progress" + Profiles.suffix(context), Context.MODE_PRIVATE)
     private val history = WatchHistory(context)
 
     fun get(key: String): ProgressEntry? = p.getString(key, null)?.let(::parse)
@@ -232,7 +237,7 @@ class ProgressStore(context: Context) {
 
 /** Last fetched "new" rows on disk, so the home screen is filled instantly after every boot. */
 class CatalogCache(context: Context) {
-    private val file = File(context.filesDir, "catalog.json")
+    private val file = File(context.filesDir, "catalog${Profiles.suffix(context)}.json")   // per profile (kids!)
 
     data class Data(val movies: List<VodItem>, val series: List<SeriesItem>)
 

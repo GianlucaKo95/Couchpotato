@@ -10,7 +10,7 @@ import kotlin.math.min
  * Filled by [ProgressStore], i.e. by Couchpotato's player and by IsiPro playback.
  */
 class WatchHistory(context: Context) {
-    private val p = context.getSharedPreferences("history", Context.MODE_PRIVATE)
+    private val p = context.getSharedPreferences("history" + Profiles.suffix(context), Context.MODE_PRIVATE)
 
     /** key "m:<movie id>" or "s:<series id>" → last watched (ms). */
     fun all(): Map<String, Long> = p.all.mapNotNull { (k, v) -> (v as? Long)?.let { k to it } }.toMap()

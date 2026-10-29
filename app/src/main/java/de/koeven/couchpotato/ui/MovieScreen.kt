@@ -90,6 +90,11 @@ fun MovieScreen(
     }
 
     val title = entry?.name ?: name
+    var unlockTick by remember { mutableStateOf(0) }
+    var askPin by remember { mutableStateOf(false) }
+    val gate = remember(info, note, unlockTick, state.profile) {
+        vm.gate(SearchEntry.KIND_MOVIE, movieId, info?.fsk, detailsLoaded = info != null || note != null)
+    }
     val key = "vod:$movieId"
     val progress = remember(state.tick, movieId) { vm.progressFor(key) }
     val item = remember(entry) {
@@ -98,6 +103,21 @@ fun MovieScreen(
     val rating = info?.rating?.takeIf { it > 0f } ?: entry?.rating?.takeIf { it > 0f }
     val genre = info?.genres?.firstOrNull() ?: entry?.genre?.split(',', '/')?.firstOrNull()?.trim()
     val year = info?.year ?: entry?.year
+
+    if (askPin) {
+        PinDialog(
+            title = "Für dieses Profil freigeben?",
+            hint = "„$title“ ist für dieses Kinderprofil gesperrt. Mit der Eltern-PIN wird der Film dauerhaft freigegeben.",
+            onDismiss = { askPin = false },
+        ) { pin ->
+            if (vm.checkPin(pin)) {
+                vm.unlockTitle(SearchEntry.KIND_MOVIE, movieId)
+                askPin = false
+                unlockTick++
+                true
+            } else false
+        }
+    }
 
     LazyColumn(Modifier.fillMaxSize()) {
         item { TopBar(active = NavTab.Movies) }
@@ -146,17 +166,24 @@ fun MovieScreen(
                         val remain = progress?.let { p ->
                             if (p.durationMs > 0) ((p.durationMs - p.positionMs) / 60_000).coerceAtLeast(1) else null
                         }
-                        PrimaryPill(
-                            if (progress != null) "▶  Fortsetzen" + (remain?.let { " · noch $it Min." } ?: "") else "▶  Abspielen",
-                            Modifier.focusRequester(playFocus),
-                        ) { Playback.start(context, listOf(item)) }
-                        if (progress != null) {
+                        when (val g = gate) {
+                            HomeViewModel.Gate.Allowed -> PrimaryPill(
+                                if (progress != null) "▶  Fortsetzen" + (remain?.let { " · noch $it Min." } ?: "") else "▶  Abspielen",
+                                Modifier.focusRequester(playFocus),
+                            ) { Playback.start(context, listOf(item)) }
+                            HomeViewModel.Gate.Checking -> PrimaryPill("Prüfe Freigabe …", Modifier.focusRequester(playFocus)) {}
+                            is HomeViewModel.Gate.Blocked -> PrimaryPill(
+                                "🔒  Gesperrt · ${g.reason}",
+                                Modifier.focusRequester(playFocus),
+                            ) { askPin = true }
+                        }
+                        if (progress != null && gate == HomeViewModel.Gate.Allowed) {
                             SecondaryPill("Von vorne") {
                                 vm.restartFromBeginning(key)
                                 Playback.start(context, listOf(item))
                             }
                         }
-                        info?.trailer?.let { yt ->
+                        info?.trailer?.takeIf { gate == HomeViewModel.Gate.Allowed }?.let { yt ->
                             SecondaryPill("Trailer") {
                                 val ok = runCatching {
                                     context.startActivity(

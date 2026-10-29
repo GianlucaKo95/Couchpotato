@@ -63,6 +63,7 @@ import androidx.compose.material3.darkColorScheme as m3DarkColorScheme
 
 private enum class Section(val label: String) {
     Login("IPTV-Zugang"),
+    Profiles("Profile & Kinder"),
     Catalog("Katalog & Anfragen"),
     Home("Startbildschirm"),
     Live("Live-TV"),
@@ -75,7 +76,15 @@ private enum class Section(val label: String) {
 @Composable
 fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
     val state by vm.state.collectAsState()
-    var section by remember { mutableStateOf(if (state.configured) Section.Catalog else Section.Login) }
+    var section by remember {
+        mutableStateOf(
+            when {
+                vm.settingsSection.also { vm.settingsSection = null } == "profiles" -> Section.Profiles
+                state.configured -> Section.Catalog
+                else -> Section.Login
+            }
+        )
+    }
     var status by remember { mutableStateOf<String?>(null) }
     val navFocus = remember { FocusRequester() }
 
@@ -141,6 +150,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                         Section.Home -> HomeSection(vm, state) { status = it }
                         Section.Live -> LiveSection(vm, state)
                         Section.Continue -> ContinueSection(vm, state)
+                        Section.Profiles -> ProfilesSection(vm, state)
                         Section.About -> AboutSection(state)
                     }
                     status?.let {
@@ -589,6 +599,145 @@ private fun TextFieldButton(
                     SecondaryPill("Abbrechen") { editing = false }
                 }
             }
+        }
+    }
+}
+
+// =====================================================================================
+// Profiles & kids
+// =====================================================================================
+
+@Composable
+private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var showSetPin by remember { mutableStateOf(false) }
+    var kidList by remember { mutableStateOf<String?>(null) }   // "cats" / "apps"
+
+    if (showSetPin) {
+        SetPinDialog(onDismiss = { showSetPin = false }) { pin ->
+            vm.setPin(pin)
+            showSetPin = false
+        }
+    }
+
+    when (kidList) {
+        "cats" -> { KidCategories(vm, state) { kidList = null }; return }
+        "apps" -> { KidApps(vm, state) { kidList = null }; return }
+    }
+
+    SectionTitle(
+        "Profile & Kinder",
+        "Jedes Profil hat sein eigenes „Weiterschauen“, „Für dich“, eigene Favoriten und Suchen. " +
+            "Anmeldung, Katalog und Apps teilen sich alle.",
+    )
+    state.profiles.forEach { p ->
+        val active = p.id == state.profile.id
+        SettingRow(
+            title = p.name + if (active) "  (aktiv)" else "",
+            description = if (editingId == p.id) "OK = zuklappen" else null,
+            value = if (p.kid) "Kinder · bis FSK ${p.maxFsk}" else "Erwachsen",
+        ) { editingId = if (editingId == p.id) null else p.id }
+        if (editingId == p.id) {
+            Column(Modifier.padding(start = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextFieldButton(
+                    label = "Name",
+                    value = p.name,
+                    onValueChange = { vm.updateProfile(p.copy(name = it.ifBlank { p.name })) },
+                )
+                if (p.id != de.koeven.couchpotato.data.Profile.MAIN) {
+                    SettingRow(title = "Kinderprofil", value = if (p.kid) "ja" else "nein") {
+                        vm.updateProfile(p.copy(kid = !p.kid))
+                        if (!p.kid && !state.hasPin) showSetPin = true
+                    }
+                }
+                if (p.kid) {
+                    SettingRow(
+                        title = "Freigegeben bis",
+                        description = "Titel mit höherer oder unbekannter FSK sind gesperrt (mit PIN freigebbar)",
+                        value = "FSK ${p.maxFsk}",
+                    ) {
+                        val steps = de.koeven.couchpotato.data.Profile.FSK_STEPS
+                        val next = steps[(steps.indexOf(p.maxFsk) + 1) % steps.size]
+                        vm.updateProfile(p.copy(maxFsk = next))
+                    }
+                }
+                SettingRow(title = "Farbe", value = "ändern") { vm.updateProfile(p.copy(color = p.color + 1)) }
+                if (p.id != de.koeven.couchpotato.data.Profile.MAIN) {
+                    SettingRow(title = "Profil löschen", description = "Sein „Weiterschauen“ und Verlauf werden gelöscht", value = "Löschen") {
+                        vm.removeProfile(p.id)
+                        editingId = null
+                    }
+                }
+            }
+        }
+    }
+    SettingRow(title = "Neues Profil", value = "Anlegen") {
+        editingId = vm.addProfile("", kid = false).id
+    }
+    SettingRow(title = "Neues Kinderprofil", value = "Anlegen") {
+        editingId = vm.addProfile("", kid = true).id
+        if (!state.hasPin) showSetPin = true
+    }
+
+    Text(
+        "Kinderschutz",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 12.dp),
+    )
+    SettingRow(
+        title = "Eltern-PIN",
+        description = "Nötig, um ein Kinderprofil zu verlassen und dort die Einstellungen zu öffnen",
+        value = if (state.hasPin) "ändern" else "festlegen",
+    ) { showSetPin = true }
+    if (!state.hasPin && state.profiles.any { it.kid }) {
+        Text("Ohne PIN kann das Kinderprofil frei verlassen werden.", color = CpColors.Error, style = MaterialTheme.typography.bodySmall)
+    }
+    SettingRow(
+        title = "Kategorien für Kinder",
+        description = "Nur diese Kategorien sehen Kinderprofile – in Mediathek, Suche, Reihen und Live-TV",
+        value = "${state.kidCategories.size} freigegeben",
+    ) { kidList = "cats" }
+    SettingRow(
+        title = "Apps für Kinder",
+        value = "${state.kidApps.size} freigegeben",
+    ) { kidList = "apps" }
+    Hint(
+        "Vor dem Abspielen prüft Couchpotato die FSK über TMDB. Ist sie unbekannt oder höher als erlaubt, " +
+            "bleibt der Titel gesperrt – mit der Eltern-PIN lässt er sich einzeln freigeben."
+    )
+}
+
+@Composable
+private fun KidCategories(vm: HomeViewModel, state: HomeState, onBack: () -> Unit) {
+    SectionTitle("Kategorien für Kinder", "OK schaltet eine Kategorie frei oder sperrt sie.")
+    SettingRow(title = "← Zurück", value = "${state.kidCategories.size} freigegeben") { onBack() }
+    for ((kind, label) in listOf(
+        SearchEntry.KIND_MOVIE to "Filme",
+        SearchEntry.KIND_SERIES to "Serien",
+        SearchEntry.KIND_LIVE to "Live-TV",
+    )) {
+        val cats = vm.categoriesFor(kind)
+        if (cats.isEmpty()) continue
+        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
+        cats.forEach { c ->
+            val key = "$kind:${c.id}"
+            val allowed = key in state.kidCategories
+            SettingRow(title = c.name, value = if (allowed) "✓ frei" else "gesperrt") {
+                vm.setKidCategory(key, !allowed)
+            }
+        }
+    }
+}
+
+@Composable
+private fun KidApps(vm: HomeViewModel, state: HomeState, onBack: () -> Unit) {
+    SectionTitle("Apps für Kinder", "Nur diese Apps erscheinen in Kinderprofilen.")
+    SettingRow(title = "← Zurück", value = "${state.kidApps.size} freigegeben") { onBack() }
+    state.allApps.forEach { a ->
+        val allowed = a.packageName in state.kidApps
+        SettingRow(title = a.label, value = if (allowed) "✓ frei" else "gesperrt") {
+            vm.setKidApp(a.packageName, !allowed)
         }
     }
 }
