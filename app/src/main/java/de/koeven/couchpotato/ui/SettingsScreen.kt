@@ -661,7 +661,18 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                         vm.updateProfile(p.copy(maxFsk = next))
                     }
                 }
+                SettingRow(title = "Tier", value = animalName(p)) {
+                    vm.updateProfile(p.copy(animal = (p.animalIndex + 1) % de.koeven.couchpotato.data.Profile.ANIMAL_COUNT))
+                }
                 SettingRow(title = "Farbe", value = "ändern") { vm.updateProfile(p.copy(color = p.color + 1)) }
+                SettingRow(title = "Neu würfeln", description = "Zufälliges Tier und zufällige Farbe", value = "🎲 Würfeln") {
+                    vm.updateProfile(
+                        p.copy(
+                            animal = (0 until de.koeven.couchpotato.data.Profile.ANIMAL_COUNT).random(),
+                            color = (0 until de.koeven.couchpotato.data.Profile.COLOR_COUNT).random(),
+                        )
+                    )
+                }
                 if (p.id != de.koeven.couchpotato.data.Profile.MAIN) {
                     SettingRow(title = "Profil löschen", description = "Sein „Weiterschauen“ und Verlauf werden gelöscht", value = "Löschen") {
                         vm.removeProfile(p.id)

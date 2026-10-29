@@ -12,13 +12,19 @@ data class Profile(
     val color: Int,          // index into the avatar colours
     val kid: Boolean,
     val maxFsk: Int = 6,     // 0, 6, 12, 16
+    val animal: Int = -1,    // avatar animal; -1 = picked from the id
 ) {
+    /** Index of the avatar animal (stable for profiles from before animals existed). */
+    val animalIndex: Int get() = if (animal >= 0) animal else Math.floorMod(id.hashCode(), ANIMAL_COUNT)
+
     /** Suffix for this profile's own data ("" for the first profile = the data from before profiles). */
     val suffix: String get() = if (id == MAIN) "" else "_$id"
 
     companion object {
         const val MAIN = "main"
         val FSK_STEPS = listOf(0, 6, 12, 16)
+        const val ANIMAL_COUNT = 12
+        const val COLOR_COUNT = 8
     }
 }
 
@@ -38,7 +44,10 @@ object Profiles {
             val arr = JSONArray(raw ?: "[]")
             (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
-                Profile(o.getString("id"), o.getString("name"), o.optInt("color"), o.optBoolean("kid"), o.optInt("maxFsk", 6))
+                Profile(
+                    o.getString("id"), o.getString("name"), o.optInt("color"), o.optBoolean("kid"),
+                    o.optInt("maxFsk", 6), o.optInt("animal", -1),
+                )
             }
         }.getOrDefault(emptyList())
         return list.ifEmpty { listOf(Profile(Profile.MAIN, "Ich", 0, kid = false)) }
@@ -46,7 +55,7 @@ object Profiles {
 
     private fun saveAll(context: Context, list: List<Profile>) {
         val arr = JSONArray(list.map {
-            JSONObject().put("id", it.id).put("name", it.name).put("color", it.color).put("kid", it.kid).put("maxFsk", it.maxFsk)
+            JSONObject().put("id", it.id).put("name", it.name).put("color", it.color).put("kid", it.kid).put("maxFsk", it.maxFsk).put("animal", it.animal)
         })
         prefs(context).edit().putString("list", arr.toString()).apply()
     }
@@ -69,6 +78,9 @@ object Profiles {
             name = name.trim().ifEmpty { if (kid) "Kinder" else "Profil ${list.size + 1}" },
             color = (list.maxOfOrNull { it.color } ?: 0) + 1,
             kid = kid,
+            // a fresh animal nobody else has yet, if possible
+            animal = ((0 until Profile.ANIMAL_COUNT).toList() - list.map { it.animalIndex }.toSet())
+                .ifEmpty { (0 until Profile.ANIMAL_COUNT).toList() }.random(),
         )
         saveAll(context, list + p)
         return p

@@ -39,17 +39,29 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Text
+import de.koeven.couchpotato.R
 import de.koeven.couchpotato.data.Profile
 import kotlinx.coroutines.delay
 
+/** Soft backgrounds that suit the animals. */
 private val AVATAR_COLORS = listOf(
-    Color(0xFFE8B86D), Color(0xFFE57373), Color(0xFF64B5F6), Color(0xFF81C784),
-    Color(0xFFBA68C8), Color(0xFFFFB74D), Color(0xFF4DD0E1), Color(0xFFF06292),
+    Color(0xFFF6D9A8), Color(0xFFF7C1C1), Color(0xFFBFD9F2), Color(0xFFC8E6C0),
+    Color(0xFFDCC7EE), Color(0xFFFBE3B5), Color(0xFFBDE9EE), Color(0xFFF8C9DE),
 )
+
+/** The avatar animals (drawn in res/drawable/animal_*.xml). */
+val ANIMALS = listOf(
+    "Fuchs" to R.drawable.animal_fuchs, "Katze" to R.drawable.animal_katze, "Bär" to R.drawable.animal_baer,
+    "Panda" to R.drawable.animal_panda, "Hase" to R.drawable.animal_hase, "Eule" to R.drawable.animal_eule,
+    "Frosch" to R.drawable.animal_frosch, "Pinguin" to R.drawable.animal_pinguin, "Löwe" to R.drawable.animal_loewe,
+    "Maus" to R.drawable.animal_maus, "Schwein" to R.drawable.animal_schwein, "Koala" to R.drawable.animal_koala,
+)
+
+fun animalName(p: Profile): String = ANIMALS[Math.floorMod(p.animalIndex, ANIMALS.size)].first
 
 fun avatarColor(p: Profile): Color = AVATAR_COLORS[Math.floorMod(p.color, AVATAR_COLORS.size)]
 
-/** Round avatar with the first letter of the name. */
+/** Round avatar: the profile's animal on its colour. */
 @Composable
 fun Avatar(p: Profile, size: Dp) {
     Box(
@@ -58,11 +70,10 @@ fun Avatar(p: Profile, size: Dp) {
             .background(avatarColor(p), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            p.name.trim().take(1).uppercase().ifEmpty { "?" },
-            color = Color(0xFF1B1408),
-            fontWeight = FontWeight.Bold,
-            fontSize = (size.value * 0.45f).sp,
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(ANIMALS[Math.floorMod(p.animalIndex, ANIMALS.size)].second),
+            contentDescription = animalName(p),
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }
