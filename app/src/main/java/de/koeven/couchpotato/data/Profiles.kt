@@ -23,7 +23,7 @@ data class Profile(
     companion object {
         const val MAIN = "main"
         val FSK_STEPS = listOf(0, 6, 12, 16)
-        const val ANIMAL_COUNT = 20      // 0–11 kids' animals, 12–19 grown-up animals
+        const val ANIMAL_COUNT = 22      // 0–11 kids' animals, 12–21 grown-up figures
         const val KID_ANIMALS = 12
         const val COLOR_COUNT = 16       // 0–7 soft (kids), 8–15 dark (grown-ups)
     }

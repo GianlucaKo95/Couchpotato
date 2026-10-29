@@ -59,10 +59,11 @@ val ANIMALS = listOf(
     "Panda" to R.drawable.animal_panda, "Hase" to R.drawable.animal_hase, "Eule" to R.drawable.animal_eule,
     "Frosch" to R.drawable.animal_frosch, "Pinguin" to R.drawable.animal_pinguin, "Löwe" to R.drawable.animal_loewe,
     "Maus" to R.drawable.animal_maus, "Schwein" to R.drawable.animal_schwein, "Koala" to R.drawable.animal_koala,
-    // grown-ups
+    // grown-ups (semi-realistic)
     "Wolf" to R.drawable.animal_wolf, "Tiger" to R.drawable.animal_tiger, "Panther" to R.drawable.animal_panther,
-    "Luchs" to R.drawable.animal_luchs, "Adler" to R.drawable.animal_adler, "Hirsch" to R.drawable.animal_hirsch,
-    "Waschbär" to R.drawable.animal_waschbaer, "Eisbär" to R.drawable.animal_eisbaer,
+    "Roboter" to R.drawable.animal_roboter, "Adler" to R.drawable.animal_adler, "Hirsch" to R.drawable.animal_hirsch,
+    "Superheld" to R.drawable.animal_held, "Eisbär" to R.drawable.animal_eisbaer,
+    "Astronaut" to R.drawable.animal_astronaut, "Ninja" to R.drawable.animal_ninja,
 )
 
 fun animalName(p: Profile): String = ANIMALS[Math.floorMod(p.animalIndex, ANIMALS.size)].first

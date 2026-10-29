@@ -661,15 +661,15 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                         vm.updateProfile(p.copy(maxFsk = next))
                     }
                 }
-                SettingRow(title = "Tier", value = animalName(p)) {
+                SettingRow(title = if (p.kid) "Tier" else "Figur", value = animalName(p)) {
                     vm.updateProfile(p.copy(animal = (p.animalIndex + 1) % de.koeven.couchpotato.data.Profile.ANIMAL_COUNT))
                 }
                 SettingRow(title = "Farbe", value = "ändern") { vm.updateProfile(p.copy(color = p.color + 1)) }
-                SettingRow(title = "Neu würfeln", description = if (p.kid) "Zufälliges Kindertier und Farbe" else "Zufälliges Tier und Farbe", value = "🎲 Würfeln") {
+                SettingRow(title = "Neu würfeln", description = if (p.kid) "Zufälliges Kindertier und Farbe" else "Zufällige Figur und Farbe", value = "🎲 Würfeln") {
                     vm.updateProfile(
                         p.copy(
                             // kids: cute animal on a soft colour, grown-ups: cool animal on a dark one
-                            animal = (if (p.kid) 0 until 12 else 12 until 20).random(),
+                            animal = (if (p.kid) 0 until 12 else 12 until 22).random(),
                             color = (if (p.kid) 0 until 8 else 8 until 16).random(),
                         )
                     )
