@@ -15,7 +15,7 @@ data class Profile(
     val animal: Int = -1,    // avatar animal; -1 = picked from the id
 ) {
     /** Index of the avatar animal (stable for profiles from before animals existed). */
-    val animalIndex: Int get() = if (animal >= 0) animal else Math.floorMod(id.hashCode(), ANIMAL_COUNT)
+    val animalIndex: Int get() = if (animal >= 0) animal else Math.floorMod(id.hashCode(), KID_ANIMALS)
 
     /** Suffix for this profile's own data ("" for the first profile = the data from before profiles). */
     val suffix: String get() = if (id == MAIN) "" else "_$id"
@@ -23,8 +23,9 @@ data class Profile(
     companion object {
         const val MAIN = "main"
         val FSK_STEPS = listOf(0, 6, 12, 16)
-        const val ANIMAL_COUNT = 12
-        const val COLOR_COUNT = 8
+        const val ANIMAL_COUNT = 20      // 0–11 kids' animals, 12–19 grown-up animals
+        const val KID_ANIMALS = 12
+        const val COLOR_COUNT = 16       // 0–7 soft (kids), 8–15 dark (grown-ups)
     }
 }
 
@@ -76,11 +77,13 @@ object Profiles {
         val p = Profile(
             id = "p" + System.currentTimeMillis().toString(36),
             name = name.trim().ifEmpty { if (kid) "Kinder" else "Profil ${list.size + 1}" },
-            color = (list.maxOfOrNull { it.color } ?: 0) + 1,
+            color = if (kid) (0 until 8).random() else (8 until 16).random(),
             kid = kid,
-            // a fresh animal nobody else has yet, if possible
-            animal = ((0 until Profile.ANIMAL_COUNT).toList() - list.map { it.animalIndex }.toSet())
-                .ifEmpty { (0 until Profile.ANIMAL_COUNT).toList() }.random(),
+            // a fresh animal nobody else has yet: cute ones for kids, cool ones for grown-ups
+            animal = run {
+                val pool = if (kid) (0 until Profile.KID_ANIMALS).toList() else (Profile.KID_ANIMALS until Profile.ANIMAL_COUNT).toList()
+                (pool - list.map { it.animalIndex }.toSet()).ifEmpty { pool }.random()
+            },
         )
         saveAll(context, list + p)
         return p
