@@ -257,7 +257,10 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
      * Streams every movie, series and live channel to [onItem] (kind, id, name, image, ext),
      * for the search index. Returns the names of the lists that could not be loaded.
      */
-    suspend fun dumpCatalog(onItem: (Char, Long, String, String?, String, String?, Long) -> Unit): List<String> =
+    /** Extra facts the lists already carry (no extra request): rating 0–10, genre, year. */
+    data class Facts(val rating: Float, val genre: String?, val year: String?)
+
+    suspend fun dumpCatalog(onItem: (Char, Long, String, String?, String, String?, Long, Facts) -> Unit): List<String> =
         withContext(Dispatchers.IO) {
             data class Spec(val action: String, val kind: Char, val idField: String, val imageField: String, val label: String)
             val specs = listOf(
@@ -275,9 +278,18 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
                         var ext = if (spec.kind == SearchEntry.KIND_LIVE) "ts" else "mp4"
                         var cat: String? = null
                         var added = 0L
+                        var rating = 0f
+                        var rating5 = 0f
+                        var genre: String? = null
+                        var year: String? = null
                         r.beginObject()
                         while (r.hasNext()) {
                             when (r.nextName()) {
+                                "rating" -> rating = r.nextLenient()?.replace(',', '.')?.toFloatOrNull() ?: rating
+                                "rating_5based" -> rating5 = r.nextLenient()?.replace(',', '.')?.toFloatOrNull() ?: rating5
+                                "genre" -> genre = r.nextLenient()?.trim()?.takeIf { it.isNotEmpty() }
+                                "year", "releaseDate", "release_date", "releasedate" ->
+                                    year = r.nextLenient()?.take(4)?.takeIf { y -> y.length == 4 && y.all { it.isDigit() } } ?: year
                                 spec.idField -> id = r.nextLenient()?.toLongOrNull()
                                 "name" -> name = r.nextLenient() ?: ""
                                 spec.imageField -> image = r.nextLenient()?.takeIf { it.startsWith("http") }
@@ -288,7 +300,8 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
                             }
                         }
                         r.endObject()
-                        id?.let { onItem(spec.kind, it, name.trim(), image, ext, cat, added) }
+                        val score = (if (rating > 0f) rating else rating5 * 2f).coerceIn(0f, 10f)
+                        id?.let { onItem(spec.kind, it, name.trim(), image, ext, cat, added, Facts(score, genre, year)) }
                     }) { Unit }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
@@ -321,9 +334,36 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         String(android.util.Base64.decode(raw, android.util.Base64.DEFAULT), Charsets.UTF_8).trim()
     }.getOrNull()?.takeIf { it.isNotEmpty() && it.none { ch -> ch == '\uFFFD' } } ?: raw
 
-    suspend fun seriesInfo(seriesId: Long, fallbackName: String): SeriesInfo = withContext(Dispatchers.IO) {
+    suspend fun seriesInfo(seriesId: Long, fallbackName: String): SeriesInfo =
+        parseSeriesInfo(seriesInfoRaw(seriesId), seriesId, fallbackName)
+
+    /** Raw answer of get_series_info (kept on the stick by the caller). */
+    suspend fun seriesInfoRaw(seriesId: Long): String = withContext(Dispatchers.IO) {
+        val text = readText(apiUrl("get_series_info", "&series_id=$seriesId"))
+        try {
+            JSONObject(text)
+        } catch (e: JSONException) {
+            throw IOException("Serie konnte nicht geladen werden")
+        }
+        text
+    }
+
+    /** Film details (plot, cast, director …): ONE request per film; the caller keeps the answer for good. */
+    suspend fun vodInfoRaw(streamId: Long): String = withContext(Dispatchers.IO) {
+        val text = readText(apiUrl("get_vod_info", "&vod_id=$streamId"))
         val root = try {
-            JSONObject(readText(apiUrl("get_series_info", "&series_id=$seriesId")))
+            JSONObject(text)
+        } catch (e: JSONException) {
+            throw IOException("Filmdetails konnten nicht geladen werden")
+        }
+        if (root.optJSONObject("info") == null) throw IOException("Der Anbieter hat zu diesem Film keine Details")
+        text
+    }
+
+    /** Turns a get_series_info answer into [SeriesInfo] (no request). */
+    fun parseSeriesInfo(text: String, seriesId: Long, fallbackName: String): SeriesInfo {
+        val root = try {
+            JSONObject(text)
         } catch (e: JSONException) {
             throw IOException("Serie konnte nicht geladen werden")
         }
@@ -354,7 +394,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
             is JSONArray -> for (i in 0 until eps.length()) eps.optJSONArray(i)?.let { addAll(it, i + 1) }
         }
 
-        SeriesInfo(
+        return SeriesInfo(
             id = seriesId,
             name = info?.str("name") ?: fallbackName,
             cover = info?.str("cover")?.takeIf { it.startsWith("http") },
@@ -362,6 +402,9 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
             genre = info?.str("genre"),
             year = (info?.str("releaseDate") ?: info?.str("release_date") ?: info?.str("year"))?.take(4)?.takeIf { y -> y.all { it.isDigit() } },
             episodes = episodes.sortedWith(compareBy({ it.season }, { it.number })),
+            cast = info?.str("cast"),
+            director = info?.str("director"),
+            rating = (info?.str("rating")?.replace(',', '.')?.toFloatOrNull() ?: 0f).coerceIn(0f, 10f),
         )
     }
 

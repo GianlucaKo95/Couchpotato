@@ -104,6 +104,9 @@ data class SeriesInfo(
     val episodes: List<Episode>,   // sorted by season, then episode number
     val genre: String? = null,
     val year: String? = null,
+    val cast: String? = null,
+    val director: String? = null,
+    val rating: Float = 0f,
 )
 
 data class AppEntry(

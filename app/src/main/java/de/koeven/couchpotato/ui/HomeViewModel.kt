@@ -13,6 +13,9 @@ import de.koeven.couchpotato.data.CatalogCache
 import de.koeven.couchpotato.data.HomeRows
 import de.koeven.couchpotato.data.LiveCategory
 import de.koeven.couchpotato.data.LiveChannel
+import de.koeven.couchpotato.data.MovieInfo
+import de.koeven.couchpotato.data.Recommender
+import de.koeven.couchpotato.data.WatchHistory
 import de.koeven.couchpotato.data.MediaPlay
 import de.koeven.couchpotato.data.MediaPlays
 import de.koeven.couchpotato.data.PlayItem
@@ -92,6 +95,9 @@ data class HomeState(
     val syncInfo: String = "",
     val imageInfo: String = "",
     val loadProviderImages: Boolean = true,
+    val recommended: List<SearchEntry> = emptyList(),
+    val recommendedPersonal: Boolean = false,
+    val loadMovieDetails: Boolean = true,
 )
 
 /** An installed app in the "search in other apps" row; [acceptsQuery] = search term is handed over. */
@@ -104,6 +110,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val cache = CatalogCache(app)
     private val watchNextCache = WatchNextCache(app)
     private val seriesCache = HashMap<Long, SeriesInfo>()
+    private val history = WatchHistory(app)
+    private val seriesDir = java.io.File(app.filesDir, "seriesinfo")
+    private val movieDir = java.io.File(app.filesDir, "vodinfo")
     private var epgJob: Job? = null
     private var categoriesByKind: Map<Char, List<LiveCategory>> = emptyMap()
 
@@ -141,7 +150,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         set(value) { settings.loginAsLink = value }
 
     fun onResume() {
-        viewModelScope.launch { refreshLocal() }
+        viewModelScope.launch {
+            refreshLocal()
+            recomputeRecommendations()
+        }
         ensureIndex(force = false)      // local; talks to the provider at most once a day
         refreshEpg(force = false)
     }
@@ -192,6 +204,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 syncInfo = syncInfo(),
                 imageInfo = imageInfo(),
                 loadProviderImages = settings.loadProviderImages,
+                loadMovieDetails = settings.loadMovieDetails,
             )
         }
     }
@@ -233,6 +246,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         if (before == after) return false
         XtreamClient.clearBlock()
         seriesCache.clear()
+        seriesDir.deleteRecursively()     // other provider: other ids
+        movieDir.deleteRecursively()
+        history.clear()
         searchIndex.clear()
         indexEntries = null
         categoriesByKind = emptyMap()
@@ -580,6 +596,53 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
         withContext(Dispatchers.IO) { cache.save(movies, series) }
         _state.update { it.copy(movies = movies, series = series) }
+        recomputeRecommendations()
+    }
+
+    /** "Für dich" – local, recomputed after every playback (the history changes). */
+    private suspend fun recomputeRecommendations() {
+        val entries = indexEntries ?: return
+        val hidden = settings.hiddenCategories()
+        val r = withContext(Dispatchers.Default) { Recommender.recommend(entries, hidden, history.all()) }
+        _state.update { it.copy(recommended = r.items, recommendedPersonal = r.personal) }
+    }
+
+    // ---------------- Info-Screens ----------------
+
+    /** Catalogue entry of a film or series (name, cover, rating …) – local. */
+    fun catalogEntry(kind: Char, id: Long): SearchEntry? =
+        indexEntries?.firstOrNull { it.kind == kind && it.id == id }
+
+    /** Titles like this one, from the catalogue – local. */
+    suspend fun similarTo(kind: Char, id: Long): List<SearchEntry> {
+        val entries = indexEntries ?: return emptyList()
+        val of = entries.firstOrNull { it.kind == kind && it.id == id } ?: return emptyList()
+        val hidden = settings.hiddenCategories()
+        return withContext(Dispatchers.Default) { Recommender.similar(entries, of, hidden) }
+    }
+
+    /**
+     * Film details: from the stick if fetched before; otherwise ONE request (through the brake),
+     * then kept for good. Returns null if switched off or the provider can't be asked right now.
+     */
+    suspend fun movieInfo(id: Long): Result<MovieInfo>? = withContext(Dispatchers.IO) {
+        val f = java.io.File(movieDir, "$id.json")
+        if (f.exists()) {
+            runCatching { MovieInfo.fromInfo(org.json.JSONObject(f.readText()).getJSONObject("info")) }
+                .getOrNull()?.let { return@withContext Result.success(it) }
+        }
+        if (!settings.loadMovieDetails) return@withContext null
+        runCatching {
+            val text = XtreamClient(settings.config()).vodInfoRaw(id)
+            movieDir.mkdirs()
+            f.writeText(text)
+            MovieInfo.fromInfo(org.json.JSONObject(text).getJSONObject("info"))
+        }
+    }
+
+    fun setLoadMovieDetails(value: Boolean) {
+        settings.loadMovieDetails = value
+        _state.update { it.copy(loadMovieDetails = value) }
     }
 
     private fun indexSummary(failed: List<String>): String {
@@ -661,11 +724,37 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun progressFor(key: String): ProgressEntry? = progress.get(key)
 
+    /** "Von vorne": forget the position, the player then starts at 0. */
+    fun restartFromBeginning(key: String) {
+        progress.remove(key)
+        viewModelScope.launch { refreshLocal() }
+    }
+
     fun progressForSeries(seriesId: Long): ProgressEntry? = progress.forSeries(seriesId)
 
     suspend fun loadSeries(seriesId: Long, fallbackName: String): SeriesInfo =
-        seriesCache[seriesId] ?: XtreamClient(settings.config()).seriesInfo(seriesId, fallbackName)
-            .also { seriesCache[seriesId] = it }
+        seriesCache[seriesId] ?: loadSeriesCached(seriesId, fallbackName).also { seriesCache[seriesId] = it }
+
+    /**
+     * Series info from the stick if younger than a day (new episodes!), otherwise ONE request.
+     * If the provider can't be asked right now, the older copy is used.
+     */
+    private suspend fun loadSeriesCached(seriesId: Long, fallbackName: String): SeriesInfo = withContext(Dispatchers.IO) {
+        val client = XtreamClient(settings.config())
+        val f = java.io.File(seriesDir, "$seriesId.json")
+        val stale = if (f.exists()) runCatching { client.parseSeriesInfo(f.readText(), seriesId, fallbackName) }.getOrNull() else null
+        if (stale != null && System.currentTimeMillis() - f.lastModified() < SERIES_MAX_AGE_MS) return@withContext stale
+        try {
+            val text = client.seriesInfoRaw(seriesId)
+            seriesDir.mkdirs()
+            f.writeText(text)
+            client.parseSeriesInfo(text, seriesId, fallbackName)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            stale ?: throw e
+        }
+    }
 
     /** For series: the stored episode plus the following ones, so playback continues automatically. */
     suspend fun playlistFor(entry: ProgressEntry): List<PlayItem> {
@@ -680,6 +769,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val ROW_SIZE = 40
+        const val SERIES_MAX_AGE_MS = 24 * 60 * 60 * 1000L     // series info: once a day at most
         // kept low on purpose: the provider locks the account after too many requests
         const val SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000L       // whole catalogue: once a day
         const val MIN_MANUAL_SYNC_GAP_MS = 10 * 60 * 1000L     // "jetzt abgleichen" not more often

@@ -113,6 +113,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                         loaded?.genre?.substringBefore(',')?.substringBefore('/')?.trim()?.takeIf { it.isNotEmpty() }
                             ?.let { add(it.uppercase()) }
                         loaded?.year?.let { add(it) }
+                        loaded?.rating?.takeIf { it > 0f }?.let { add("★ " + "%.1f".format(java.util.Locale.GERMANY, it)) }
                         if (seasons.isNotEmpty()) add(if (seasons.size == 1) "1 STAFFEL" else "${seasons.size} STAFFELN")
                     }.joinToString("  ·  ")
                     Text(
@@ -137,6 +138,16 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                             color = CpColors.TextMuted,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    loaded?.cast?.let {
+                        Text(
+                            "Mit: $it",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CpColors.TextMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 6.dp),
                         )
                     }
                     Spacer(Modifier.height(18.dp))

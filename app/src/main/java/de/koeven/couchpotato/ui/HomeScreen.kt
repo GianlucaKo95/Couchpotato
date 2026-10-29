@@ -72,6 +72,7 @@ fun HomeScreen(
     onOpenLive: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenBrowse: (Char) -> Unit,
+    onOpenMovie: (Long, String) -> Unit,
 ) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
@@ -92,6 +93,7 @@ fun HomeScreen(
             HomeRows.APPS -> state.apps.isNotEmpty()
             HomeRows.MOVIES -> state.movies.isNotEmpty()
             HomeRows.SERIES -> state.series.isNotEmpty()
+            HomeRows.RECOMMENDED -> state.recommended.isNotEmpty()
             else -> false
         }
     }
@@ -303,7 +305,7 @@ fun HomeScreen(
                                 PosterCard(
                                     title = movie.name,
                                     image = movie.image,
-                                    onClick = { Playback.start(context, listOf(PlayItem.movie(movie))) },
+                                    onClick = { onOpenMovie(movie.id, movie.name) },
                                     modifier = if (i == 0 && firstRow == HomeRows.MOVIES) Modifier.focusRequester(firstFocus) else Modifier,
                                 )
                             }
@@ -320,6 +322,30 @@ fun HomeScreen(
                                     image = series.image,
                                     onClick = { onOpenSeries(series) },
                                     modifier = if (i == 0 && firstRow == HomeRows.SERIES) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HomeRows.RECOMMENDED -> if (state.recommended.isNotEmpty()) {
+                    item(key = HomeRows.RECOMMENDED) {
+                        Shelf(
+                            HomeRows.label(HomeRows.RECOMMENDED),
+                            hint = if (state.recommendedPersonal) null else "Nach Bewertung – wird mit jedem Film und jeder Serie persönlicher",
+                        ) {
+                            itemsIndexed(state.recommended, key = { _, e -> "${e.kind}${e.id}" }) { i, e ->
+                                PosterCard(
+                                    title = e.name,
+                                    image = e.image,
+                                    onClick = {
+                                        if (e.kind == SearchEntry.KIND_SERIES) {
+                                            onOpenSeries(SeriesItem(e.id, e.name, e.image, e.added, e.categoryId))
+                                        } else {
+                                            onOpenMovie(e.id, e.name)
+                                        }
+                                    },
+                                    modifier = if (i == 0 && firstRow == HomeRows.RECOMMENDED) Modifier.focusRequester(firstFocus) else Modifier,
                                 )
                             }
                         }

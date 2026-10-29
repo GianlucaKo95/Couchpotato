@@ -74,7 +74,12 @@ private val GridGap = 14.dp
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun BrowseScreen(vm: HomeViewModel, kind: Char, onOpenSeries: (Long, String) -> Unit) {
+fun BrowseScreen(
+    vm: HomeViewModel,
+    kind: Char,
+    onOpenSeries: (Long, String) -> Unit,
+    onOpenMovie: (Long, String) -> Unit,
+) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
 
@@ -296,7 +301,7 @@ fun BrowseScreen(vm: HomeViewModel, kind: Char, onOpenSeries: (Long, String) -> 
                                         title = movie.name,
                                         image = movie.image,
                                         width = posterW,
-                                        onClick = { Playback.start(context, listOf(PlayItem.movie(movie))) },
+                                        onClick = { onOpenMovie(movie.id, movie.name) },
                                     )
                                 }
                             }

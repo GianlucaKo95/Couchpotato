@@ -27,6 +27,7 @@ private sealed interface Screen {
     data object Search : Screen
     data class Browse(val kind: Char) : Screen
     data class Series(val id: Long, val name: String) : Screen
+    data class Movie(val id: Long, val name: String) : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -120,13 +121,27 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
                 onOpenLive = { nav.browse(SearchEntry.KIND_LIVE) },   // "Sender verwalten" = Mediathek Live-TV
                 onOpenSearch = nav.search,
                 onOpenBrowse = nav.browse,
+                onOpenMovie = { id, name -> go(Screen.Movie(id, name)) },
             )
             is Screen.Browse -> key(s.kind) {
-                BrowseScreen(vm = vm, kind = s.kind, onOpenSeries = { id, name -> go(Screen.Series(id, name)) })
+                BrowseScreen(
+                    vm = vm,
+                    kind = s.kind,
+                    onOpenSeries = { id, name -> go(Screen.Series(id, name)) },
+                    onOpenMovie = { id, name -> go(Screen.Movie(id, name)) },
+                )
             }
-            Screen.Search -> SearchScreen(vm = vm, onOpenSeries = { id, name -> go(Screen.Series(id, name)) }, onClose = back)
+            Screen.Search -> SearchScreen(
+                vm = vm,
+                onOpenSeries = { id, name -> go(Screen.Series(id, name)) },
+                onOpenMovie = { id, name -> go(Screen.Movie(id, name)) },
+                onClose = back,
+            )
             Screen.Settings -> SettingsScreen(vm = vm, onDone = back)
-            is Screen.Series -> SeriesScreen(vm = vm, seriesId = s.id, name = s.name)
+            is Screen.Series -> key(s.id) { SeriesScreen(vm = vm, seriesId = s.id, name = s.name) }
+            is Screen.Movie -> key(s.id) {
+                MovieScreen(vm = vm, movieId = s.id, name = s.name, onOpenMovie = { id, name -> go(Screen.Movie(id, name)) })
+            }
         }
     }
 }

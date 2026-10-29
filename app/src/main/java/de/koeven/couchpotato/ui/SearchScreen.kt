@@ -68,7 +68,12 @@ private val DIGITS = "1234567890-.:'&!?+#/()".map { it.toString() }
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun SearchScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit, onClose: () -> Unit) {
+fun SearchScreen(
+    vm: HomeViewModel,
+    onOpenSeries: (Long, String) -> Unit,
+    onOpenMovie: (Long, String) -> Unit,
+    onClose: () -> Unit,
+) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
     val results by vm.search.collectAsState()
@@ -230,14 +235,8 @@ fun SearchScreen(vm: HomeViewModel, onOpenSeries: (Long, String) -> Unit, onClos
                                         image = e.image,
                                         onClick = {
                                             saveQuery()
-                                            if (e.kind == SearchEntry.KIND_SERIES) {
-                                                onOpenSeries(e.id, e.name)
-                                            } else {
-                                                Playback.start(
-                                                    context,
-                                                    listOf(PlayItem.movie(VodItem(e.id, e.name, e.image, 0, e.ext))),
-                                                )
-                                            }
+                                            if (e.kind == SearchEntry.KIND_SERIES) onOpenSeries(e.id, e.name)
+                                            else onOpenMovie(e.id, e.name)
                                         },
                                     )
                                 }

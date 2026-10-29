@@ -17,6 +17,9 @@ data class SearchEntry(
     val norm: String,
     val categoryId: String? = null,
     val added: Long = 0L,          // movies: "added", series: "last_modified" (unix seconds)
+    val rating: Float = 0f,        // 0–10 as the provider lists it (0 = unknown)
+    val genre: String? = null,
+    val year: String? = null,
 ) {
     /** Same key format as SettingsStore.hiddenCategories(). */
     val categoryKey: String get() = "$kind:${categoryId ?: ""}"
@@ -114,7 +117,7 @@ class SearchIndex(context: Context) {
         val hostCounts = HashMap<String, Int>()
         var images = 0
         tmp.bufferedWriter(Charsets.UTF_8).use { w ->
-            failed += client.dumpCatalog { kind, id, name, image, ext, cat, added ->
+            failed += client.dumpCatalog { kind, id, name, image, ext, cat, added, facts ->
                 val clean = name.sanitize()
                 if (clean.isEmpty()) return@dumpCatalog
                 // where do the pictures live? (provider's own server = throttled)
@@ -130,7 +133,10 @@ class SearchIndex(context: Context) {
                     .append(clean).append('\t')
                     .append(normalize(clean)).append('\t')
                     .append(cat?.sanitize() ?: "").append('\t')
-                    .append(added.toString()).append('\n')
+                    .append(added.toString()).append('\t')
+                    .append(if (facts.rating > 0f) "%.1f".format(Locale.ROOT, facts.rating) else "").append('\t')
+                    .append(facts.genre?.sanitize() ?: "").append('\t')
+                    .append(facts.year ?: "").append('\n')
                 count++
             }
         }
@@ -165,6 +171,9 @@ class SearchIndex(context: Context) {
                     norm = p[5],
                     categoryId = p.getOrNull(6)?.ifEmpty { null },
                     added = p.getOrNull(7)?.toLongOrNull() ?: 0L,
+                    rating = p.getOrNull(8)?.toFloatOrNull() ?: 0f,
+                    genre = p.getOrNull(9)?.ifEmpty { null },
+                    year = p.getOrNull(10)?.ifEmpty { null },
                 )
             }.toList()
         }

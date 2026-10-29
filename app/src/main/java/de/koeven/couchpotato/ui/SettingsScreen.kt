@@ -285,6 +285,11 @@ private fun CatalogSection(vm: HomeViewModel, state: HomeState, setStatus: (Stri
         description = "Einzeln, mit Pause, max. ${XtreamClient.IMAGES_PER_HOUR} pro Stunde · jedes Bild nur einmal",
         value = if (state.loadProviderImages) "laden (gebremst)" else "nicht laden",
     ) { vm.setLoadProviderImages(!state.loadProviderImages) }
+    SettingRow(
+        title = "Film-Details (Beschreibung, Besetzung)",
+        description = "1 Anfrage beim ersten Öffnen eines Films, danach dauerhaft auf dem Stick",
+        value = if (state.loadMovieDetails) "laden" else "nicht laden",
+    ) { vm.setLoadMovieDetails(!state.loadMovieDetails) }
     Hint(state.imageInfo)
     if (state.indexStatus.isNotBlank()) Hint(state.indexStatus)
 }

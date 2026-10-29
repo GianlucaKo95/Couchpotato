@@ -11,7 +11,8 @@ object HomeRows {
     const val APPS = "apps"
     const val MOVIES = "movies"
     const val SERIES = "series"
-    val ALL = listOf(CONTINUE, LIVE, APPS, MOVIES, SERIES)
+    const val RECOMMENDED = "recommended"
+    val ALL = listOf(CONTINUE, LIVE, APPS, RECOMMENDED, MOVIES, SERIES)
 
     fun label(id: String) = when (id) {
         CONTINUE -> "Weiterschauen"
@@ -19,6 +20,7 @@ object HomeRows {
         APPS -> "Apps"
         MOVIES -> "Neue Filme"
         SERIES -> "Neue Serien"
+        RECOMMENDED -> "Für dich"
         else -> id
     }
 }
@@ -87,7 +89,13 @@ class SettingsStore(context: Context) {
     fun rowOrder(): List<String> = runCatching {
         val arr = JSONArray(p.getString("rowOrder", null) ?: "[]")
         val saved = (0 until arr.length()).map { arr.getString(it) }.filter { it in HomeRows.ALL }
-        saved + HomeRows.ALL.filterNot { it in saved }   // rows added in later versions go to the end
+        val order = saved.toMutableList()
+        // "Für dich" arrived later: put it in front of "Neue Filme" instead of at the very end
+        if (HomeRows.RECOMMENDED !in order) {
+            val at = order.indexOf(HomeRows.MOVIES).takeIf { it >= 0 } ?: order.size
+            order.add(at, HomeRows.RECOMMENDED)
+        }
+        order + HomeRows.ALL.filterNot { it in order }   // rows added in later versions go to the end
     }.getOrDefault(HomeRows.ALL)
 
     fun setRowOrder(ids: List<String>) = p.edit().putString("rowOrder", JSONArray(ids).toString()).apply()
@@ -133,6 +141,11 @@ class SettingsStore(context: Context) {
         get() = p.getBoolean("providerImages", true)
         set(value) = p.edit().putBoolean("providerImages", value).apply()
 
+    /** Film details (plot, cast …): one request per film, the first time it is opened. */
+    var loadMovieDetails: Boolean
+        get() = p.getBoolean("movieDetails", true)
+        set(value) = p.edit().putBoolean("movieDetails", value).apply()
+
     /** Last searches (newest first), shown as suggestions in the search window. */
     fun recentSearches(): List<String> =
         p.getString("recentSearches", null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
@@ -151,6 +164,7 @@ class SettingsStore(context: Context) {
 /** Playback positions. One entry per movie, and at most one per series. */
 class ProgressStore(context: Context) {
     private val p = context.getSharedPreferences("progress", Context.MODE_PRIVATE)
+    private val history = WatchHistory(context)
 
     fun get(key: String): ProgressEntry? = p.getString(key, null)?.let(::parse)
 
@@ -159,11 +173,14 @@ class ProgressStore(context: Context) {
     fun forSeries(seriesId: Long): ProgressEntry? =
         all().filter { it.item.seriesId == seriesId }.maxByOrNull { it.updatedAt }
 
-    fun save(item: PlayItem, positionMs: Long, durationMs: Long) =
+    fun save(item: PlayItem, positionMs: Long, durationMs: Long) {
+        history.add(item)
         put(ProgressEntry(item, positionMs, durationMs, System.currentTimeMillis(), upNext = false))
+    }
 
     /** Item played to the end: drop it; for series queue the next episode instead. */
     fun finished(item: PlayItem, next: PlayItem?) {
+        history.add(item)
         if (next != null && item.seriesId != null && next.seriesId == item.seriesId) {
             put(ProgressEntry(next, 0, 0, System.currentTimeMillis(), upNext = true))
         } else {
