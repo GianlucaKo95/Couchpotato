@@ -1,6 +1,7 @@
 package de.koeven.couchpotato.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -577,7 +578,8 @@ private fun TextFieldButton(
             Column(
                 Modifier
                     .width(600.dp)
-                    .background(CpColors.Surface, RoundedCornerShape(16.dp))
+                    .background(androidx.compose.ui.graphics.Color(0xFF0B3236), RoundedCornerShape(18.dp))
+                    .border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {

@@ -1,6 +1,10 @@
 package de.koeven.couchpotato.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.graphics.Color
+import androidx.tv.material3.ButtonDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,9 +57,11 @@ fun ContextMenu(title: String, actions: List<MenuAction>, onDismiss: () -> Unit)
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
-                .width(380.dp)
-                .background(CpColors.Surface, RoundedCornerShape(16.dp))
-                .padding(24.dp)
+                .width(400.dp)
+                // solid dark panel with a light edge, so it stands out over any background
+                .background(Color(0xFF0B3236), RoundedCornerShape(18.dp))
+                .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
+                .padding(22.dp)
                 .onPreviewKeyEvent { e ->
                     if (armed) return@onPreviewKeyEvent false
                     when {
@@ -68,18 +74,30 @@ fun ContextMenu(title: String, actions: List<MenuAction>, onDismiss: () -> Unit)
                         else -> true
                     }
                 },
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
+                color = CpColors.Text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(bottom = 6.dp),
             )
-            (actions + MenuAction("Abbrechen") {}).forEachIndexed { i, action ->
+            val all = actions + MenuAction("Abbrechen") {}
+            all.forEachIndexed { i, action ->
+                val cancel = i == all.lastIndex
                 Button(
+                    shape = ButtonDefaults.shape(RoundedCornerShape(12.dp)),
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color.White.copy(alpha = if (cancel) 0.05f else 0.12f),
+                        contentColor = if (cancel) CpColors.TextMuted else CpColors.Text,
+                        focusedContainerColor = CpColors.Text,
+                        focusedContentColor = Color(0xFF0B3236),
+                    ),
+                    scale = ButtonDefaults.scale(focusedScale = 1.03f),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
                     onClick = {
                         onDismiss()
                         action.onClick()
@@ -88,7 +106,7 @@ fun ContextMenu(title: String, actions: List<MenuAction>, onDismiss: () -> Unit)
                         .fillMaxWidth()
                         .then(if (i == 0) Modifier.focusRequester(firstFocus) else Modifier),
                 ) {
-                    Text(action.label)
+                    Text(action.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
