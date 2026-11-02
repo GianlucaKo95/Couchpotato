@@ -35,7 +35,12 @@ class CloudSync(context: Context) {
         else -> "Noch nicht mit einem anderen Gerät gekoppelt."
     }
 
-    suspend fun createPairingCode(): String = withContext(Dispatchers.IO) {
+    /**
+     * New pairing code. With [iptv], the IPTV login is handed over ONCE: encrypted here with a key
+     * derived from the code (the server only knows the code's hash), deleted on the server as soon as
+     * the other TV has picked it up, and gone after 10 minutes at the latest.
+     */
+    suspend fun createPairingCode(iptv: XtreamConfig? = null): String = withContext(Dispatchers.IO) {
         requireConfigured()
         if (linked) sync()
         val token = secure.read() ?: newDeviceToken()
@@ -45,14 +50,33 @@ class CloudSync(context: Context) {
         val local = snapshot()
         val pushed = call("push", token, JSONObject().put("group_id", result.getString("group_id")).put("snapshot", local))
         saveSyncMark(local, pushed.optLong("updated_at", System.currentTimeMillis()))
-        result.getString("code")
+        val code = result.getString("code")
+        if (iptv != null && iptv.isValid) {
+            val groupId = result.getString("group_id")
+            val plain = JSONObject().put("url", iptv.baseUrl).put("user", iptv.user).put("pass", iptv.pass).toString()
+            call("stash", token, JSONObject()
+                .put("group_id", groupId)
+                .put("code_hash", sha256Hex(code))
+                .put("blob", HandOver.encrypt(plain, code, groupId)))
+        }
+        code
     }
 
-    suspend fun join(code: String): String = withContext(Dispatchers.IO) {
+    /** Result of pairing: the message and – if the other TV handed it over – the IPTV login. */
+    data class JoinResult(val message: String, val iptv: XtreamConfig?)
+
+    suspend fun join(code: String): JoinResult = withContext(Dispatchers.IO) {
         requireConfigured()
         val token = newDeviceToken()
-        val result = call("join", token, JSONObject().put("code", code.trim().uppercase()))
+        val clean = normalizeCode(code)
+        val result = call("join", token, JSONObject().put("code", clean))
         val groupId = result.getString("group_id")
+        val iptv = result.optString("secret").takeIf { it.isNotBlank() && it != "null" }?.let { blob ->
+            runCatching {
+                val o = JSONObject(HandOver.decrypt(blob, clean, groupId))
+                XtreamConfig(o.getString("url"), o.getString("user"), o.getString("pass"))
+            }.getOrNull()
+        }
         prefs.edit().putString("groupId", groupId).apply()
         secure.write(token)
         val payload = result.optJSONObject("snapshot")
@@ -65,7 +89,7 @@ class CloudSync(context: Context) {
         } else {
             saveSyncMark(payload, serverAt)
         }
-        "Gerät gekoppelt."
+        JoinResult("Gerät gekoppelt.", iptv)
     }
 
     suspend fun sync(): String = withContext(Dispatchers.IO) {
@@ -256,8 +280,15 @@ class CloudSync(context: Context) {
     private fun newDeviceToken(): String = ByteArray(32).also(SecureRandom()::nextBytes)
         .let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
 
+    private fun sha256Hex(value: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
     private companion object {
         const val PREFS = "cloudsync"
+
+        /** Same rule as the server: upper case, only the code alphabet (no I, L, O, U). */
+        fun normalizeCode(code: String): String = code.uppercase().replace(Regex("[^0-9A-HJKMNP-TV-Z]"), "")
     }
 }
 
@@ -301,4 +332,33 @@ private class SecureSyncToken(context: Context, private val prefs: SharedPrefere
     }
 
     private companion object { const val IV_BYTES = 12 }
+}
+
+/**
+ * Encryption of the one-time IPTV hand-over: AES-256-GCM, key = PBKDF2(pairing code, group id).
+ * Only someone who knows the code can open it – the server stores the code as a hash only.
+ */
+private object HandOver {
+    private const val ITERATIONS = 150_000
+    private const val IV_BYTES = 12
+
+    private fun key(code: String, groupId: String): javax.crypto.spec.SecretKeySpec {
+        val spec = javax.crypto.spec.PBEKeySpec(code.toCharArray(), "couchpotato:$groupId".toByteArray(Charsets.UTF_8), ITERATIONS, 256)
+        val bytes = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1").generateSecret(spec).encoded
+        return javax.crypto.spec.SecretKeySpec(bytes, "AES")
+    }
+
+    fun encrypt(plain: String, code: String, groupId: String): String {
+        val iv = ByteArray(IV_BYTES).also(SecureRandom()::nextBytes)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key(code, groupId), GCMParameterSpec(128, iv))
+        return Base64.encodeToString(iv + cipher.doFinal(plain.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+    }
+
+    fun decrypt(blob: String, code: String, groupId: String): String {
+        val packed = Base64.decode(blob, Base64.NO_WRAP)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, key(code, groupId), GCMParameterSpec(128, packed.copyOfRange(0, IV_BYTES)))
+        return String(cipher.doFinal(packed.copyOfRange(IV_BYTES, packed.size)), Charsets.UTF_8)
+    }
 }

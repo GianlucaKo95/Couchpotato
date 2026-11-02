@@ -36,6 +36,8 @@ Deno.serve(async (req) => {
     if (!url || !key) throw new Error("Server is not configured");
     const db = createClient(url, key, { auth: { persistSession: false } });
     const tokenHash = await sha256(token);
+    // expired pairing codes – and any IPTV hand-over still attached to them – never outlive 10 minutes
+    await db.from("couchpotato_sync_pairing_codes").delete().lt("expires_at", new Date().toISOString());
 
     if (action === "create") {
       let { data: device } = await db.from("couchpotato_sync_devices").select("group_id").eq("token_hash", tokenHash).maybeSingle();
@@ -59,19 +61,40 @@ Deno.serve(async (req) => {
       const code = String(body.code ?? "").toUpperCase().replace(/[^0-9A-HJKMNP-TV-Z]/g, "");
       if (code.length !== 12) return json({ error: "Invalid or expired pairing code" }, 400);
       const codeHash = await sha256(code);
-      const { data: groupId, error: pe } = await db.rpc("consume_couchpotato_pairing_code", { p_code_hash: codeHash });
+      const { data: rows, error: pe } = await db.rpc("consume_couchpotato_pairing_code_v2", { p_code_hash: codeHash });
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      const groupId = row?.group_id;
       if (pe || !groupId) return json({ error: "Invalid or expired pairing code" }, 400);
       const { error: de } = await db.from("couchpotato_sync_devices").insert({ token_hash: tokenHash, group_id: groupId });
       if (de) throw de;
       const { data: state } = await db.from("couchpotato_sync_state").select("snapshot, updated_at")
         .eq("group_id", groupId).maybeSingle();
-      return json({ group_id: groupId, snapshot: state?.snapshot ?? null, updated_at: state?.updated_at ? Date.parse(state.updated_at) : 0 });
+      return json({
+        group_id: groupId,
+        snapshot: state?.snapshot ?? null,
+        updated_at: state?.updated_at ? Date.parse(state.updated_at) : 0,
+        // encrypted on the giving TV; only the receiving TV (which knows the code) can open it
+        secret: row?.secret_blob ?? null,
+      });
     }
 
     const { data: device, error: authError } = await db.from("couchpotato_sync_devices")
       .select("group_id").eq("token_hash", tokenHash).maybeSingle();
     if (authError || !device || device.group_id !== body.group_id) return json({ error: "Device is not paired to this group" }, 403);
     await db.from("couchpotato_sync_devices").update({ last_seen_at: new Date().toISOString() }).eq("token_hash", tokenHash);
+
+    if (action === "stash") {
+      // attach the encrypted IPTV hand-over to this group's still valid pairing code
+      const codeHash = String(body.code_hash ?? "");
+      const blob = String(body.blob ?? "");
+      if (!/^[0-9a-f]{64}$/.test(codeHash) || blob.length === 0 || blob.length > 4096) return json({ error: "Invalid hand-over" }, 400);
+      const { data, error } = await db.from("couchpotato_sync_pairing_codes").update({ secret_blob: blob })
+        .eq("code_hash", codeHash).eq("group_id", device.group_id).gt("expires_at", new Date().toISOString())
+        .select("code_hash");
+      if (error) throw error;
+      if (!data || data.length === 0) return json({ error: "Pairing code expired" }, 404);
+      return json({ ok: true });
+    }
 
     if (action === "pull") {
       const { data: state, error } = await db.from("couchpotato_sync_state").select("snapshot, updated_at")
