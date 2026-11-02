@@ -18,6 +18,7 @@ object TmdbGate {
     private const val MIN_GAP_MS = 50L           // = 20 per second
     private const val DEFAULT_PAUSE_MS = 10_000L
     private const val HOUR_MS = 60 * 60 * 1000L
+    private const val CLOCK_FUTURE_TOLERANCE_MS = 5 * 60 * 1000L
 
     private val parallel = Semaphore(MAX_PARALLEL, true)
     private val lock = Any()
@@ -29,16 +30,20 @@ object TmdbGate {
     private var todayCount = 0
     private var prefs: SharedPreferences? = null
 
-    fun init(context: Context) {
-        if (prefs != null) return
+    fun init(context: Context) = synchronized(lock) {
+        if (prefs != null) return@synchronized
         val p = context.applicationContext.getSharedPreferences("tmdbgate", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
         prefs = p
-        synchronized(lock) {
+        run {
             today = p.getString("day", "") ?: ""
             todayCount = p.getInt("count", 0)
-            last429 = p.getLong("last429", 0L)
+            last429 = p.getLong("last429", 0L).takeIf { it <= now + CLOCK_FUTURE_TOLERANCE_MS } ?: 0L
             pausedUntil = p.getLong("pausedUntil", 0L)
-            p.getString("recent", null)?.split(',')?.mapNotNull { it.toLongOrNull() }?.let { recent.addAll(it) }
+                .takeIf { it in now..(now + 120_000L + CLOCK_FUTURE_TOLERANCE_MS) } ?: 0L
+            p.getString("recent", null)?.split(',')?.mapNotNull { it.toLongOrNull() }
+                ?.filter { it in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS) }
+                ?.forEach { recent.addLast(it) }
         }
     }
 
@@ -71,7 +76,7 @@ object TmdbGate {
     }
 
     private fun count(now: Long) {
-        while (recent.isNotEmpty() && now - recent.first() > HOUR_MS) recent.removeFirst()
+        while (recent.isNotEmpty() && recent.first() !in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS)) recent.removeFirst()
         recent.addLast(now)
         val day = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(now))
         if (day != today) { today = day; todayCount = 0 }
@@ -92,7 +97,7 @@ object TmdbGate {
 
     fun lastHour(): Int = synchronized(lock) {
         val now = System.currentTimeMillis()
-        recent.count { now - it <= HOUR_MS }
+        recent.count { it in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS) }
     }
 
     fun today(): Int = synchronized(lock) {

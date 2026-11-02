@@ -198,8 +198,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onResume() {
         viewModelScope.launch {
-            refreshLocal()
-            recomputeRecommendations()
+            try {
+                refreshLocal()
+                recomputeRecommendations()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message ?: e.javaClass.simpleName) }
+            }
         }
         ensureIndex(force = false)      // local; talks to the provider at most once a day
         refreshEpg(force = false)
@@ -574,7 +580,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun syncCatalog(force: Boolean) {
-        loadLocalCatalog()
+        try {
+            loadLocalCatalog()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.update { it.copy(loading = false, error = e.message ?: e.javaClass.simpleName) }
+            setIndexStatus("Lokale Daten konnten nicht geladen werden: ${e.message ?: e.javaClass.simpleName}")
+            return
+        }
         val cfg = settings.config()
         if (!cfg.isValid) {
             setIndexStatus("IPTV ist noch nicht eingerichtet – gesucht wird nur in Apps.")
@@ -649,7 +663,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 .toList()
             m to sr
         }
-        withContext(Dispatchers.IO) { cache.save(movies, series) }
+        // The disk cache is an optimization; full storage or a transient I/O error must not
+        // take down the catalog load or the app's startup coroutine.
+        try {
+            withContext(Dispatchers.IO) { cache.save(movies, series) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // The cache is optional; keep the in-memory rows available for this session.
+        }
         _state.update { it.copy(movies = movies, series = series) }
         recomputeRecommendations()
     }

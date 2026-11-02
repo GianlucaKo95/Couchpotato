@@ -54,12 +54,17 @@ class SearchIndex(context: Context) {
     private val file = File(context.filesDir, "catalog_v3.tsv")          // v3: + date column
     private val catFile = File(context.filesDir, "categories_v3.json")
 
+    init {
+        restoreBackup(file)
+        restoreBackup(catFile)
+    }
+
     fun exists(): Boolean = file.exists() && file.length() > 0 && catFile.exists()
     fun ageMs(): Long = if (file.exists()) System.currentTimeMillis() - file.lastModified() else Long.MAX_VALUE
     fun lastSync(): Long = if (file.exists()) file.lastModified() else 0L
     fun clear() {
-        file.delete()
-        catFile.delete()
+        listOf(file, catFile, File(file.path + ".tmp"), File(catFile.path + ".tmp"),
+            File(file.path + ".bak"), File(catFile.path + ".bak")).forEach { it.delete() }
     }
 
     /** e.g. "12.345 Bilder · 8 % vom Anbieter-Server · sonst v. a. image.tmdb.org" */
@@ -117,6 +122,7 @@ class SearchIndex(context: Context) {
         val providerHost = XtreamClient.providerHost
         val hostCounts = HashMap<String, Int>()
         var images = 0
+        try {
         tmp.bufferedWriter(Charsets.UTF_8).use { w ->
             failed += client.dumpCatalog { kind, id, name, image, ext, cat, added, facts ->
                 val clean = name.sanitize()
@@ -143,24 +149,31 @@ class SearchIndex(context: Context) {
             }
         }
         if (count > 0) {
-            file.delete()
-            tmp.renameTo(file)
             val fromProvider = providerHost?.let { hostCounts[it.lowercase()] } ?: 0
             val top = hostCounts.entries.sortedByDescending { it.value }.take(3)
             cats.put("img", org.json.JSONObject()
                 .put("total", images)
                 .put("provider", fromProvider)
                 .put("hosts", org.json.JSONArray(top.map { org.json.JSONObject().put("host", it.key).put("n", it.value) })))
-            catFile.writeText(cats.toString())
+            val catTmp = File(catFile.path + ".tmp")
+            catTmp.writeText(cats.toString(), Charsets.UTF_8)
+            replaceFile(tmp, file)
+            replaceFile(catTmp, catFile)
         } else {
             tmp.delete()
         }
         failed
+        } catch (e: Exception) {
+            tmp.delete()
+            File(catFile.path + ".tmp").delete()
+            throw e
+        }
     }
 
     suspend fun load(): List<SearchEntry> = withContext(Dispatchers.IO) {
         if (!file.exists()) return@withContext emptyList()
-        file.bufferedReader(Charsets.UTF_8).useLines { lines ->
+        try {
+        val entries = file.bufferedReader(Charsets.UTF_8).useLines { lines ->
             lines.mapNotNull { line ->
                 val p = line.split('\t')
                 if (p.size < 6) return@mapNotNull null
@@ -180,6 +193,34 @@ class SearchIndex(context: Context) {
                 )
             }.toList()
         }
+        if (entries.isEmpty() && file.length() > 0L) clear()
+        entries
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // A damaged local index must not crash every launch. Its absence triggers a rebuild.
+            clear()
+            emptyList()
+        }
+    }
+
+    /** Replace within the same directory while retaining the old file if the rename fails. */
+    private fun replaceFile(temp: File, target: File) {
+        val backup = File(target.path + ".bak")
+        backup.delete()
+        val hadTarget = target.exists()
+        if (hadTarget && !target.renameTo(backup)) throw java.io.IOException("Katalogdatei kann nicht gesichert werden")
+        if (!temp.renameTo(target)) {
+            if (hadTarget) backup.renameTo(target)
+            throw java.io.IOException("Katalogdatei kann nicht ersetzt werden")
+        }
+        backup.delete()
+    }
+
+    private fun restoreBackup(target: File) {
+        val backup = File(target.path + ".bak")
+        if (!target.exists() && backup.exists()) backup.renameTo(target)
+        else backup.delete()
     }
 
     companion object {

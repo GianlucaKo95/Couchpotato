@@ -19,13 +19,13 @@ object AppsRepository {
         val found = LinkedHashMap<String, ResolveInfo>()
         for (category in listOf(Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER)) {
             val query = Intent(Intent.ACTION_MAIN).addCategory(category)
-            for (ri in pm.queryIntentActivities(query, 0)) {
+            for (ri in runCatching { pm.queryIntentActivities(query, 0) }.getOrDefault(emptyList())) {
                 val pkg = ri.activityInfo.packageName
                 if (pkg == context.packageName || found.containsKey(pkg)) continue
                 found[pkg] = ri
             }
         }
-        return found.values.map { ri ->
+        return found.values.mapNotNull { ri -> runCatching {
             val ai = ri.activityInfo
             val updated = runCatching { pm.getPackageInfo(ai.packageName, 0).lastUpdateTime }.getOrDefault(0L)
             cache[ai.packageName]?.takeIf { it.first == updated }?.second ?: run {
@@ -38,7 +38,7 @@ object AppsRepository {
                     icon = icon?.let { runCatching { it.toBitmapKeepingRatio(192).asImageBitmap() }.getOrNull() },
                 ).also { cache[ai.packageName] = updated to it }
             }
-        }
+        }.getOrNull() }
     }
 
     /**

@@ -68,7 +68,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
     private fun <T> gated(block: () -> T): T = synchronized(GATE) {
         val now = System.currentTimeMillis()
         if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
-        while (requestLog.isNotEmpty() && now - requestLog.first() > HOUR_MS) requestLog.removeFirst()
+        while (requestLog.isNotEmpty() && requestLog.first() !in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS)) requestLog.removeFirst()
         val limit = if (background) BACKGROUND_PER_HOUR else MAX_PER_HOUR
         if (requestLog.size >= limit) throw RequestBudgetException(background)
         val wait = lastRequestAt + MIN_GAP_MS - now
@@ -416,6 +416,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         private val GATE = Any()
         private const val MIN_GAP_MS = 2_500L
         private const val HOUR_MS = 60 * 60 * 1000L
+        private const val CLOCK_FUTURE_TOLERANCE_MS = 5 * 60 * 1000L
         /** Hard cap for everything in one hour (a normal day needs ~6 for the sync). */
         const val MAX_PER_HOUR = 40
         /** Background work (sync, "Jetzt läuft") stops earlier, so you still have room to browse. */
@@ -445,12 +446,15 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
             if (prefs != null) return@synchronized
             val p = context.applicationContext.getSharedPreferences("netguard", Context.MODE_PRIVATE)
             prefs = p
-            blockedUntil = p.getLong("blockedUntil", 0L)
-            lastRequestAt = p.getLong("lastRequestAt", 0L)
             val now = System.currentTimeMillis()
+            blockedUntil = p.getLong("blockedUntil", 0L)
+                .takeIf { it in now..(now + COOLDOWN_MS + CLOCK_FUTURE_TOLERANCE_MS) } ?: 0L
+            lastRequestAt = p.getLong("lastRequestAt", 0L)
+                .takeIf { it in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS) } ?: 0L
             fun restore(key: String, into: ArrayDeque<Long>) {
                 p.getString(key, null)?.split(',')?.mapNotNull { it.toLongOrNull() }
-                    ?.filter { now - it <= HOUR_MS }?.sorted()?.forEach { into.addLast(it) }
+                    ?.filter { it in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS) }
+                    ?.sorted()?.forEach { into.addLast(it) }
             }
             restore("requestLog", requestLog)
             restore("imageLog", imageLog)
@@ -468,12 +472,12 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         /** For the settings screen. */
         fun requestsLastHour(): Int = synchronized(GATE) {
             val now = System.currentTimeMillis()
-            requestLog.count { now - it <= HOUR_MS }
+            requestLog.count { it in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS) }
         }
 
         fun imagesLastHour(): Int = synchronized(GATE) {
             val now = System.currentTimeMillis()
-            imageLog.count { now - it <= HOUR_MS }
+            imageLog.count { it in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS) }
         }
 
         /** Only when the login data really changed (a new account isn't locked). */
@@ -486,7 +490,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         fun <T> gateImage(block: () -> T): T = synchronized(GATE) {
             val now = System.currentTimeMillis()
             if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
-            while (imageLog.isNotEmpty() && now - imageLog.first() > HOUR_MS) imageLog.removeFirst()
+            while (imageLog.isNotEmpty() && imageLog.first() !in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS)) imageLog.removeFirst()
             if (imageLog.size >= IMAGES_PER_HOUR) throw RequestBudgetException(true)
             val wait = lastRequestAt + IMAGE_GAP_MS - now
             if (wait > 0) Thread.sleep(wait)
