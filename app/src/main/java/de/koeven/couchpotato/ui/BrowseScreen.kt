@@ -92,7 +92,8 @@ fun BrowseScreen(
     var showHidden by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<BrowseMenu?>(null) }
     var editing by remember { mutableStateOf(false) }
-    var refocusCategory by remember { mutableStateOf(false) }
+    var jumpToContent by remember { mutableStateOf(false) }   // OK on a category: focus goes to its titles
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val selectedFocus = remember { FocusRequester() }
 
     val hiddenSet = state.hiddenCategories
@@ -160,12 +161,20 @@ fun BrowseScreen(
         }
     }
 
-    LaunchedEffect(refocusCategory, selectedId) {
-        if (refocusCategory) {
-            delay(60)
-            runCatching { selectedFocus.requestFocus() }
-            refocusCategory = false
+    LaunchedEffect(jumpToContent, content) {
+        if (!jumpToContent) return@LaunchedEffect
+        val ready = when (val c = content) {
+            is BrowseContent.Movies -> c.items.isNotEmpty()
+            is BrowseContent.Series -> c.items.isNotEmpty()
+            is BrowseContent.Live -> c.items.isNotEmpty()
+            BrowseContent.Loading -> return@LaunchedEffect      // wait until the titles are there
+            else -> false
         }
+        if (ready) {
+            delay(80)
+            focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Right)
+        }
+        jumpToContent = false
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -240,7 +249,7 @@ fun BrowseScreen(
                                 if (editing) vm.setCategoriesHidden(kind, listOf(cat.id), !hidden, refresh = false)
                                 else {
                                     selectedId = cat.id
-                                    refocusCategory = true
+                                    jumpToContent = true
                                 }
                             },
                             onLongClick = { if (!editing && !kidMode) menu = BrowseMenu.Category(cat, hidden) },
