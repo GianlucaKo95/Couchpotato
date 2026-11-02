@@ -140,6 +140,10 @@ class SettingsStore(context: Context) {
         get() = p.getLong("syncAttemptAt", 0L)
         set(value) = p.edit().putLong("syncAttemptAt", value).apply()
 
+    var cloudSyncAttemptAt: Long
+        get() = p.getLong("cloudSyncAttemptAt", 0L)
+        set(value) = p.edit().putLong("cloudSyncAttemptAt", value).apply()
+
     /** false = pictures from the provider's own server are not loaded at all. */
     var loadProviderImages: Boolean
         get() = p.getBoolean("providerImages", true)

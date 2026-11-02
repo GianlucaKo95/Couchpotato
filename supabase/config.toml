@@ -1,0 +1,10 @@
+project_id = "couchpotato"
+
+[db]
+major_version = 17
+
+[functions.couchpotato-sync]
+enabled = true
+verify_jwt = false
+import_map = "./functions/couchpotato-sync/deno.json"
+entrypoint = "./functions/couchpotato-sync/index.ts"
