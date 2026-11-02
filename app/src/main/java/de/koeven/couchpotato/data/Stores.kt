@@ -61,7 +61,7 @@ class SettingsStore(context: Context) {
     /** Live-TV favourites, in the order they were added. */
     fun favorites(): List<LiveChannel> = runCatching {
         JSONArray(p.getString(mine("liveFavs"), null) ?: "[]").mapObjects {
-            LiveChannel(it.getLong("id"), it.str("name") ?: "", it.str("logo"), it.str("cat"))
+            LiveChannel(it.getLong("id"), Names.display(it.str("name") ?: ""), it.str("logo"), it.str("cat"))
         }.distinctBy { it.id }
     }.getOrDefault(emptyList())
 
@@ -251,10 +251,10 @@ class CatalogCache(context: Context) {
         val o = JSONObject(file.readText())
         Data(
             movies = o.getJSONArray("movies").mapObjects {
-                VodItem(it.getLong("id"), it.str("name") ?: "", it.str("image"), it.optLong("added"), it.str("ext") ?: "mp4", it.str("cat"))
+                VodItem(it.getLong("id"), Names.display(it.str("name") ?: ""), it.str("image"), it.optLong("added"), it.str("ext") ?: "mp4", it.str("cat"))
             },
             series = o.getJSONArray("series").mapObjects {
-                SeriesItem(it.getLong("id"), it.str("name") ?: "", it.str("image"), it.optLong("updated"), it.str("cat"))
+                SeriesItem(it.getLong("id"), Names.display(it.str("name") ?: ""), it.str("image"), it.optLong("updated"), it.str("cat"))
             },
         )
     }.getOrNull()

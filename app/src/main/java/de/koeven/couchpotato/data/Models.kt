@@ -147,11 +147,18 @@ data class PlayItem(
             kind = o.getString("kind"),
             streamId = o.getLong("streamId"),
             ext = o.str("ext") ?: "mp4",
-            title = o.str("title") ?: "",
-            subtitle = o.str("subtitle"),
+            title = Names.display(o.str("title") ?: ""),
+            subtitle = o.str("subtitle")?.let(::cleanSubtitle),
             image = o.str("image"),
             seriesId = o.str("seriesId")?.toLongOrNull(),
         )
+
+        /** older saved entries: "S01 E03 · DE - Serie - S01E03 - Titel" → "S01 E03 · Titel" */
+        private fun cleanSubtitle(sub: String): String {
+            val m = Regex("""^S(\d+) E(\d+) · (.*)$""").find(sub) ?: return Names.display(sub)
+            val n = m.groupValues[2].toIntOrNull() ?: 0
+            return "S%s E%s · %s".format(m.groupValues[1], m.groupValues[2], Names.episode(m.groupValues[3], "", n))
+        }
 
         fun movie(v: VodItem) = PlayItem(
             key = "vod:${v.id}", kind = KIND_MOVIE, streamId = v.id, ext = v.ext,
