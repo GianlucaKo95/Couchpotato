@@ -222,6 +222,8 @@ fun KidBrowseScreen(
     var selected by remember { mutableStateOf<String?>(null) }    // null = alle
     var titles by remember { mutableStateOf<List<SearchEntry>?>(null) }
     val first = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    var jumpDown by remember { mutableStateOf(false) }      // OK on a bubble: focus goes to the covers
     val (title, sub) = when (kind) {
         SearchEntry.KIND_MOVIE -> "Filme" to "Such dir einen Film aus!"
         SearchEntry.KIND_SERIES -> "Serien" to "Welche Serie möchtest du schauen?"
@@ -237,6 +239,14 @@ fun KidBrowseScreen(
         titles = null
         titles = runCatching { vm.visibleTitles(kind, selected) }.getOrDefault(emptyList())
     }
+    LaunchedEffect(jumpDown, titles) {
+        if (!jumpDown || titles == null) return@LaunchedEffect
+        if (titles?.isNotEmpty() == true) {
+            delay(80)
+            focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
+        }
+        jumpDown = false
+    }
 
     Column(Modifier.fillMaxSize()) {
         KidHeader(state.profile, title, sub, avatar = 52.dp)
@@ -244,9 +254,9 @@ fun KidBrowseScreen(
             contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 14.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { KidChip("Alle", selected == null, Modifier.focusRequester(first)) { selected = null } }
+            item { KidChip("Alle", selected == null, Modifier.focusRequester(first)) { selected = null; jumpDown = true } }
             items(categories, key = { it.id }) { c ->
-                KidChip(c.name, selected == c.id) { selected = c.id }
+                KidChip(c.name, selected == c.id) { selected = c.id; jumpDown = true }
             }
         }
         val list = titles
