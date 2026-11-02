@@ -137,9 +137,10 @@ fun RoundIcon(icon: Int, description: String, highlighted: Boolean = false, onCl
 /** Primary pill button (white), e.g. "Fortsetzen". */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun PrimaryPill(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun PrimaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         shape = ButtonDefaults.shape(RoundedCornerShape(50)),
         colors = ButtonDefaults.colors(
             containerColor = CpColors.Text,
@@ -157,9 +158,10 @@ fun PrimaryPill(label: String, modifier: Modifier = Modifier, onClick: () -> Uni
 /** Secondary pill button (translucent). */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun SecondaryPill(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun SecondaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         shape = ButtonDefaults.shape(RoundedCornerShape(50)),
         colors = ButtonDefaults.colors(
             containerColor = Color.White.copy(alpha = 0.12f),

@@ -357,13 +357,13 @@ fun kidTileWidth(perRow: Float, gap: Dp = 16.dp): Dp {
 @Composable
 fun MainAction(label: String, modifier: Modifier = Modifier, icon: Int? = null, onClick: () -> Unit) {
     if (LocalProfile.current?.kid == true) KidActionButton(label, primary = true, modifier = modifier, icon = icon, onClick = onClick)
-    else PrimaryPill(label, modifier, onClick)
+    else PrimaryPill(label, modifier, onClick = onClick)
 }
 
 @Composable
 fun SideAction(label: String, modifier: Modifier = Modifier, icon: Int? = null, onClick: () -> Unit) {
     if (LocalProfile.current?.kid == true) KidActionButton(label, primary = false, modifier = modifier, icon = icon, onClick = onClick)
-    else SecondaryPill(label, modifier, onClick)
+    else SecondaryPill(label, modifier, onClick = onClick)
 }
 
 /** Top of the info screens: kids greeting or the normal tab bar. */

@@ -112,3 +112,17 @@ Der Anbieter sperrt das Konto zeitweise, wenn zu viele Anfragen kommen. Deshalb:
   ganz abschalten; die Einstellungen zeigen, wie viele Bilder überhaupt vom Anbieter kommen.
 - **Zappen**: umgeschaltet wird erst, wenn man 0,8 s auf einem Sender bleibt.
 - Unter *Einstellungen → Katalog & Anfragen* stehen letzter Abgleich und Anfragen der letzten Stunde.
+
+## Geräte-Synchronisierung (Supabase)
+
+Mehrere Couchpotato-Geräte lassen sich über einen einmaligen Gerätecode koppeln. Der Code gilt zehn
+Minuten. Der Geräte-Token wird auf Android mit Android Keystore verschlüsselt; die Datenbank speichert
+nur dessen SHA-256-Hash. Synchronisiert werden Profile, Favoriten, Weiterschauen, Verlauf und
+Couchpotato-Einstellungen. IPTV-Zugangsdaten, Profil-PINs und TMDB-Schlüssel bleiben lokal.
+
+Die Edge Function und SQL-Migration liegen in `supabase/`. Einmalig mit dem Projekt verknüpfen und
+die Migration anwenden (`supabase link --project-ref <project-ref>`, `supabase db push`), dann die
+Function mit `supabase functions deploy couchpotato-sync` bereitstellen. Der APK-Build braucht die
+Umgebungsvariablen `SUPABASE_URL` und `SUPABASE_PUBLISHABLE_KEY`; in GitHub Actions sind sie als
+Repository-Secrets gleichen Namens einzutragen. Der Secret-Key von Supabase bleibt ausschließlich
+serverseitig in der Edge Function.
