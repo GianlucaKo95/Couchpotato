@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import de.koeven.couchpotato.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -81,12 +82,12 @@ class CloudSync(context: Context) {
             baseline == null -> remoteSnapshot
             else -> mergeSnapshots(baseline, local, remoteSnapshot)
         }
-        if (remoteSnapshot == null || !merged.similar(remoteSnapshot)) {
+        if (remoteSnapshot == null || !sameJson(merged, remoteSnapshot)) {
             val pushed = call("push", token, JSONObject().put("group_id", groupId).put("snapshot", merged))
-            if (!merged.similar(local)) applySnapshot(merged)
+            if (!sameJson(merged, local)) applySnapshot(merged)
             saveSyncMark(merged, pushed.optLong("updated_at", System.currentTimeMillis()))
         } else {
-            if (!merged.similar(local)) applySnapshot(merged)
+            if (!sameJson(merged, local)) applySnapshot(merged)
             saveSyncMark(merged, remoteAt)
         }
         "Synchronisierung abgeschlossen."
@@ -130,6 +131,7 @@ class CloudSync(context: Context) {
             val values = JSONObject()
             app.getSharedPreferences(name, Context.MODE_PRIVATE).all.forEach { (key, value) ->
                 if (excluded(name, key)) return@forEach
+                if (value == null) return@forEach
                 val safeValue = if (name == "mediaplays" && value is String) {
                     runCatching {
                         JSONObject(value).apply {
@@ -164,7 +166,7 @@ class CloudSync(context: Context) {
                 val baseValue = b.opt(key)
                 val localValue = l.opt(key)
                 val remoteValue = r.opt(key)
-                val localChanged = localHas != baseHas || localValue.toString() != baseValue.toString()
+                val localChanged = localHas != baseHas || canonicalJson(localValue) != canonicalJson(baseValue)
                 val useLocal = localChanged // when both changed this key, the currently syncing device wins
                 val hasChosen = if (useLocal) localHas else remoteHas
                 if (hasChosen) merged.put(key, if (useLocal) localValue else remoteValue)
@@ -236,6 +238,18 @@ class CloudSync(context: Context) {
 
     private fun saveSyncMark(snapshot: JSONObject, at: Long) {
         prefs.edit().putString("lastSnapshot", snapshot.toString()).putLong("lastAt", at).apply()
+    }
+
+    private fun sameJson(left: JSONObject, right: JSONObject): Boolean = canonicalJson(left) == canonicalJson(right)
+
+    private fun canonicalJson(value: Any?): String = when (value) {
+        null, JSONObject.NULL -> "null"
+        is JSONObject -> value.keys().asSequence().toList().sorted().joinToString(prefix = "{", postfix = "}") { key ->
+            "${JSONObject.quote(key)}:${canonicalJson(value.opt(key))}"
+        }
+        is JSONArray -> (0 until value.length()).joinToString(prefix = "[", postfix = "]") { canonicalJson(value.opt(it)) }
+        is Number, is Boolean -> value.toString()
+        else -> JSONObject.quote(value.toString())
     }
 
     private fun newDeviceToken(): String = ByteArray(32).also(SecureRandom()::nextBytes)
