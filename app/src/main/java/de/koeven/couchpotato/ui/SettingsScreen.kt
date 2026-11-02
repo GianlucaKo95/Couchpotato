@@ -427,22 +427,38 @@ private fun ContinueSection(vm: HomeViewModel, state: HomeState) {
 private fun CloudSyncSection(vm: HomeViewModel) {
     val scope = rememberCoroutineScope()
     var joinCode by remember { mutableStateOf("") }
-    var pairingCode by remember { mutableStateOf<String?>(null) }
+    var code by remember { mutableStateOf(vm.householdCode()) }
+    var linked by remember { mutableStateOf(vm.cloudLinked) }
+    var isMain by remember { mutableStateOf(vm.cloudIsMain) }
+    var shareIptv by remember { mutableStateOf(vm.shareIptvWithHousehold) }
     var status by remember { mutableStateOf(vm.cloudSyncStatus()) }
     var busy by remember { mutableStateOf(false) }
-    var withIptv by remember { mutableStateOf(false) }
+    var confirmLeave by remember { mutableStateOf(false) }
+    var confirmRenew by remember { mutableStateOf(false) }
+
+    fun act(block: suspend () -> String) {
+        scope.launch {
+            busy = true
+            status = "Einen Moment …"
+            status = try { block() } catch (e: Exception) { "Fehler: ${e.message ?: e.javaClass.simpleName}" }
+            code = vm.householdCode(); linked = vm.cloudLinked; isMain = vm.cloudIsMain
+            shareIptv = vm.shareIptvWithHousehold
+            busy = false
+        }
+    }
 
     SectionTitle(
-        "Geräte synchronisieren",
-        "Profile, Weiterschauen, Verlauf, Favoriten und Couchpotato-Einstellungen werden über Supabase geteilt. " +
-            "IPTV-Zugangsdaten, Eltern-PIN und TMDB-Schlüssel bleiben auf diesem Gerät.",
+        "Haushalt",
+        "Profile, Weiterschauen, Verlauf, Favoriten und Einstellungen auf allen Fire TVs gleich – mit einem " +
+            "Haushalts-Code, ohne Konto und ohne E-Mail. Alles wird auf dem Fire TV verschlüsselt, der Server sieht nur Datensalat.",
     )
     Text(status, color = if (status.startsWith("Fehler")) CpColors.Error else CpColors.Accent)
-    pairingCode?.let { code ->
+
+    if (linked && code != null) {
         // big and spaced, so it can be read from the sofa and typed on the other TV
-        Text("Gerätecode – 10 Minuten gültig", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted)
+        Text("Haushalts-Code – gilt dauerhaft, auf weiteren Fire TVs eingeben", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted)
         Text(
-            code.chunked(4).joinToString("  "),
+            code!!.replace("-", "  –  "),
             style = MaterialTheme.typography.displaySmall,
             fontWeight = FontWeight.Bold,
             color = CpColors.Text,
@@ -450,50 +466,61 @@ private fun CloudSyncSection(vm: HomeViewModel) {
                 .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
                 .padding(horizontal = 20.dp, vertical = 10.dp),
         )
-    }
-    SettingRow(
-        title = "IPTV-Zugang beim Koppeln mitgeben",
-        description = "Einmalig, verschlüsselt mit dem Gerätecode – liegt nicht dauerhaft in der Cloud",
-        value = if (withIptv) "ja" else "nein",
-    ) { withIptv = !withIptv }
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        PrimaryPill("Gerätecode anzeigen", enabled = !busy) {
-            scope.launch {
-                busy = true
-                status = try {
-                    pairingCode = vm.createCloudPairingCode(withIptv)
-                    "Code auf dem zweiten Gerät unter Synchronisierung eingeben." +
-                        if (withIptv) " Der IPTV-Zugang wird dabei einmalig verschlüsselt mitgegeben." else ""
-                } catch (e: Exception) {
-                    "Fehler: ${e.message ?: e.javaClass.simpleName}"
-                } finally { busy = false }
+        if (isMain) {
+            SettingRow(
+                title = "IPTV-Zugang im Haushalt teilen",
+                description = if (shareIptv) "Andere Fire TVs ohne Zugang übernehmen ihn – verschlüsselt, der Server kann ihn nicht lesen"
+                    else "Aus: Zugangsdaten bleiben nur auf diesem Fire TV",
+                value = if (shareIptv) "an" else "aus",
+            ) {
+                vm.shareIptvWithHousehold = !shareIptv
+                shareIptv = vm.shareIptvWithHousehold
+                act { vm.syncCloudNow() + if (shareIptv) " IPTV-Zugang wird geteilt." else " IPTV-Zugang wird nicht mehr geteilt." }
             }
         }
-        SecondaryPill("Jetzt synchronisieren", enabled = !busy) {
-            scope.launch {
-                busy = true
-                status = try { vm.syncCloudNow() }
-                catch (e: Exception) { "Fehler: ${e.message ?: e.javaClass.simpleName}" }
-                finally { busy = false }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PrimaryPill("Jetzt synchronisieren", enabled = !busy) { act { vm.syncCloudNow() } }
+            if (isMain) {
+                SecondaryPill(if (confirmRenew) "Wirklich? Alle müssen neu eingeben" else "Neuen Code erzeugen", enabled = !busy) {
+                    if (!confirmRenew) { confirmRenew = true; return@SecondaryPill }
+                    confirmRenew = false
+                    act { "Neuer Code: ${vm.renewHouseholdCode()} – der alte gilt nicht mehr." }
+                }
+            }
+            SecondaryPill(
+                when {
+                    confirmLeave && isMain -> "Wirklich? Löscht den Haushalt"
+                    confirmLeave -> "Wirklich verlassen?"
+                    isMain -> "Haushalt auflösen"
+                    else -> "Haushalt verlassen"
+                },
+                enabled = !busy,
+            ) {
+                if (!confirmLeave) { confirmLeave = true; return@SecondaryPill }
+                confirmLeave = false
+                act { vm.leaveHousehold() }
             }
         }
-    }
-    TextFieldButton(
-        label = "Gerätecode vom anderen Gerät",
-        value = joinCode,
-        hint = "12 Zeichen, z. B. 7KQ2MX9P4TRA",
-        onValueChange = { joinCode = it.filter { c -> c.isLetterOrDigit() }.take(16).uppercase() },
-    )
-    PrimaryPill("Mit diesem Gerät koppeln", enabled = !busy && joinCode.isNotBlank()) {
-        scope.launch {
-            busy = true
-            status = try {
-                val message = vm.joinCloudGroup(joinCode)
-                pairingCode = null
-                joinCode = ""
-                message
-            } catch (e: Exception) { "Fehler: ${e.message ?: e.javaClass.simpleName}" }
-            finally { busy = false }
+        Hint(
+            if (isMain) "Dieses Gerät ist das Hauptgerät. Wird ein Fire TV verkauft oder verliehen: „Neuen Code erzeugen“ – " +
+                "dann kommen nur Geräte rein, die den neuen Code kennen."
+            else "Den IPTV-Zugang teilt nur das Hauptgerät – wenn es dort eingeschaltet ist."
+        )
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PrimaryPill("Haushalt auf diesem Fire TV anlegen", enabled = !busy) {
+                act { "Haushalt angelegt. Code ${vm.createHousehold()} auf den anderen Fire TVs eingeben." }
+            }
+        }
+        Hint("Schon einen Haushalt? Dann hier den Code vom Hauptgerät eingeben – das Hauptgerät muss dafür nicht an sein.")
+        TextFieldButton(
+            label = "Haushalts-Code",
+            value = joinCode,
+            hint = "10 Zeichen, z. B. 7KQ2M-X9P4T",
+            onValueChange = { joinCode = it.filter { c -> c.isLetterOrDigit() }.take(10).uppercase() },
+        )
+        PrimaryPill("Beitreten", enabled = !busy && joinCode.length == 10) {
+            act { vm.joinHousehold(joinCode).also { joinCode = "" } }
         }
     }
 }
