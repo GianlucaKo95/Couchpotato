@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        de.koeven.couchpotato.data.CrashLog.install(this)   // first: so even a crash during start is recorded
         ImageGate.start(this)          // request brake + picture loader, before anything goes online
         applyConfigExtras(intent)
         setContent {
