@@ -196,12 +196,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cloudSyncStatus(): String = cloudSync.status()
 
-    suspend fun createCloudPairingCode(): String = cloudSync.createPairingCode()
+    /** [withIptv]: hand the IPTV login over once, encrypted (see CloudSync.createPairingCode). */
+    suspend fun createCloudPairingCode(withIptv: Boolean): String =
+        cloudSync.createPairingCode(if (withIptv) settings.config().takeIf { it.isValid } else null)
 
     suspend fun joinCloudGroup(code: String): String {
-        val message = cloudSync.join(code)
+        val result = cloudSync.join(code)
         reloadAfterCloudSync()
-        return message
+        val iptv = result.iptv ?: return result.message
+        applyLogin(iptv)
+        ensureIndex(force = false)
+        return result.message + " IPTV-Zugang übernommen (Server ${iptv.host ?: iptv.baseUrl}). " +
+            "Hinweis: Viele Anbieter erlauben nur 1–2 Geräte gleichzeitig."
     }
 
     suspend fun syncCloudNow(): String {
