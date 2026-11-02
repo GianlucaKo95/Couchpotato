@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import de.koeven.couchpotato.data.AppEntry
 import de.koeven.couchpotato.data.AppsRepository
 import de.koeven.couchpotato.data.CatalogCache
+import de.koeven.couchpotato.data.CloudSync
 import de.koeven.couchpotato.data.HomeRows
 import de.koeven.couchpotato.data.LiveCategory
 import de.koeven.couchpotato.data.LiveChannel
@@ -141,6 +142,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = SettingsStore(app)
     private var progress = ProgressStore(app)
     private var cache = CatalogCache(app)
+    private val cloudSync = CloudSync(app)
     private val watchNextCache = WatchNextCache(app)
     private val seriesCache = HashMap<Long, SeriesInfo>()
     private var history = WatchHistory(app)
@@ -192,6 +194,34 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun config(): XtreamConfig = settings.config()
 
+    fun cloudSyncStatus(): String = cloudSync.status()
+
+    suspend fun createCloudPairingCode(): String = cloudSync.createPairingCode()
+
+    suspend fun joinCloudGroup(code: String): String {
+        val message = cloudSync.join(code)
+        reloadAfterCloudSync()
+        return message
+    }
+
+    suspend fun syncCloudNow(): String {
+        val message = cloudSync.sync()
+        settings.cloudSyncAttemptAt = System.currentTimeMillis()
+        reloadAfterCloudSync()
+        return message
+    }
+
+    private suspend fun reloadAfterCloudSync() {
+        progress = ProgressStore(app)
+        history = WatchHistory(app)
+        cache = CatalogCache(app)
+        refreshProfiles()
+        _state.update { it.copy(hiddenCategories = effectiveHidden()) }
+        refreshLocal()
+        recomputeRows()
+        recomputeRecommendations()
+    }
+
     var loginAsLink: Boolean
         get() = settings.loginAsLink
         set(value) { settings.loginAsLink = value }
@@ -201,6 +231,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 refreshLocal()
                 recomputeRecommendations()
+                if (cloudSync.linked && System.currentTimeMillis() - settings.cloudSyncAttemptAt >= CLOUD_SYNC_MIN_GAP_MS) {
+                    settings.cloudSyncAttemptAt = System.currentTimeMillis()
+                    cloudSync.sync()
+                    reloadAfterCloudSync()
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1152,6 +1187,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // kept low on purpose: the provider locks the account after too many requests
         const val SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000L       // whole catalogue: once a day
         const val MIN_MANUAL_SYNC_GAP_MS = 10 * 60 * 1000L     // "jetzt abgleichen" not more often
+        const val CLOUD_SYNC_MIN_GAP_MS = 60 * 1000L
         const val EPG_MAX_AGE_MS = 30 * 60 * 1000L             // "Jetzt läuft": every 30 minutes …
         const val EPG_MAX_CHANNELS = 8                         // … for the first 8 favourites
         const val EPG_KEEP_MS = 2 * 60 * 60 * 1000L            // show stored titles after a reboot

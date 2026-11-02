@@ -69,6 +69,7 @@ private enum class Section(val label: String) {
     Home("Startbildschirm"),
     Live("Live-TV"),
     Continue("Weiterschauen"),
+    CloudSync("Synchronisierung"),
     About("Über Couchpotato"),
 }
 
@@ -87,11 +88,20 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
         )
     }
     var status by remember { mutableStateOf<String?>(null) }
+    var refocusSection by remember { mutableStateOf(false) }
     val navFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         delay(150)
         runCatching { navFocus.requestFocus() }
+    }
+
+    LaunchedEffect(refocusSection, section) {
+        if (refocusSection) {
+            delay(60)
+            runCatching { navFocus.requestFocus() }
+            refocusSection = false
+        }
     }
 
     M3Theme(
@@ -124,7 +134,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                             NavRow(
                                 label = s.label,
                                 selected = s == section,
-                                onClick = { section = s },
+                                onClick = { section = s; refocusSection = true },
                                 modifier = Modifier
                                     .onFocusChanged { if (it.isFocused) section = s }
                                     .then(if (s == section) Modifier.focusRequester(navFocus) else Modifier),
@@ -151,6 +161,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                         Section.Home -> HomeSection(vm, state) { status = it }
                         Section.Live -> LiveSection(vm, state)
                         Section.Continue -> ContinueSection(vm, state)
+                        Section.CloudSync -> CloudSyncSection(vm)
                         Section.Profiles -> ProfilesSection(vm, state)
                         Section.About -> AboutSection(state)
                     }
@@ -410,6 +421,63 @@ private fun ContinueSection(vm: HomeViewModel, state: HomeState) {
     }
 }
 
+
+@Composable
+private fun CloudSyncSection(vm: HomeViewModel) {
+    val scope = rememberCoroutineScope()
+    var joinCode by remember { mutableStateOf("") }
+    var pairingCode by remember { mutableStateOf<String?>(null) }
+    var status by remember { mutableStateOf(vm.cloudSyncStatus()) }
+    var busy by remember { mutableStateOf(false) }
+
+    SectionTitle(
+        "Geräte synchronisieren",
+        "Profile, Weiterschauen, Verlauf, Favoriten und Couchpotato-Einstellungen werden über Supabase geteilt. " +
+            "IPTV-Zugangsdaten, Eltern-PIN und TMDB-Schlüssel bleiben auf diesem Gerät.",
+    )
+    Text(status, color = if (status.startsWith("Fehler")) CpColors.Error else CpColors.Accent)
+    if (pairingCode != null) Hint("Gerätecode (10 Minuten gültig):\n$pairingCode")
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        PrimaryPill("Gerätecode anzeigen", enabled = !busy) {
+            scope.launch {
+                busy = true
+                status = try {
+                    pairingCode = vm.createCloudPairingCode()
+                    "Code auf dem zweiten Gerät unter Synchronisierung eingeben."
+                } catch (e: Exception) {
+                    "Fehler: ${e.message ?: e.javaClass.simpleName}"
+                } finally { busy = false }
+            }
+        }
+        SecondaryPill("Jetzt synchronisieren", enabled = !busy) {
+            scope.launch {
+                busy = true
+                status = try { vm.syncCloudNow() }
+                catch (e: Exception) { "Fehler: ${e.message ?: e.javaClass.simpleName}" }
+                finally { busy = false }
+            }
+        }
+    }
+    OutlinedTextField(
+        value = joinCode,
+        onValueChange = { joinCode = it.take(16).uppercase() },
+        singleLine = true,
+        label = { M3Text("Gerätecode eingeben") },
+        modifier = Modifier.fillMaxWidth(0.75f),
+    )
+    PrimaryPill("Mit diesem Gerät koppeln", enabled = !busy && joinCode.isNotBlank()) {
+        scope.launch {
+            busy = true
+            status = try {
+                val message = vm.joinCloudGroup(joinCode)
+                pairingCode = null
+                joinCode = ""
+                message
+            } catch (e: Exception) { "Fehler: ${e.message ?: e.javaClass.simpleName}" }
+            finally { busy = false }
+        }
+    }
+}
 
 @Composable
 private fun AboutSection(state: HomeState) {

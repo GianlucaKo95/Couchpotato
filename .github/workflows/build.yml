@@ -37,6 +37,8 @@ jobs:
         env:
           TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
           CP_KEYSTORE_PASSWORD: ${{ secrets.CP_KEYSTORE_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -o pipefail
           if [ -z "$TMDB_TOKEN" ]; then echo "::warning::TMDB_TOKEN secret not set - TMDB details off"; else echo "::notice::TMDB token present"; fi
@@ -59,6 +61,7 @@ jobs:
           path: couchpotato.apk
 
       - name: Publish as release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}

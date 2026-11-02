@@ -92,6 +92,7 @@ fun BrowseScreen(
     var showHidden by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<BrowseMenu?>(null) }
     var editing by remember { mutableStateOf(false) }
+    var refocusCategory by remember { mutableStateOf(false) }
     val selectedFocus = remember { FocusRequester() }
 
     val hiddenSet = state.hiddenCategories
@@ -156,6 +157,14 @@ fun BrowseScreen(
         if (categories != null) {
             delay(150)
             runCatching { selectedFocus.requestFocus() }
+        }
+    }
+
+    LaunchedEffect(refocusCategory, selectedId) {
+        if (refocusCategory) {
+            delay(60)
+            runCatching { selectedFocus.requestFocus() }
+            refocusCategory = false
         }
     }
 
@@ -229,7 +238,10 @@ fun BrowseScreen(
                             dimmed = hidden,
                             onClick = {
                                 if (editing) vm.setCategoriesHidden(kind, listOf(cat.id), !hidden, refresh = false)
-                                else selectedId = cat.id
+                                else {
+                                    selectedId = cat.id
+                                    refocusCategory = true
+                                }
                             },
                             onLongClick = { if (!editing && !kidMode) menu = BrowseMenu.Category(cat, hidden) },
                             modifier = Modifier
