@@ -251,6 +251,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 refreshLocal()
+                // the big catalogue (search, "Für dich") only after apps and "Weiterschauen" are on screen,
+                // so it doesn't compete with them for the stick's CPU after a reboot
+                ensureIndex(force = false)      // local; talks to the provider at most once a day
+                refreshEpg(force = false)
                 recomputeRecommendations()
                 if (cloudSync.linked && System.currentTimeMillis() - settings.cloudSyncAttemptAt >= CLOUD_SYNC_MIN_GAP_MS) {
                     settings.cloudSyncAttemptAt = System.currentTimeMillis()
@@ -266,10 +270,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 throw e
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message ?: "unerwarteter Fehler") }
+                ensureIndex(force = false)
             }
         }
-        ensureIndex(force = false)      // local; talks to the provider at most once a day
-        refreshEpg(force = false)
     }
 
     /** Titles started in IsiPro carry no cover: take name and cover from the local catalogue. */
@@ -289,6 +292,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             else allApps.filterNot { it.packageName in hidden }).distinctBy { it.packageName }
         )
         val labels = apps.associate { it.packageName to it.label }
+        // apps on screen right away – "Weiterschauen" from the other apps follows a moment later
+        if (_state.value.apps.isEmpty()) _state.update { it.copy(apps = apps, allApps = allApps.sortedBy { a -> a.label.lowercase() }) }
         val hiddenCw = settings.hiddenContinue()
         val cw = withContext(Dispatchers.IO) {
             val iptv = progress.continueWatching().map { ContinueItem.Iptv(enrich(it)) }
@@ -710,6 +715,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             indexEntries = searchIndex.load()
             categoriesByKind = withContext(Dispatchers.IO) { searchIndex.loadCategories() }
             setIndexStatus(indexSummary(emptyList()))
+        } else if (indexEntries != null) {
+            return      // already in memory: nothing changed, don't re-sort tens of thousands of titles on every return
         }
         recomputeRows()
         runSearch(searchQuery.value)

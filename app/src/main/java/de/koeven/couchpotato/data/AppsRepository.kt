@@ -28,17 +28,50 @@ object AppsRepository {
         return found.values.mapNotNull { ri -> runCatching {
             val ai = ri.activityInfo
             val updated = runCatching { pm.getPackageInfo(ai.packageName, 0).lastUpdateTime }.getOrDefault(0L)
-            cache[ai.packageName]?.takeIf { it.first == updated }?.second ?: run {
-                val banner = runCatching { ai.loadBanner(pm) ?: ai.applicationInfo.loadBanner(pm) }.getOrNull()
-                val icon = if (banner == null) runCatching { ri.loadIcon(pm) }.getOrNull() else null
-                AppEntry(
-                    packageName = ai.packageName,
-                    label = ri.loadLabel(pm).toString(),
-                    banner = banner?.let { runCatching { it.toBitmapKeepingRatio(480).asImageBitmap() }.getOrNull() },
-                    icon = icon?.let { runCatching { it.toBitmapKeepingRatio(192).asImageBitmap() }.getOrNull() },
-                ).also { cache[ai.packageName] = updated to it }
-            }
+            cache[ai.packageName]?.takeIf { it.first == updated }?.second
+                ?: fromDisk(context, ai.packageName, updated, ri)
+                ?: run {
+                    val banner = runCatching { ai.loadBanner(pm) ?: ai.applicationInfo.loadBanner(pm) }.getOrNull()
+                    val icon = if (banner == null) runCatching { ri.loadIcon(pm) }.getOrNull() else null
+                    val bannerBmp = banner?.let { runCatching { it.toBitmapKeepingRatio(480) }.getOrNull() }
+                    val iconBmp = icon?.let { runCatching { it.toBitmapKeepingRatio(192) }.getOrNull() }
+                    toDisk(context, ai.packageName, updated, bannerBmp, iconBmp)
+                    AppEntry(
+                        packageName = ai.packageName,
+                        label = ri.loadLabel(pm).toString(),
+                        banner = bannerBmp?.asImageBitmap(),
+                        icon = iconBmp?.asImageBitmap(),
+                    )
+                }.also { cache[ai.packageName] = updated to it }
         }.getOrNull() }
+    }
+
+    /*
+     * After a reboot of the stick, rendering every app banner from the other apps' resources is the
+     * slowest part of showing the home screen. The rendered bitmaps are kept on disk, per app version.
+     */
+    private fun diskFile(context: Context, pkg: String, updated: Long, kind: String) =
+        java.io.File(context.cacheDir, "appart").apply { mkdirs() }.resolve("${pkg}_${updated}_$kind.png")
+
+    private fun fromDisk(context: Context, pkg: String, updated: Long, ri: ResolveInfo): AppEntry? = runCatching {
+        val b = diskFile(context, pkg, updated, "banner")
+        val i = diskFile(context, pkg, updated, "icon")
+        if (!b.exists() && !i.exists()) return null
+        AppEntry(
+            packageName = pkg,
+            label = ri.loadLabel(context.packageManager).toString(),
+            banner = if (b.exists()) android.graphics.BitmapFactory.decodeFile(b.path)?.asImageBitmap() else null,
+            icon = if (i.exists()) android.graphics.BitmapFactory.decodeFile(i.path)?.asImageBitmap() else null,
+        ).takeIf { it.banner != null || it.icon != null }
+    }.getOrNull()
+
+    private fun toDisk(context: Context, pkg: String, updated: Long, banner: Bitmap?, icon: Bitmap?) {
+        runCatching {
+            // older versions of this app's pictures are no longer needed
+            java.io.File(context.cacheDir, "appart").listFiles()?.filter { it.name.startsWith("${pkg}_") }?.forEach { it.delete() }
+            banner?.let { bmp -> diskFile(context, pkg, updated, "banner").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+            icon?.let { bmp -> diskFile(context, pkg, updated, "icon").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+        }
     }
 
     /**
