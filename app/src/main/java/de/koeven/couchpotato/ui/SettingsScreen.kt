@@ -525,6 +525,54 @@ private fun CloudSyncSection(vm: HomeViewModel) {
     }
 }
 
+/** In-app update: look for a newer build, download it, let Android install it. */
+@Composable
+private fun UpdateRow() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var release by remember { mutableStateOf(de.koeven.couchpotato.data.Updater.known(context)) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val updater = de.koeven.couchpotato.data.Updater
+    if (!updater.configured) return
+    val r = release
+    SettingRow(
+        title = if (r != null) "Update verfügbar: Build ${r.build}" else "Updates",
+        description = status ?: if (r != null) "Du hast Build ${updater.currentBuild}. Deine Daten bleiben beim Update erhalten."
+            else "Build ${updater.currentBuild} – sucht alle 6 Stunden selbst nach neuen Versionen",
+        value = when {
+            busy -> "…"
+            r == null -> "Jetzt suchen"
+            !updater.canInstall(context) -> "Installieren erlauben"
+            else -> "Installieren"
+        },
+    ) {
+        if (busy) return@SettingRow
+        when {
+            r == null -> scope.launch {
+                busy = true
+                status = try {
+                    release = updater.check(context, force = true)
+                    if (release == null) "Couchpotato ist aktuell." else null
+                } catch (e: Exception) { "Fehler: ${e.message ?: "Update-Server nicht erreichbar"}" }
+                busy = false
+            }
+            !updater.canInstall(context) -> {
+                status = "Bei Couchpotato „Apps unbekannter Herkunft“ einschalten, dann zurück und noch einmal OK."
+                updater.openInstallPermission(context)
+            }
+            else -> scope.launch {
+                busy = true
+                status = try {
+                    updater.install(context, r) { pct -> status = "Lade herunter … $pct %" }
+                    "Gleich fragt Fire TV, ob installiert werden soll – mit „Installieren“ bestätigen."
+                } catch (e: Exception) { "Fehler: ${e.message ?: "Update fehlgeschlagen"}" }
+                busy = false
+            }
+        }
+    }
+}
+
 @Composable
 private fun AboutSection(state: HomeState) {
     val context = LocalContext.current
@@ -532,6 +580,7 @@ private fun AboutSection(state: HomeState) {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
     SectionTitle("Über Couchpotato", "Dein eigener Startbildschirm für Fire TV – ohne Werbung.")
+    UpdateRow()
     Hint(
         "Film- und Serieninfos: Dieses Produkt nutzt die TMDB-API, ist aber nicht von TMDB " +
             "unterstützt oder zertifiziert (themoviedb.org)."
@@ -809,6 +858,22 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                         val steps = de.koeven.couchpotato.data.Profile.FSK_STEPS
                         val next = steps[(steps.indexOf(p.maxFsk) + 1) % steps.size]
                         vm.updateProfile(p.copy(maxFsk = next))
+                    }
+                    SettingRow(
+                        title = "Bildschirmzeit pro Tag",
+                        description = "Zählt Filme, Serien und Apps wie Netflix – ${vm.screenTimeInfo(p)}. Danach nur mit Eltern-PIN weiter.",
+                        value = if (p.dailyMinutes <= 0) "unbegrenzt" else "${p.dailyMinutes} Min.",
+                    ) {
+                        val steps = listOf(0, 30, 45, 60, 90, 120, 180)
+                        vm.updateProfile(p.copy(dailyMinutes = steps[(steps.indexOf(p.dailyMinutes) + 1).mod(steps.size)]))
+                    }
+                    SettingRow(
+                        title = "Schlafenszeit",
+                        description = "Ab dieser Uhrzeit bis 6 Uhr ist das Kinderprofil gesperrt",
+                        value = if (p.bedtime < 0) "aus" else "${de.koeven.couchpotato.data.ScreenTime.clock(p.bedtime)} Uhr",
+                    ) {
+                        val steps = listOf(-1) + (17 * 60..21 * 60 step 30).toList()
+                        vm.updateProfile(p.copy(bedtime = steps[(steps.indexOf(p.bedtime) + 1).mod(steps.size)]))
                     }
                 }
                 SettingRow(title = "Tier", value = animalName(p)) {

@@ -93,6 +93,7 @@ object WatchNextSource {
         val intent = p.intentUri?.let { runCatching { Intent.parseUri(it, Intent.URI_INTENT_SCHEME) }.getOrNull() }
         if (intent != null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
             if (runCatching { context.startActivity(intent) }.isSuccess) return true
         }
         return p.packageName?.let { AppsRepository.launch(context, it) } ?: false

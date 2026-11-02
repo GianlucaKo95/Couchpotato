@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        de.koeven.couchpotato.data.ScreenTime.backInLauncher(this)   // kids: book the time spent in apps/player
         vm.onResume()
     }
 
@@ -161,6 +162,16 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
                 }
             },
         )
+        return
+    }
+
+    // kids: screen time used up or bedtime – checked every minute while the launcher is open
+    LaunchedEffect(state.profile.id) {
+        while (true) { vm.checkScreenTime(); kotlinx.coroutines.delay(60_000) }
+    }
+    if (state.profile.kid && state.screenLock != null) {
+        BackHandler { }
+        ScreenTimeLock(vm, state.screenLock!!, state.hasPin)
         return
     }
 

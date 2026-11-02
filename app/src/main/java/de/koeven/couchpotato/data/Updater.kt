@@ -1,0 +1,145 @@
+package de.koeven.couchpotato.data
+
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageInstaller
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
+import de.koeven.couchpotato.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.MessageDigest
+
+/**
+ * In-app updates: every build from main is stored by GitHub Actions in Supabase Storage.
+ * Couchpotato looks there at most every 6 hours, downloads the APK, checks its SHA-256 and
+ * hands it to Android's installer – no adb needed any more.
+ */
+object Updater {
+    data class Release(val build: Int, val url: String, val size: Long, val sha256: String)
+
+    private const val PREFS = "updater"
+    private const val CHECK_GAP_MS = 6 * 3600_000L
+    private const val BUCKET = "couchpotato-updates"
+
+    val configured: Boolean get() = BuildConfig.SUPABASE_URL.isNotBlank()
+    val currentBuild: Int get() = BuildConfig.VERSION_CODE
+
+    private fun prefs(c: Context) = c.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun base() = "${BuildConfig.SUPABASE_URL}/storage/v1/object/public/$BUCKET"
+
+    /** Last known newer release (from the last check), or null. */
+    fun known(c: Context): Release? = prefs(c).getString("latest", null)?.let { parse(it) }?.takeIf { it.build > currentBuild }
+
+    /** Looks for a newer build. [force] ignores the 6-hour gap (button in the settings). */
+    suspend fun check(c: Context, force: Boolean = false): Release? = withContext(Dispatchers.IO) {
+        if (!configured) return@withContext null
+        val p = prefs(c)
+        if (!force && System.currentTimeMillis() - p.getLong("checkedAt", 0L) < CHECK_GAP_MS) return@withContext known(c)
+        p.edit().putLong("checkedAt", System.currentTimeMillis()).apply()
+        val text = get("${base()}/latest.json?t=${System.currentTimeMillis() / 60_000}")
+        p.edit().putString("latest", text).apply()
+        parse(text)?.takeIf { it.build > currentBuild }
+    }
+
+    private fun parse(text: String): Release? = runCatching {
+        val o = JSONObject(text)
+        Release(o.getInt("build"), "${base()}/${o.getString("path")}", o.optLong("size"), o.getString("sha256"))
+    }.getOrNull()
+
+    /** May Couchpotato install apps? (Fire TV: Einstellungen → Mein Fire TV → Entwickleroptionen.) */
+    fun canInstall(c: Context): Boolean =
+        Build.VERSION.SDK_INT < 26 || c.packageManager.canRequestPackageInstalls()
+
+    fun openInstallPermission(c: Context) {
+        runCatching {
+            c.startActivity(
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${c.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure {
+            runCatching { c.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
+    }
+
+    /** Downloads, verifies and starts the installation (Android then asks once to confirm). */
+    suspend fun install(c: Context, r: Release, onProgress: (Int) -> Unit = {}) = withContext(Dispatchers.IO) {
+        val file = File(c.cacheDir, "update.apk")
+        val conn = URL(r.url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 15_000; conn.readTimeout = 30_000
+        val digest = MessageDigest.getInstance("SHA-256")
+        try {
+            if (conn.responseCode !in 200..299) throw IOException("Download fehlgeschlagen (HTTP ${conn.responseCode})")
+            val total = conn.contentLengthLong.takeIf { it > 0 } ?: r.size
+            conn.inputStream.use { input ->
+                file.outputStream().use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    var done = 0L
+                    var lastPct = -1
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n); digest.update(buf, 0, n)
+                        done += n
+                        val pct = if (total > 0) (done * 100 / total).toInt() else 0
+                        if (pct != lastPct) { lastPct = pct; withContext(Dispatchers.Main) { onProgress(pct) } }
+                    }
+                }
+            }
+        } finally { conn.disconnect() }
+        val hash = digest.digest().joinToString("") { "%02x".format(it) }
+        if (!hash.equals(r.sha256, ignoreCase = true)) { file.delete(); throw IOException("Download beschädigt – bitte noch einmal") }
+
+        val installer = c.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        params.setAppPackageName(c.packageName)
+        val id = installer.createSession(params)
+        installer.openSession(id).use { session ->
+            session.openWrite("couchpotato.apk", 0, file.length()).use { out ->
+                file.inputStream().use { it.copyTo(out) }
+                session.fsync(out)
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+            val pi = PendingIntent.getBroadcast(c, id, Intent(c, UpdateResultReceiver::class.java), flags)
+            session.commit(pi.intentSender)
+        }
+        file.delete()
+    }
+
+    private fun get(url: String): String {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 15_000; conn.readTimeout = 20_000
+        try {
+            if (conn.responseCode !in 200..299) throw IOException("Update-Server antwortet mit HTTP ${conn.responseCode}")
+            return conn.inputStream.bufferedReader().use { it.readText() }
+        } finally { conn.disconnect() }
+    }
+}
+
+/** Android's installer reports back here; the confirmation dialog is started from here. */
+class UpdateResultReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                @Suppress("DEPRECATION")
+                val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
+                context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            PackageInstaller.STATUS_SUCCESS -> Unit   // the new version starts as the launcher
+            else -> Toast.makeText(
+                context,
+                "Update nicht installiert: ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "abgebrochen"}",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+}
