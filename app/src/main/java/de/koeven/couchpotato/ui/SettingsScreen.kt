@@ -88,7 +88,8 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
         )
     }
     var status by remember { mutableStateOf<String?>(null) }
-    var refocusSection by remember { mutableStateOf(false) }
+    var jumpToContent by remember { mutableStateOf(false) }   // OK on a section: focus goes to its settings
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val navFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -96,11 +97,11 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
         runCatching { navFocus.requestFocus() }
     }
 
-    LaunchedEffect(refocusSection, section) {
-        if (refocusSection) {
-            delay(60)
-            runCatching { navFocus.requestFocus() }
-            refocusSection = false
+    LaunchedEffect(jumpToContent, section) {
+        if (jumpToContent) {
+            delay(80)
+            focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Right)
+            jumpToContent = false
         }
     }
 
@@ -134,7 +135,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                             NavRow(
                                 label = s.label,
                                 selected = s == section,
-                                onClick = { section = s; refocusSection = true },
+                                onClick = { section = s; jumpToContent = true },
                                 modifier = Modifier
                                     .onFocusChanged { if (it.isFocused) section = s }
                                     .then(if (s == section) Modifier.focusRequester(navFocus) else Modifier),
