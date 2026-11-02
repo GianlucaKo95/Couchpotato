@@ -440,7 +440,7 @@ private fun CloudSyncSection(vm: HomeViewModel) {
         scope.launch {
             busy = true
             status = "Einen Moment …"
-            status = try { block() } catch (e: Exception) { "Fehler: ${e.message ?: e.javaClass.simpleName}" }
+            status = try { block() } catch (e: Exception) { "Fehler: ${e.message ?: "unerwarteter Fehler"}" }
             code = vm.householdCode(); linked = vm.cloudLinked; isMain = vm.cloudIsMain
             shareIptv = vm.shareIptvWithHousehold
             busy = false
