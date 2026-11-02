@@ -62,7 +62,7 @@ class SettingsStore(context: Context) {
     fun favorites(): List<LiveChannel> = runCatching {
         JSONArray(p.getString(mine("liveFavs"), null) ?: "[]").mapObjects {
             LiveChannel(it.getLong("id"), it.str("name") ?: "", it.str("logo"), it.str("cat"))
-        }
+        }.distinctBy { it.id }
     }.getOrDefault(emptyList())
 
     fun setFavorites(list: List<LiveChannel>) {

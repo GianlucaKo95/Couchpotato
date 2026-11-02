@@ -431,6 +431,26 @@ private fun AboutSection(state: HomeState) {
             "${XtreamClient.MAX_PER_HOUR} pro Stunde (Hintergrund 20). Antwortet der Anbieter mit einer Sperre, " +
             "pausiert Couchpotato 15 Minuten – auch über einen Neustart hinweg."
     )
+    // last crash (if any) – the reason, readable on the TV
+    var crash by remember { mutableStateOf(de.koeven.couchpotato.data.CrashLog.last(context)) }
+    crash?.let { report ->
+        Text(
+            "Letzter Absturz",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = CpColors.Error,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        Text(
+            report.lineSequence().take(14).joinToString("\n"),
+            style = MaterialTheme.typography.labelSmall,
+            color = CpColors.TextMuted,
+        )
+        SettingRow(title = "Absturzbericht löschen", value = "Löschen") {
+            de.koeven.couchpotato.data.CrashLog.clear(context)
+            crash = null
+        }
+    }
 }
 
 // =====================================================================================

@@ -257,9 +257,9 @@ class SearchIndex(context: Context) {
 
             return SearchResults(
                 query = query,
-                movies = hits.filter { it.kind == SearchEntry.KIND_MOVIE }.take(limit),
-                series = hits.filter { it.kind == SearchEntry.KIND_SERIES }.take(limit),
-                live = hits.filter { it.kind == SearchEntry.KIND_LIVE }.take(limit),
+                movies = hits.filter { it.kind == SearchEntry.KIND_MOVIE }.distinctBy { it.id }.take(limit),
+                series = hits.filter { it.kind == SearchEntry.KIND_SERIES }.distinctBy { it.id }.take(limit),
+                live = hits.filter { it.kind == SearchEntry.KIND_LIVE }.distinctBy { it.id }.take(limit),
             )
         }
 

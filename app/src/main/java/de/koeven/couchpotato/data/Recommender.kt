@@ -74,7 +74,7 @@ object Recommender {
             it.kind != SearchEntry.KIND_LIVE &&
                 it.categoryKey !in hidden &&
                 "${it.kind}:${it.id}" !in history
-        }
+        }.distinctBy { "${it.kind}:${it.id}" }
         val anyRatings = candidates.any { it.rating > 0f }
 
         fun score(e: SearchEntry): Double {
@@ -114,6 +114,7 @@ object Recommender {
         val g = genres(of.genre)
         return entries.asSequence()
             .filter { it.kind == of.kind && it.id != of.id && it.categoryKey !in hidden }
+            .distinctBy { it.id }
             .map { e ->
                 val shared = genres(e.genre).count { it in g }
                 val sameCat = if (e.categoryKey == of.categoryKey) 1 else 0
