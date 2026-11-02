@@ -17,6 +17,11 @@ object Names {
     private val SEPARATORS = charArrayOf(' ', '-', ':', '|', '·', '–', '—', '_')
 
     fun display(raw: String): String {
+        // fast path for the catalogue load: "Der Pate" can't carry a tag – only "|..", "[..", "(.." or "DE…" can
+        val t = raw.trimStart()
+        if (t.length < 3 || (t[0] !in "|[(" && !(t[0].isUpperCase() || t[0].isDigit()) ) ||
+            (t[0] !in "|[(" && t[1].isLowerCase())
+        ) return raw.trim()
         var s = raw
         while (true) {
             val m = LEADING.find(s) ?: break

@@ -265,7 +265,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(error = e.message ?: e.javaClass.simpleName) }
+                _state.update { it.copy(error = e.message ?: "unerwarteter Fehler") }
             }
         }
         ensureIndex(force = false)      // local; talks to the provider at most once a day
@@ -389,7 +389,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            "Fehler: ${e.message ?: e.javaClass.simpleName}"
+            "Fehler: ${e.message ?: "unerwarteter Fehler"}"
         }
     }
 
@@ -650,8 +650,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            _state.update { it.copy(loading = false, error = e.message ?: e.javaClass.simpleName) }
-            setIndexStatus("Lokale Daten konnten nicht geladen werden: ${e.message ?: e.javaClass.simpleName}")
+            _state.update { it.copy(loading = false, error = e.message ?: "unerwarteter Fehler") }
+            setIndexStatus("Lokale Daten konnten nicht geladen werden: ${e.message ?: "unerwarteter Fehler"}")
             return
         }
         val cfg = settings.config()
@@ -690,8 +690,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             throw e
         } catch (e: Exception) {
             settings.syncFailures += 1
-            _state.update { it.copy(loading = false, error = e.message ?: e.javaClass.simpleName) }
-            setIndexStatus("Katalog konnte nicht abgeglichen werden: ${e.message ?: e.javaClass.simpleName}")
+            _state.update { it.copy(loading = false, error = e.message ?: "unerwarteter Fehler") }
+            setIndexStatus("Katalog konnte nicht abgeglichen werden: ${e.message ?: "unerwarteter Fehler"}")
         } catch (e: OutOfMemoryError) {
             // a very large catalogue must not take the whole launcher down
             indexEntries = null
