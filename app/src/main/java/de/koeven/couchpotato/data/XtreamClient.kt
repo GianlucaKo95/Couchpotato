@@ -403,7 +403,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
             plot = info?.str("plot"),
             genre = info?.str("genre"),
             year = (info?.str("releaseDate") ?: info?.str("release_date") ?: info?.str("year"))?.take(4)?.takeIf { y -> y.all { it.isDigit() } },
-            episodes = episodes.sortedWith(compareBy({ it.season }, { it.number })),
+            episodes = episodes.distinctBy { it.id }.sortedWith(compareBy({ it.season }, { it.number })),
             cast = info?.str("cast"),
             director = info?.str("director"),
             rating = (info?.str("rating")?.replace(',', '.')?.toFloatOrNull() ?: 0f).coerceIn(0f, 10f),

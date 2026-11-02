@@ -139,7 +139,7 @@ class Tmdb(context: Context) {
                     )
                 }
             }.awaitAll()
-        }.filter { it.title.isNotBlank() && it.providers.isNotEmpty() }
+        }.filter { it.title.isNotBlank() && it.providers.isNotEmpty() }.distinctBy { "${it.tv}${it.tmdbId}" }
         synchronized(searchCache) {
             if (searchCache.size > 40) searchCache.remove(searchCache.keys.first())
             searchCache[q.lowercase()] = hits

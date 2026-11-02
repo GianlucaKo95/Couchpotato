@@ -183,8 +183,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         cache.load()?.let { c ->
             _state.update {
                 it.copy(
-                    movies = c.movies.filterNot { m -> "m:${m.categoryId ?: ""}" in hidden },
-                    series = c.series.filterNot { s -> "s:${s.categoryId ?: ""}" in hidden },
+                    movies = c.movies.filterNot { m -> "m:${m.categoryId ?: ""}" in hidden }.distinctBy { it.id },
+                    series = c.series.filterNot { s -> "s:${s.categoryId ?: ""}" in hidden }.distinctBy { it.id },
                 )
             }
         }
@@ -224,8 +224,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val kidApps = Profiles.kidApps(app)
         val allApps = withContext(Dispatchers.IO) { AppsRepository.load(getApplication()) }
         val apps = sortApps(
-            if (kid) allApps.filter { it.packageName in kidApps }      // kids: only released apps
-            else allApps.filterNot { it.packageName in hidden }
+            (if (kid) allApps.filter { it.packageName in kidApps }      // kids: only released apps
+            else allApps.filterNot { it.packageName in hidden }).distinctBy { it.packageName }
         )
         val labels = apps.associate { it.packageName to it.label }
         val hiddenCw = settings.hiddenContinue()
@@ -244,6 +244,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 .map { ContinueItem.External(it, it.packageName?.let { pkg -> labels[pkg] }) }
             (if (kid) iptv else iptv + external + media + tiles)
                 .filterNot { it.key in hiddenCw }
+                .distinctBy { it.key }
                 .sortedByDescending { it.sortTime }
                 .take(40)
         }
@@ -377,7 +378,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun allCategories(kind: Char): List<LiveCategory> {
         val entries = catalog()
-        categoriesByKind[kind]?.takeIf { it.isNotEmpty() }?.let { return it }
+        categoriesByKind[kind]?.takeIf { it.isNotEmpty() }?.let { return it.distinctBy { c -> c.id } }
         // category names missing (that request failed): use the ids from the titles
         return entries.asSequence().filter { it.kind == kind }.mapNotNull { it.categoryId }.distinct()
             .map { LiveCategory(it, "Kategorie $it") }.toList()
@@ -393,17 +394,20 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         catalog().filter { it.kind == SearchEntry.KIND_MOVIE && it.categoryId == categoryId }
             .sortedByDescending { it.added }
             .map { VodItem(it.id, it.name, it.image, it.added, it.ext, it.categoryId) }
+            .distinctBy { it.id }
     }
 
     suspend fun seriesIn(categoryId: String): List<SeriesItem> = withContext(Dispatchers.Default) {
         catalog().filter { it.kind == SearchEntry.KIND_SERIES && it.categoryId == categoryId }
             .sortedByDescending { it.added }
             .map { SeriesItem(it.id, it.name, it.image, it.added, it.categoryId) }
+            .distinctBy { it.id }
     }
 
     suspend fun liveChannels(categoryId: String): List<LiveChannel> = withContext(Dispatchers.Default) {
         catalog().filter { it.kind == SearchEntry.KIND_LIVE && it.categoryId == categoryId }
             .map { LiveChannel(it.id, it.name, it.image, it.categoryId) }
+            .distinctBy { it.id }
     }
 
     fun setCategoryHidden(kind: Char, categoryId: String, hidden: Boolean) =
@@ -627,6 +631,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             settings.syncFailures += 1
             _state.update { it.copy(loading = false, error = e.message ?: e.javaClass.simpleName) }
             setIndexStatus("Katalog konnte nicht abgeglichen werden: ${e.message ?: e.javaClass.simpleName}")
+        } catch (e: OutOfMemoryError) {
+            // a very large catalogue must not take the whole launcher down
+            indexEntries = null
+            System.gc()
+            settings.syncFailures += 1
+            _state.update { it.copy(loading = false, error = "Zu wenig Speicher für den Katalog") }
+            setIndexStatus("Katalog zu groß für den Speicher – bitte Kategorien ausblenden.")
         } finally {
             _state.update { it.copy(syncInfo = syncInfo(), imageInfo = imageInfo()) }
         }
@@ -652,12 +663,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val m = entries.asSequence()
                 .filter { it.kind == SearchEntry.KIND_MOVIE && it.categoryKey !in hidden }
                 .sortedByDescending { it.added }
+                .distinctBy { it.id }   // providers often list a title in two categories (e.g. "Neu" + genre)
                 .take(ROW_SIZE)
                 .map { VodItem(it.id, it.name, it.image, it.added, it.ext, it.categoryId) }
                 .toList()
             val sr = entries.asSequence()
                 .filter { it.kind == SearchEntry.KIND_SERIES && it.categoryKey !in hidden }
                 .sortedByDescending { it.added }
+                .distinctBy { it.id }   // providers often list a title in two categories (e.g. "Neu" + genre)
                 .take(ROW_SIZE)
                 .map { SeriesItem(it.id, it.name, it.image, it.added, it.categoryId) }
                 .toList()
@@ -806,6 +819,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             entries.asSequence()
                 .filter { it.kind == kind && it.categoryKey !in hidden && (categoryId == null || it.categoryId == categoryId) }
                 .sortedByDescending { it.added }
+                .distinctBy { it.id }
                 .take(limit)
                 .toList()
         }
