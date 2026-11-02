@@ -196,25 +196,40 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cloudSyncStatus(): String = cloudSync.status()
 
-    /** [withIptv]: hand the IPTV login over once, encrypted (see CloudSync.createPairingCode). */
-    suspend fun createCloudPairingCode(withIptv: Boolean): String =
-        cloudSync.createPairingCode(if (withIptv) settings.config().takeIf { it.isValid } else null)
+    val cloudLinked: Boolean get() = cloudSync.linked
+    val cloudIsMain: Boolean get() = cloudSync.isMain
+    fun householdCode(): String? = cloudSync.householdCode()
+    var shareIptvWithHousehold: Boolean
+        get() = cloudSync.shareIptv
+        set(value) { cloudSync.shareIptv = value }
 
-    suspend fun joinCloudGroup(code: String): String {
+    suspend fun createHousehold(): String = cloudSync.createHousehold()
+
+    suspend fun joinHousehold(code: String): String {
         val result = cloudSync.join(code)
         reloadAfterCloudSync()
-        val iptv = result.iptv ?: return result.message
-        applyLogin(iptv)
-        ensureIndex(force = false)
-        return result.message + " IPTV-Zugang übernommen (Server ${iptv.host ?: iptv.baseUrl}). " +
-            "Hinweis: Viele Anbieter erlauben nur 1–2 Geräte gleichzeitig."
+        return result.message + takeSharedLogin(result.iptv, always = true)
     }
 
     suspend fun syncCloudNow(): String {
-        val message = cloudSync.sync()
+        val result = cloudSync.sync()
         settings.cloudSyncAttemptAt = System.currentTimeMillis()
         reloadAfterCloudSync()
-        return message
+        return result.message + takeSharedLogin(result.iptv, always = false)
+    }
+
+    suspend fun renewHouseholdCode(): String = cloudSync.renewCode()
+
+    suspend fun leaveHousehold(): String = cloudSync.leave()
+
+    /** The main TV shares its IPTV login (only if switched on there): use it here when this TV has none. */
+    private suspend fun takeSharedLogin(iptv: org.json.JSONObject?, always: Boolean): String {
+        val cfg = cloudSync.iptvConfig(iptv) ?: return ""
+        if (!always && settings.config().isValid) return ""
+        if (cfg == settings.config()) return ""
+        applyLogin(cfg)
+        ensureIndex(force = false)
+        return " IPTV-Zugang vom Hauptgerät übernommen. Hinweis: Viele Anbieter erlauben nur 1–2 Geräte gleichzeitig."
     }
 
     private suspend fun reloadAfterCloudSync() {
@@ -241,8 +256,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     settings.cloudSyncAttemptAt = System.currentTimeMillis()
                     // automatic sync in the background: if the cloud can't be reached, just try again later –
                     // it must not show up as an IPTV error on the home screen
-                    val synced = runCatching { cloudSync.sync() }.isSuccess
-                    if (synced) reloadAfterCloudSync()
+                    val synced = runCatching { cloudSync.sync() }.getOrNull()
+                    if (synced != null) {
+                        reloadAfterCloudSync()
+                        runCatching { takeSharedLogin(synced.iptv, always = false) }
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e

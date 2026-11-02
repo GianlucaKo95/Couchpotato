@@ -19,125 +19,191 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.PBEKeySpec
+import javax.crypto.spec.SecretKeySpec
+import javax.crypto.SecretKeyFactory
+import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
-/** Cloud sync over a Supabase Edge Function. The service-role key never leaves the server. */
+/**
+ * Household sync over a Supabase Edge Function – end-to-end encrypted.
+ *
+ * The main TV invents a 10-character household code. From it, each TV derives (slow PBKDF2) two
+ * independent keys: an access key (the server keeps only its SHA-256 hash, to find the household)
+ * and an encryption key that never leaves the TVs. Everything in the cloud is one AES-256-GCM blob,
+ * so the server can't read profiles, progress or – if shared at all – the IPTV login.
+ */
 class CloudSync(context: Context) {
     private val app = context.applicationContext
     private val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private val secure = SecureSyncToken(app, prefs)
+    private val secure = SecureStore(app, prefs)
+
+    init {
+        // pairing of the earlier (not end-to-end encrypted) sync: forget it, a household code replaces it
+        if (prefs.contains("groupId")) prefs.edit().clear().apply()
+    }
 
     val configured: Boolean get() = BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank()
-    val linked: Boolean get() = prefs.getString("groupId", null) != null && secure.read() != null
+    val linked: Boolean get() = secure.read("keys") != null && secure.read("code") != null
+    /** The TV that created the household: only it decides about the IPTV login and can renew the code. */
+    val isMain: Boolean get() = linked && prefs.getBoolean("main", false)
+    var shareIptv: Boolean
+        get() = prefs.getBoolean("shareIptv", false)
+        set(value) = prefs.edit().putBoolean("shareIptv", value).apply()
+
+    /** "7KQ2M-X9P4T", or null when not part of a household. */
+    fun householdCode(): String? = secure.read("code")?.let { "${it.take(5)}-${it.drop(5)}" }
 
     fun status(): String = when {
         !configured -> "Supabase ist im Build noch nicht konfiguriert."
-        linked -> "Mit der Couchpotato-Cloud verbunden."
-        else -> "Noch nicht mit einem anderen Gerät gekoppelt."
+        isMain -> "Hauptgerät des Haushalts – Ende-zu-Ende-verschlüsselt."
+        linked -> "Mit dem Haushalt verbunden – Ende-zu-Ende-verschlüsselt."
+        else -> "Noch in keinem Haushalt."
     }
 
-    /**
-     * New pairing code. With [iptv], the IPTV login is handed over ONCE: encrypted here with a key
-     * derived from the code (the server only knows the code's hash), deleted on the server as soon as
-     * the other TV has picked it up, and gone after 10 minutes at the latest.
-     */
-    suspend fun createPairingCode(iptv: XtreamConfig? = null): String = withContext(Dispatchers.IO) {
+    /** Result of a sync or join – with the IPTV login if the main TV shares it and this TV needs it. */
+    data class Result(val message: String, val iptv: XtreamConfig?)
+
+    /** This TV becomes the main device of a new household. Returns the code to type on the other TVs. */
+    suspend fun createHousehold(): String = withContext(Dispatchers.IO) {
         requireConfigured()
-        if (linked) sync()
-        val token = secure.read() ?: newDeviceToken()
-        val result = call("create", token, JSONObject())
-        prefs.edit().putString("groupId", result.getString("group_id")).apply()
-        secure.write(token)
-        val local = snapshot()
-        val pushed = call("push", token, JSONObject().put("group_id", result.getString("group_id")).put("snapshot", local))
-        saveSyncMark(local, pushed.optLong("updated_at", System.currentTimeMillis()))
-        val code = result.getString("code")
-        if (iptv != null && iptv.isValid) {
-            val groupId = result.getString("group_id")
-            val plain = JSONObject().put("url", iptv.baseUrl).put("user", iptv.user).put("pass", iptv.pass).toString()
-            call("stash", token, JSONObject()
-                .put("group_id", groupId)
-                .put("code_hash", sha256Hex(code))
-                .put("blob", HandOver.encrypt(plain, code, groupId)))
-        }
-        code
+        if (linked) throw IOException("Dieses Gerät ist schon in einem Haushalt.")
+        val code = newCode()
+        val keys = HouseholdKeys.derive(code)
+        val snap = withIptv(snapshot(), null)
+        val res = call("create", JSONObject().put("auth", keys.authHex).put("blob", keys.seal(snap)))
+        secure.write("code", code)
+        secure.write("keys", keys.encoded())
+        prefs.edit().putBoolean("main", true).putLong("version", res.getLong("version")).apply()
+        saveSyncMark(snap, System.currentTimeMillis())
+        householdCode()!!
     }
 
-    /** Result of pairing: the message and – if the other TV handed it over – the IPTV login. */
-    data class JoinResult(val message: String, val iptv: XtreamConfig?)
-
-    suspend fun join(code: String): JoinResult = withContext(Dispatchers.IO) {
+    /** Joins with the household code. The household's data replaces this TV's profiles & lists. */
+    suspend fun join(code: String): Result = withContext(Dispatchers.IO) {
         requireConfigured()
-        val token = newDeviceToken()
         val clean = normalizeCode(code)
-        val result = call("join", token, JSONObject().put("code", clean))
-        val groupId = result.getString("group_id")
-        val iptv = result.optString("secret").takeIf { it.isNotBlank() && it != "null" }?.let { blob ->
-            runCatching {
-                val o = JSONObject(HandOver.decrypt(blob, clean, groupId))
-                XtreamConfig(o.getString("url"), o.getString("user"), o.getString("pass"))
-            }.getOrNull()
+        if (clean.length != CODE_LENGTH) throw IOException("Der Haushalts-Code hat $CODE_LENGTH Zeichen.")
+        val keys = HouseholdKeys.derive(clean)
+        val res = try {
+            call("pull", JSONObject().put("auth", keys.authHex))
+        } catch (e: NotFound) {
+            throw IOException("Diesen Haushalts-Code gibt es nicht (mehr). Bitte auf dem Hauptgerät nachsehen.")
         }
-        prefs.edit().putString("groupId", groupId).apply()
-        secure.write(token)
-        val payload = result.optJSONObject("snapshot")
-        if (payload != null) applySnapshot(payload)
-        val current = snapshot()
-        val serverAt = result.optLong("updated_at", 0L)
-        if (payload == null) {
-            call("push", token, JSONObject().put("group_id", groupId).put("snapshot", current))
-            saveSyncMark(current, System.currentTimeMillis())
-        } else {
-            saveSyncMark(payload, serverAt)
-        }
-        JoinResult("Gerät gekoppelt.", iptv)
+        val remote = keys.open(res.getString("blob"))
+            ?: throw IOException("Der Code passt nicht zu den Daten – bitte noch einmal eingeben.")
+        secure.write("code", clean)
+        secure.write("keys", keys.encoded())
+        prefs.edit().putBoolean("main", false).putBoolean("shareIptv", false).putLong("version", res.getLong("version")).apply()
+        applySnapshot(remote)
+        saveSyncMark(remote, System.currentTimeMillis())
+        Result("Mit dem Haushalt verbunden.", iptvOf(remote))
     }
 
-    suspend fun sync(): String = withContext(Dispatchers.IO) {
+    suspend fun sync(): Result = withContext(Dispatchers.IO) {
         requireConfigured()
-        val token = secure.read() ?: throw IOException("Dieses Gerät ist noch nicht gekoppelt.")
-        val groupId = prefs.getString("groupId", null) ?: throw IOException("Dieses Gerät ist noch nicht gekoppelt.")
-        val local = snapshot()
+        val keys = HouseholdKeys.decode(secure.read("keys") ?: throw IOException("Dieses Gerät ist noch in keinem Haushalt."))
         val baseline = prefs.getString("lastSnapshot", null)?.let { runCatching { JSONObject(it) }.getOrNull() }
-        val remote = call("pull", token, JSONObject().put("group_id", groupId))
-        val remoteSnapshot = remote.optJSONObject("snapshot")
-        val remoteAt = remote.optLong("updated_at", 0L)
-        val merged = when {
-            remoteSnapshot == null -> local
-            baseline == null -> remoteSnapshot
-            else -> mergeSnapshots(baseline, local, remoteSnapshot)
+        repeat(3) {
+            val local = snapshot()
+            val res = try {
+                call("pull", JSONObject().put("auth", keys.authHex))
+            } catch (e: NotFound) {
+                throw IOException("Der Haushalts-Code wurde auf dem Hauptgerät erneuert – bitte den neuen Code eingeben.")
+            }
+            val version = res.getLong("version")
+            val remote = keys.open(res.getString("blob")) ?: throw IOException("Cloud-Daten lassen sich nicht entschlüsseln.")
+            val mergedPrefs = if (baseline == null) remote else mergeSnapshots(baseline, local, remote)
+            val merged = withIptv(mergedPrefs, iptvOf(remote))
+            if (!sameJson(merged, remote)) {
+                try {
+                    call("push", JSONObject().put("auth", keys.authHex).put("blob", keys.seal(merged)).put("base_version", version))
+                        .let { prefs.edit().putLong("version", it.getLong("version")).apply() }
+                } catch (e: Conflict) {
+                    return@repeat   // another TV was faster – fetch its state and merge again
+                }
+            } else {
+                prefs.edit().putLong("version", version).apply()
+            }
+            if (!sameJson(withIptv(merged, null), withIptv(local, null))) applySnapshot(merged)
+            saveSyncMark(merged, System.currentTimeMillis())
+            val needsLogin = !SettingsStore(app).config().isValid
+            return@withContext Result("Synchronisierung abgeschlossen.", if (needsLogin) iptvOf(merged) else null)
         }
-        if (remoteSnapshot == null || !sameJson(merged, remoteSnapshot)) {
-            val pushed = call("push", token, JSONObject().put("group_id", groupId).put("snapshot", merged))
-            if (!sameJson(merged, local)) applySnapshot(merged)
-            saveSyncMark(merged, pushed.optLong("updated_at", System.currentTimeMillis()))
-        } else {
-            if (!sameJson(merged, local)) applySnapshot(merged)
-            saveSyncMark(merged, remoteAt)
-        }
-        "Synchronisierung abgeschlossen."
+        throw IOException("Andere Geräte synchronisieren gerade – bitte gleich noch einmal versuchen.")
+    }
+
+    /** Main TV: new code + new keys. All other TVs have to enter the new code (e.g. after selling a stick). */
+    suspend fun renewCode(): String = withContext(Dispatchers.IO) {
+        if (!isMain) throw IOException("Nur das Hauptgerät kann den Code erneuern.")
+        sync()
+        val old = HouseholdKeys.decode(secure.read("keys")!!)
+        val snap = JSONObject(prefs.getString("lastSnapshot", null) ?: snapshot().toString())
+        val code = newCode()
+        val keys = HouseholdKeys.derive(code)
+        val res = call("create", JSONObject().put("auth", keys.authHex).put("blob", keys.seal(snap)))
+        runCatching { call("delete", JSONObject().put("auth", old.authHex)) }
+        secure.write("code", code)
+        secure.write("keys", keys.encoded())
+        prefs.edit().putLong("version", res.getLong("version")).apply()
+        householdCode()!!
+    }
+
+    /** Leave the household on this TV. The main TV also deletes the household from the cloud. */
+    suspend fun leave(): String = withContext(Dispatchers.IO) {
+        if (isMain) secure.read("keys")?.let { k -> runCatching { call("delete", JSONObject().put("auth", HouseholdKeys.decode(k).authHex)) } }
+        val wasMain = isMain
+        prefs.edit().clear().apply()
+        if (wasMain) "Haushalt gelöscht – die Daten in der Cloud sind entfernt." else "Dieses Gerät hat den Haushalt verlassen."
+    }
+
+    /** IPTV login inside the encrypted blob: the main TV adds it only while "teilen" is switched on. */
+    private fun withIptv(snap: JSONObject, remoteIptv: JSONObject?): JSONObject {
+        val out = JSONObject(snap.toString()).apply { remove("iptv") }
+        val iptv = if (prefs.getBoolean("main", false)) {
+            SettingsStore(app).config().takeIf { shareIptv && it.isValid }
+                ?.let { JSONObject().put("url", it.baseUrl).put("user", it.user).put("pass", it.pass) }
+        } else remoteIptv
+        if (iptv != null) out.put("iptv", iptv)
+        return out
+    }
+
+    private fun iptvOf(snap: JSONObject): JSONObject? = snap.optJSONObject("iptv")
+
+    fun iptvConfig(o: JSONObject?): XtreamConfig? = o?.let {
+        runCatching { XtreamConfig(it.getString("url"), it.getString("user"), it.getString("pass")) }.getOrNull()?.takeIf { c -> c.isValid }
     }
 
     private fun requireConfigured() {
         if (!configured) throw IOException("SUPABASE_URL und SUPABASE_PUBLISHABLE_KEY fehlen im Build.")
     }
 
-    private fun call(action: String, token: String, extra: JSONObject): JSONObject {
+    private class NotFound : IOException("not found")
+    private class Conflict : IOException("conflict")
+
+    private fun call(action: String, extra: JSONObject): JSONObject {
         val connection = URL("${BuildConfig.SUPABASE_URL}/functions/v1/couchpotato-sync").openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.connectTimeout = 15_000
-        connection.readTimeout = 20_000
+        connection.readTimeout = 30_000
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "application/json")
         connection.setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
         connection.setRequestProperty("Authorization", "Bearer ${BuildConfig.SUPABASE_PUBLISHABLE_KEY}")
-        val body = JSONObject(extra.toString()).put("action", action).put("device_token", token)
+        val body = JSONObject(extra.toString()).put("action", action).put("v", 3)
         try {
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) throw IOException("Cloud antwortet mit HTTP $code: ${text.take(240)}")
-            return JSONObject(text)
+            when (code) {
+                in 200..299 -> return JSONObject(text)
+                404 -> throw NotFound()
+                409 -> throw Conflict()
+                else -> throw IOException("Cloud antwortet mit HTTP $code: ${text.take(240)}")
+            }
         } finally {
             connection.disconnect()
         }
@@ -277,44 +343,43 @@ class CloudSync(context: Context) {
         else -> JSONObject.quote(value.toString())
     }
 
-    private fun newDeviceToken(): String = ByteArray(32).also(SecureRandom()::nextBytes)
-        .let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
-
-    private fun sha256Hex(value: String): String =
-        java.security.MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
-
     private companion object {
         const val PREFS = "cloudsync"
+        const val CODE_LENGTH = 10
+        const val ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"   // no I, L, O, U – nothing to mix up
 
-        /** Same rule as the server: upper case, only the code alphabet (no I, L, O, U). */
-        fun normalizeCode(code: String): String = code.uppercase().replace(Regex("[^0-9A-HJKMNP-TV-Z]"), "")
+        /** 10 × 5 bits = 50 bits of chance; with the slow key derivation far beyond guessing. */
+        fun newCode(): String {
+            val bytes = ByteArray(CODE_LENGTH).also(SecureRandom()::nextBytes)
+            return bytes.joinToString("") { ALPHABET[it.toInt() and 31].toString() }
+        }
+
+        fun normalizeCode(code: String): String = code.uppercase()
+            .replace('O', '0').replace('I', '1').replace('L', '1')
+            .replace(Regex("[^0-9A-HJKMNP-TV-Z]"), "")
     }
 }
 
-/** Encrypt the per-device bearer secret with a non-exportable Android Keystore AES key. */
-private class SecureSyncToken(context: Context, private val prefs: SharedPreferences) {
-    private val app = context.applicationContext
+/** Small values (household code, keys) encrypted with a non-exportable Android Keystore AES key. */
+private class SecureStore(context: Context, private val prefs: SharedPreferences) {
     private val alias = "couchpotato.cloudsync.token"
 
-    fun read(): String? {
-        val encoded = prefs.getString("token", null) ?: return null
+    fun read(name: String): String? {
+        val encoded = prefs.getString("secure_$name", null) ?: return null
         return runCatching {
             val packed = Base64.decode(encoded, Base64.NO_WRAP)
             if (packed.size <= IV_BYTES) return null
-            val iv = packed.copyOfRange(0, IV_BYTES)
-            val cipherText = packed.copyOfRange(IV_BYTES, packed.size)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
-            String(cipher.doFinal(cipherText), Charsets.UTF_8)
+            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, packed.copyOfRange(0, IV_BYTES)))
+            String(cipher.doFinal(packed.copyOfRange(IV_BYTES, packed.size)), Charsets.UTF_8)
         }.getOrNull()
     }
 
-    fun write(token: String) {
+    fun write(name: String, value: String) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
-        val packed = cipher.iv + cipher.doFinal(token.toByteArray(Charsets.UTF_8))
-        prefs.edit().putString("token", Base64.encodeToString(packed, Base64.NO_WRAP)).apply()
+        val packed = cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+        prefs.edit().putString("secure_$name", Base64.encodeToString(packed, Base64.NO_WRAP)).apply()
     }
 
     private fun key(): SecretKey {
@@ -335,30 +400,54 @@ private class SecureSyncToken(context: Context, private val prefs: SharedPrefere
 }
 
 /**
- * Encryption of the one-time IPTV hand-over: AES-256-GCM, key = PBKDF2(pairing code, group id).
- * Only someone who knows the code can open it – the server stores the code as a hash only.
+ * Keys of a household, derived from its code with PBKDF2-HMAC-SHA256 (210 000 rounds, 512 bit):
+ * the first half is the access key (server sees only its hash), the second half the AES-256 key.
+ * Knowing one half tells nothing about the other.
  */
-private object HandOver {
-    private const val ITERATIONS = 150_000
-    private const val IV_BYTES = 12
+private class HouseholdKeys(private val auth: ByteArray, private val enc: ByteArray) {
+    val authHex: String get() = auth.joinToString("") { "%02x".format(it) }
+    private val aad: ByteArray get() = sha256(auth)
 
-    private fun key(code: String, groupId: String): javax.crypto.spec.SecretKeySpec {
-        val spec = javax.crypto.spec.PBEKeySpec(code.toCharArray(), "couchpotato:$groupId".toByteArray(Charsets.UTF_8), ITERATIONS, 256)
-        val bytes = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1").generateSecret(spec).encoded
-        return javax.crypto.spec.SecretKeySpec(bytes, "AES")
-    }
+    fun encoded(): String = Base64.encodeToString(auth + enc, Base64.NO_WRAP)
 
-    fun encrypt(plain: String, code: String, groupId: String): String {
+    /** JSON → gzip → AES-256-GCM, bound to this household. */
+    fun seal(snapshot: JSONObject): String {
+        val zipped = ByteArrayOutputStream().also { out ->
+            GZIPOutputStream(out).use { it.write(snapshot.toString().toByteArray(Charsets.UTF_8)) }
+        }.toByteArray()
         val iv = ByteArray(IV_BYTES).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key(code, groupId), GCMParameterSpec(128, iv))
-        return Base64.encodeToString(iv + cipher.doFinal(plain.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(enc, "AES"), GCMParameterSpec(128, iv))
+        cipher.updateAAD(aad)
+        return Base64.encodeToString(byteArrayOf(FORMAT) + iv + cipher.doFinal(zipped), Base64.NO_WRAP)
     }
 
-    fun decrypt(blob: String, code: String, groupId: String): String {
+    fun open(blob: String): JSONObject? = runCatching {
         val packed = Base64.decode(blob, Base64.NO_WRAP)
+        require(packed.size > 1 + IV_BYTES && packed[0] == FORMAT)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, key(code, groupId), GCMParameterSpec(128, packed.copyOfRange(0, IV_BYTES)))
-        return String(cipher.doFinal(packed.copyOfRange(IV_BYTES, packed.size)), Charsets.UTF_8)
+        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(enc, "AES"), GCMParameterSpec(128, packed.copyOfRange(1, 1 + IV_BYTES)))
+        cipher.updateAAD(aad)
+        val zipped = cipher.doFinal(packed.copyOfRange(1 + IV_BYTES, packed.size))
+        JSONObject(GZIPInputStream(zipped.inputStream()).bufferedReader(Charsets.UTF_8).use { it.readText() })
+    }.getOrNull()
+
+    companion object {
+        private const val ITERATIONS = 210_000
+        private const val IV_BYTES = 12
+        private const val FORMAT: Byte = 1
+
+        fun derive(code: String): HouseholdKeys {
+            val spec = PBEKeySpec(code.toCharArray(), "couchpotato-household-v1".toByteArray(Charsets.UTF_8), ITERATIONS, 512)
+            val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+            return HouseholdKeys(bytes.copyOfRange(0, 32), bytes.copyOfRange(32, 64))
+        }
+
+        fun decode(encoded: String): HouseholdKeys {
+            val b = Base64.decode(encoded, Base64.NO_WRAP)
+            return HouseholdKeys(b.copyOfRange(0, 32), b.copyOfRange(32, 64))
+        }
+
+        private fun sha256(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b)
     }
 }
