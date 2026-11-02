@@ -182,7 +182,7 @@ class SearchIndex(context: Context) {
                     id = p[1].toLongOrNull() ?: return@mapNotNull null,
                     ext = p[2].ifEmpty { "mp4" },
                     image = p[3].ifEmpty { null },
-                    name = p[4],
+                    name = Names.display(p[4]),
                     norm = p[5],
                     categoryId = p.getOrNull(6)?.ifEmpty { null },
                     added = p.getOrNull(7)?.toLongOrNull() ?: 0L,

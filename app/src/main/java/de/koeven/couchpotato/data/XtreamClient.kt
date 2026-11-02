@@ -151,7 +151,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
             }
         }
         r.endObject()
-        return id?.let { VodItem(it, name.trim(), icon, added, ext, cat) }
+        return id?.let { VodItem(it, Names.display(name), icon, added, ext, cat) }
     }
 
     private fun readSeries(r: JsonReader): SeriesItem? {
@@ -172,7 +172,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
             }
         }
         r.endObject()
-        return id?.let { SeriesItem(it, name.trim(), cover, updated, cat) }
+        return id?.let { SeriesItem(it, Names.display(name), cover, updated, cat) }
     }
 
     /** Newest [limit] movies, skipping categories in [hiddenCats] (ids without prefix). */
@@ -249,7 +249,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
                 }
             }
             r.endObject()
-            id?.let { list += LiveChannel(it, name.trim(), logo, cat ?: categoryId) }
+            id?.let { list += LiveChannel(it, Names.display(name), logo, cat ?: categoryId) }
         }) { list }
     }
 
@@ -303,7 +303,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
                         }
                         r.endObject()
                         val score = (if (rating > 0f) rating else rating5 * 2f).coerceIn(0f, 10f)
-                        id?.let { onItem(spec.kind, it, name.trim(), image, ext, cat, added, Facts(score, genre, year, tmdb)) }
+                        id?.let { onItem(spec.kind, it, Names.display(name), image, ext, cat, added, Facts(score, genre, year, tmdb)) }
                     }) { Unit }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
@@ -382,7 +382,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
                     id = id,
                     season = o.str("season")?.toIntOrNull() ?: seasonHint ?: 1,
                     number = number,
-                    title = o.str("title") ?: "Folge $number",
+                    title = Names.episode(o.str("title"), info?.str("name") ?: fallbackName, number),
                     image = epInfo?.str("movie_image")?.takeIf { it.startsWith("http") },
                     ext = o.str("container_extension") ?: "mp4",
                     durationSec = epInfo?.str("duration_secs")?.toIntOrNull() ?: 0,
@@ -398,7 +398,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
 
         return SeriesInfo(
             id = seriesId,
-            name = info?.str("name") ?: fallbackName,
+            name = Names.display(info?.str("name") ?: fallbackName),
             cover = info?.str("cover")?.takeIf { it.startsWith("http") },
             plot = info?.str("plot"),
             genre = info?.str("genre"),
