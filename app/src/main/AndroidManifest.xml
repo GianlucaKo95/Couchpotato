@@ -26,6 +26,7 @@
     </queries>
 
     <application
+        android:name=".CouchpotatoApp"
         android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@drawable/ic_launcher"

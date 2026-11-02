@@ -42,7 +42,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: Compose runs much smoother optimized; smaller APK. mapping.txt goes to the release.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Stable key from CI secrets; falls back to the debug key for local builds.
             signingConfig = signingConfigs.findByName("release-key") ?: signingConfigs.getByName("debug")
         }

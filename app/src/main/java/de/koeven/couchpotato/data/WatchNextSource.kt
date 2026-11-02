@@ -84,7 +84,7 @@ object WatchNextSource {
             lastResult = "Zugriff von Android verweigert"
             emptyList()
         } catch (e: Exception) {
-            lastResult = "Fehler: ${e.javaClass.simpleName}"
+            lastResult = "Fehler: ${e.message ?: "unerwarteter Fehler"}"
             emptyList()
         }
     }
