@@ -4,7 +4,19 @@ import android.app.Activity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
+import android.view.Gravity
 import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -90,6 +102,132 @@ class PlayerActivity : Activity() {
         player.prepare()
         player.playWhenReady = true
         playerView.requestFocus()
+        buildUpNext()
+        handler.post(upNextTick)
+    }
+
+    // ---------- "Nächste Folge" like Netflix ----------
+
+    private lateinit var upNext: LinearLayout
+    private lateinit var upNextTitle: TextView
+    private lateinit var upNextSub: TextView
+    private lateinit var upNextPlay: Button
+    private lateinit var upNextCredits: Button
+    private var upNextShownFor = -1          // media index the panel was shown (or dismissed) for
+    private var upNextDeadline = 0L
+    private var stillWatching = false        // "Schaust du noch?" instead of a countdown
+    private var autoInARow = 0               // episodes started without any key press in between
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun buildUpNext() {
+        fun pill(bg: Int) = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(bg) }
+        fun button(text: String) = Button(this).apply {
+            this.text = text
+            isAllCaps = false
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(22), 0, dp(22), 0)
+            minHeight = dp(44); minimumHeight = dp(44)
+            stateListAnimator = null
+            background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), pill(Color.WHITE))
+                addState(intArrayOf(), pill(0x33FFFFFF))
+            }
+            setTextColor(ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
+                intArrayOf(Color.BLACK, Color.WHITE),
+            ))
+            isFocusable = true
+        }
+        upNextTitle = TextView(this).apply {
+            setTextColor(0xB3FFFFFF.toInt()); textSize = 15f
+        }
+        upNextSub = TextView(this).apply {
+            setTextColor(Color.WHITE); textSize = 21f; setTypeface(typeface, Typeface.BOLD)
+            maxLines = 2; setPadding(0, dp(2), 0, dp(14))
+        }
+        upNextPlay = button("Jetzt abspielen").apply { setOnClickListener { playNextNow() } }
+        upNextCredits = button("Abspann ansehen").apply { setOnClickListener { dismissUpNext() } }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(upNextPlay)
+            addView(upNextCredits, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) })
+        }
+        upNext = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(26), dp(20), dp(26), dp(22))
+            background = GradientDrawable().apply { cornerRadius = dp(18).toFloat(); setColor(0xE6141414.toInt()) }
+            visibility = View.GONE
+            addView(upNextTitle); addView(upNextSub); addView(row)
+        }
+        (playerView.parent as FrameLayout).addView(upNext, FrameLayout.LayoutParams(
+            dp(520), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END,
+        ).apply { setMargins(0, 0, dp(48), dp(56)) })
+    }
+
+    private val upNextTick = object : Runnable {
+        override fun run() {
+            updateUpNext()
+            handler.postDelayed(this, 500)
+        }
+    }
+
+    private fun updateUpNext() {
+        if (isLive || !::player.isInitialized || !::upNext.isInitialized) return
+        val i = player.currentMediaItemIndex
+        val next = items.getOrNull(i + 1)
+        val dur = player.duration
+        if (next == null || items[i].kind != PlayItem.KIND_EPISODE || dur == C.TIME_UNSET || dur < 120_000) {
+            if (upNext.visibility == View.VISIBLE) hideUpNext()
+            return
+        }
+        val remaining = dur - player.currentPosition
+        if (upNext.visibility != View.VISIBLE) {
+            if (remaining in 1..UP_NEXT_BEFORE_END_MS && upNextShownFor != i && player.isPlaying) showUpNext(i, next)
+            return
+        }
+        if (remaining > UP_NEXT_BEFORE_END_MS + 5_000) { hideUpNext(); return }   // seeked back
+        if (stillWatching) return
+        val left = ((upNextDeadline - System.currentTimeMillis() + 999) / 1000).coerceAtLeast(0)
+        upNextPlay.text = "Nächste Folge in $left s"
+        if (left <= 0) playNextNow(auto = true)
+    }
+
+    private fun showUpNext(index: Int, next: PlayItem) {
+        upNextShownFor = index
+        stillWatching = autoInARow >= STILL_WATCHING_AFTER
+        upNextTitle.text = if (stillWatching) "Schaust du noch?" else "Nächste Folge"
+        upNextSub.text = next.subtitle ?: next.title
+        upNextPlay.text = if (stillWatching) "Weiterschauen" else "Nächste Folge in ${UP_NEXT_COUNTDOWN_MS / 1000} s"
+        upNextCredits.text = if (stillWatching) "Beenden" else "Abspann ansehen"
+        // "Schaust du noch?": stop at the end of this episode instead of rolling on all night
+        player.pauseAtEndOfMediaItems = stillWatching
+        upNextDeadline = System.currentTimeMillis() + UP_NEXT_COUNTDOWN_MS
+        playerView.hideController()
+        upNext.visibility = View.VISIBLE
+        upNextPlay.requestFocus()
+    }
+
+    private fun hideUpNext() {
+        upNext.visibility = View.GONE
+        player.pauseAtEndOfMediaItems = false
+        playerView.requestFocus()
+    }
+
+    private fun dismissUpNext() {
+        if (stillWatching) { saveCurrent(); finish(); return }
+        hideUpNext()   // credits play on; ExoPlayer still moves on at the very end
+    }
+
+    private fun playNextNow(auto: Boolean = false) {
+        val i = player.currentMediaItemIndex
+        if (i + 1 > items.lastIndex) return
+        autoInARow = if (auto) autoInARow + 1 else 0
+        hideUpNext()
+        progress.finished(items[i], items[i + 1])
+        player.seekToDefaultPosition(i + 1)
+        player.playWhenReady = true
     }
 
     private fun startPositionFor(item: PlayItem): Long {
@@ -105,7 +243,9 @@ class PlayerActivity : Activity() {
             if (!isLive && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && currentIndex in items.indices) {
                 // previous episode played to the end
                 progress.finished(items[currentIndex], items.getOrNull(currentIndex + 1))
+                autoInARow++
             }
+            if (::upNext.isInitialized && upNext.visibility == View.VISIBLE) hideUpNext()
             currentIndex = player.currentMediaItemIndex
         }
 
@@ -162,11 +302,26 @@ class PlayerActivity : Activity() {
     override fun onDestroy() {
         handler.removeCallbacks(zapCommit)
         handler.removeCallbacks(saveTask)
+        handler.removeCallbacks(upNextTick)
         if (::player.isInitialized) player.release()
         super.onDestroy()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) autoInARow = 0   // someone is on the couch
+        // "Nächste Folge" panel: D-pad moves between its buttons, Back closes it
+        if (::upNext.isInitialized && upNext.visibility == View.VISIBLE) {
+            if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+                if (event.action == KeyEvent.ACTION_UP) dismissUpNext()
+                return true
+            }
+            if (event.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || event.keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ||
+                event.keyCode == KeyEvent.KEYCODE_MEDIA_REWIND) {
+                hideUpNext()
+            } else {
+                return super.dispatchKeyEvent(event)
+            }
+        }
         // Live: up/down (while the controls are hidden) and channel keys zap through the list.
         if (isLive && ::player.isInitialized) {
             val step = when (event.keyCode) {
@@ -215,6 +370,9 @@ class PlayerActivity : Activity() {
 
     private companion object {
         const val ZAP_DELAY_MS = 800L
+        const val UP_NEXT_BEFORE_END_MS = 25_000L   // panel appears 25 s before the end (credits)
+        const val UP_NEXT_COUNTDOWN_MS = 10_000L
+        const val STILL_WATCHING_AFTER = 3          // episodes in a row without touching the remote
         const val SAVE_INTERVAL_MS = 10_000L
     }
 }
