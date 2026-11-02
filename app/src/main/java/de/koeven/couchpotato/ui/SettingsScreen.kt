@@ -430,6 +430,7 @@ private fun CloudSyncSection(vm: HomeViewModel) {
     var pairingCode by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf(vm.cloudSyncStatus()) }
     var busy by remember { mutableStateOf(false) }
+    var withIptv by remember { mutableStateOf(false) }
 
     SectionTitle(
         "Geräte synchronisieren",
@@ -450,13 +451,19 @@ private fun CloudSyncSection(vm: HomeViewModel) {
                 .padding(horizontal = 20.dp, vertical = 10.dp),
         )
     }
+    SettingRow(
+        title = "IPTV-Zugang beim Koppeln mitgeben",
+        description = "Einmalig, verschlüsselt mit dem Gerätecode – liegt nicht dauerhaft in der Cloud",
+        value = if (withIptv) "ja" else "nein",
+    ) { withIptv = !withIptv }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         PrimaryPill("Gerätecode anzeigen", enabled = !busy) {
             scope.launch {
                 busy = true
                 status = try {
-                    pairingCode = vm.createCloudPairingCode()
-                    "Code auf dem zweiten Gerät unter Synchronisierung eingeben."
+                    pairingCode = vm.createCloudPairingCode(withIptv)
+                    "Code auf dem zweiten Gerät unter Synchronisierung eingeben." +
+                        if (withIptv) " Der IPTV-Zugang wird dabei einmalig verschlüsselt mitgegeben." else ""
                 } catch (e: Exception) {
                     "Fehler: ${e.message ?: e.javaClass.simpleName}"
                 } finally { busy = false }
