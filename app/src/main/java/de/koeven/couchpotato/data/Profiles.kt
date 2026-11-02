@@ -13,6 +13,8 @@ data class Profile(
     val kid: Boolean,
     val maxFsk: Int = 6,     // 0, 6, 12, 16
     val animal: Int = -1,    // avatar animal; -1 = picked from the id
+    val dailyMinutes: Int = 0,   // kids: screen time per day, 0 = no limit
+    val bedtime: Int = -1,       // kids: minute of the day from which the profile is locked, -1 = none
 ) {
     /** Index of the avatar animal (stable for profiles from before animals existed). */
     val animalIndex: Int get() = if (animal >= 0) animal else Math.floorMod(id.hashCode(), KID_ANIMALS)
@@ -48,6 +50,7 @@ object Profiles {
                 Profile(
                     o.getString("id"), o.getString("name"), o.optInt("color"), o.optBoolean("kid"),
                     o.optInt("maxFsk", 6), o.optInt("animal", -1),
+                    o.optInt("limit", 0), o.optInt("bed", -1),
                 )
             }
         }.getOrDefault(emptyList())
@@ -57,6 +60,7 @@ object Profiles {
     private fun saveAll(context: Context, list: List<Profile>) {
         val arr = JSONArray(list.map {
             JSONObject().put("id", it.id).put("name", it.name).put("color", it.color).put("kid", it.kid).put("maxFsk", it.maxFsk).put("animal", it.animal)
+                .put("limit", it.dailyMinutes).put("bed", it.bedtime)
         })
         prefs(context).edit().putString("list", arr.toString()).apply()
     }

@@ -113,6 +113,22 @@ fun SearchScreen(
     }
 
     fun type(s: String) = vm.setQuery(query + s)
+
+    // voice search – only if this Fire TV offers speech recognition to apps (Alexa itself is reserved for Amazon)
+    val voiceIntent = remember {
+        android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "de-DE")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Was möchtest du schauen?")
+    }
+    val voiceAvailable = remember {
+        runCatching { context.packageManager.queryIntentActivities(voiceIntent, 0).isNotEmpty() }.getOrDefault(false)
+    }
+    val voice = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        res.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { vm.setQuery(it) }
+    }
     fun saveQuery(q: String = query) {
         vm.rememberSearch(q)
         recent = vm.recentSearches()
@@ -193,6 +209,9 @@ fun SearchScreen(
                         Key("Leerzeichen", keyWidth * 3 + KeyGap * 2) { if (query.isNotEmpty() && !query.endsWith(" ")) type(" ") }
                         Key("⌫ Löschen", keyWidth * 2 + KeyGap) { vm.setQuery(query.dropLast(1)) }
                         Key(if (digits) "abc" else "123", keyWidth * 2 + KeyGap) { digits = !digits }
+                    }
+                    if (voiceAvailable) Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
+                        Key("🎤 Sprechen", keyWidth * 7 + KeyGap * 6) { runCatching { voice.launch(voiceIntent) } }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         Key("Alles löschen", keyWidth * 4 + KeyGap * 3, muted = true) { vm.setQuery("") }

@@ -131,6 +131,8 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
 
     val loaded = info
     val seasons = remember(loaded) { loaded?.episodes?.map { it.season }?.distinct().orEmpty() }
+    val watchedSet = remember(state.tick, loaded) { vm.watchedEpisodes(seriesId) }
+    var menuEp by remember { mutableStateOf<Episode?>(null) }
     val progressMap = remember(state.tick, loaded) {
         loaded?.episodes?.associate { it.id to vm.progressFor("ep:${it.id}") }.orEmpty()
     }
@@ -298,8 +300,10 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                                 episode = ep,
                                 fallbackImage = loaded.cover,
                                 progress = progressMap[ep.id],
+                                seen = ep.id in watchedSet,
                                 width = episodeWidth,
                                 onClick = { guardedPlay { Playback.start(context, Playback.episodePlaylist(loaded, ep.id)) } },
+                                onLongClick = { menuEp = ep },
                             )
                         }
                     }
@@ -307,6 +311,28 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
             }
         }
         if (details?.fromTmdb == true) item { TmdbNote() }
+    }
+
+    // OK lang drücken auf einer Folge: als gesehen / ungesehen markieren – einzeln oder die ganze Staffel
+    val ep = menuEp
+    if (ep != null && loaded != null) {
+        val seen = ep.id in watchedSet || progressMap[ep.id]?.watched() == true
+        val seasonIds = loaded.episodes.filter { it.season == ep.season }.map { it.id }
+        val seasonSeen = seasonIds.all { it in watchedSet }
+        ContextMenu(
+            title = "${ep.number}. ${ep.title}",
+            actions = listOf(
+                if (seen) MenuAction("Als ungesehen markieren") { vm.markWatched(loaded, listOf(ep.id), false) }
+                else MenuAction("Als gesehen markieren") { vm.markWatched(loaded, listOf(ep.id), true) },
+                MenuAction("Bis hier alles als gesehen markieren") {
+                    val upTo = loaded.episodes.indexOfFirst { it.id == ep.id }
+                    vm.markWatched(loaded, loaded.episodes.take(upTo + 1).map { it.id }, true)
+                },
+                if (seasonSeen) MenuAction("Staffel ${ep.season} als ungesehen markieren") { vm.markWatched(loaded, seasonIds, false) }
+                else MenuAction("Staffel ${ep.season} als gesehen markieren") { vm.markWatched(loaded, seasonIds, true) },
+            ),
+            onDismiss = { menuEp = null },
+        )
     }
 }
 
@@ -321,14 +347,17 @@ private fun EpisodeCard(
     episode: Episode,
     fallbackImage: String?,
     progress: ProgressEntry?,
+    seen: Boolean,
     width: Dp,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
-    val watched = progress?.watched() == true
+    val watched = seen && progress?.upNext != true || progress?.watched() == true
     val image = episode.image ?: fallbackImage
     Column(Modifier.width(width)) {
         Card(
             onClick = onClick,
+            onLongClick = onLongClick,
             modifier = Modifier
                 .width(width)
                 .aspectRatio(16f / 9f)

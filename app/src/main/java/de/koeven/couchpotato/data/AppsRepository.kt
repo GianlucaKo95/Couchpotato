@@ -89,6 +89,7 @@ object AppsRepository {
         val pm = context.packageManager
         val intent = pm.getLeanbackLaunchIntentForPackage(pkg) ?: pm.getLaunchIntentForPackage(pkg) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
         return runCatching { context.startActivity(intent) }.isSuccess
     }
 
@@ -106,6 +107,7 @@ object AppsRepository {
             .putExtra(SearchManager.QUERY, query)
             .putExtra("query", query)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
         if (runCatching { context.startActivity(intent) }.isSuccess) return true
         launch(context, pkg)
         return false
@@ -119,6 +121,7 @@ object AppsRepository {
         )
         for (i in intents) {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
             if (runCatching { context.startActivity(i) }.isSuccess) return true
         }
         return false

@@ -206,6 +206,7 @@ fun MovieScreen(
                         info?.trailer?.takeIf { gate == HomeViewModel.Gate.Allowed }?.let { yt ->
                             SideAction("Trailer") {
                                 val ok = runCatching {
+                                    de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
                                     context.startActivity(
                                         Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$yt"))
                                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

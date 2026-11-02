@@ -34,8 +34,28 @@ class MediaWatcher : NotificationListenerService() {
         attach(list.orEmpty())
     }
 
+    /**
+     * Kids' screen time also ends inside Netflix, YouTube & co: once a minute, if the kids profile
+     * is out of time while another app is open, the launcher comes back to the front (lock screen).
+     */
+    private val screenTimeCheck = object : Runnable {
+        override fun run() {
+            runCatching {
+                if (ScreenTime.isAway(this@MediaWatcher) && ScreenTime.state(this@MediaWatcher) !is ScreenTime.State.Allowed) {
+                    startActivity(
+                        android.content.Intent(this@MediaWatcher, de.koeven.couchpotato.ui.MainActivity::class.java)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    )
+                }
+            }
+            handler.postDelayed(this, 60_000L)
+        }
+    }
+
     override fun onListenerConnected() {
         super.onListenerConnected()
+        handler.removeCallbacks(screenTimeCheck)
+        handler.postDelayed(screenTimeCheck, 60_000L)
         val msm = getSystemService(MediaSessionManager::class.java) ?: return
         sessionManager = msm
         val me = ComponentName(this, MediaWatcher::class.java)
@@ -46,6 +66,7 @@ class MediaWatcher : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        handler.removeCallbacks(screenTimeCheck)
         runCatching { sessionManager?.removeOnActiveSessionsChangedListener(sessionsListener) }
         controllers.values.forEach { (c, cb) -> runCatching { c.unregisterCallback(cb) } }
         controllers.clear()

@@ -215,6 +215,7 @@ class CloudSync(context: Context) {
         Profiles.all(app).forEach { p ->
             names += "progress${p.suffix}"
             names += "history${p.suffix}"
+            names += "watched${p.suffix}"
         }
         val all = JSONObject()
         for (name in names) {
