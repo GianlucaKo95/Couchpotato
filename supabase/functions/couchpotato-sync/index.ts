@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
+// Household sync, end-to-end encrypted: this function only ever sees an access key (stored as its
+// SHA-256) and an opaque AES-GCM blob. It cannot read profiles, progress or IPTV logins.
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type",
@@ -13,104 +15,57 @@ const sha256 = async (value: string) => {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 };
-const makeCode = () => {
-  const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-  const bytes = crypto.getRandomValues(new Uint8Array(12));
-  return [...bytes].map((b) => alphabet[b & 31]).join("");
-};
+const MAX_BLOB = 2_000_000;
+const TABLE = "couchpotato_households";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "POST required" }, 405);
   try {
     const raw = await req.text();
-    if (raw.length > 1_500_000) return json({ error: "Request too large" }, 413);
+    if (raw.length > MAX_BLOB + 10_000) return json({ error: "Request too large" }, 413);
     const body = JSON.parse(raw);
     const action = String(body.action ?? "");
-    const token = String(body.device_token ?? "");
-    if (!/^[A-Za-z0-9_-]{40,50}$/.test(token)) return json({ error: "Invalid device token" }, 400);
+    const auth = String(body.auth ?? "");
+    if (body.v !== 3) return json({ error: "Bitte Couchpotato aktualisieren" }, 426);
+    if (!/^[0-9a-f]{64}$/.test(auth)) return json({ error: "Invalid access key" }, 400);
 
     const url = Deno.env.get("SUPABASE_URL");
     const secrets = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}");
     const key = secrets.default;
     if (!url || !key) throw new Error("Server is not configured");
     const db = createClient(url, key, { auth: { persistSession: false } });
-    const tokenHash = await sha256(token);
-    // expired pairing codes – and any IPTV hand-over still attached to them – never outlive 10 minutes
-    await db.from("couchpotato_sync_pairing_codes").delete().lt("expires_at", new Date().toISOString());
+    const lookup = await sha256(auth);
+    const blob = typeof body.blob === "string" ? body.blob : "";
+    const blobOk = blob.length > 0 && blob.length <= MAX_BLOB && /^[A-Za-z0-9+/=]+$/.test(blob);
 
     if (action === "create") {
-      let { data: device } = await db.from("couchpotato_sync_devices").select("group_id").eq("token_hash", tokenHash).maybeSingle();
-      if (!device) {
-        const { data: group, error: ge } = await db.from("couchpotato_sync_groups").insert({}).select("id").single();
-        if (ge) throw ge;
-        const { error: de } = await db.from("couchpotato_sync_devices").insert({ token_hash: tokenHash, group_id: group.id });
-        if (de) throw de;
-        device = { group_id: group.id };
-      }
-      await db.from("couchpotato_sync_pairing_codes").delete().lt("expires_at", new Date().toISOString());
-      const code = makeCode();
-      const { error: ce } = await db.from("couchpotato_sync_pairing_codes").insert({
-        code_hash: await sha256(code), group_id: device.group_id, expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
-      });
-      if (ce) throw ce;
-      return json({ group_id: device.group_id, code });
+      if (!blobOk) return json({ error: "Invalid blob" }, 400);
+      const { data, error } = await db.from(TABLE).insert({ lookup_hash: lookup, blob }).select("version").single();
+      if (error) return error.code === "23505" ? json({ error: "Exists" }, 409) : (() => { throw error; })();
+      return json({ version: data.version });
     }
-
-    if (action === "join") {
-      const code = String(body.code ?? "").toUpperCase().replace(/[^0-9A-HJKMNP-TV-Z]/g, "");
-      if (code.length !== 12) return json({ error: "Invalid or expired pairing code" }, 400);
-      const codeHash = await sha256(code);
-      const { data: rows, error: pe } = await db.rpc("consume_couchpotato_pairing_code_v2", { p_code_hash: codeHash });
-      const row = Array.isArray(rows) ? rows[0] : rows;
-      const groupId = row?.group_id;
-      if (pe || !groupId) return json({ error: "Invalid or expired pairing code" }, 400);
-      const { error: de } = await db.from("couchpotato_sync_devices").insert({ token_hash: tokenHash, group_id: groupId });
-      if (de) throw de;
-      const { data: state } = await db.from("couchpotato_sync_state").select("snapshot, updated_at")
-        .eq("group_id", groupId).maybeSingle();
-      return json({
-        group_id: groupId,
-        snapshot: state?.snapshot ?? null,
-        updated_at: state?.updated_at ? Date.parse(state.updated_at) : 0,
-        // encrypted on the giving TV; only the receiving TV (which knows the code) can open it
-        secret: row?.secret_blob ?? null,
-      });
-    }
-
-    const { data: device, error: authError } = await db.from("couchpotato_sync_devices")
-      .select("group_id").eq("token_hash", tokenHash).maybeSingle();
-    if (authError || !device || device.group_id !== body.group_id) return json({ error: "Device is not paired to this group" }, 403);
-    await db.from("couchpotato_sync_devices").update({ last_seen_at: new Date().toISOString() }).eq("token_hash", tokenHash);
-
-    if (action === "stash") {
-      // attach the encrypted IPTV hand-over to this group's still valid pairing code
-      const codeHash = String(body.code_hash ?? "");
-      const blob = String(body.blob ?? "");
-      if (!/^[0-9a-f]{64}$/.test(codeHash) || blob.length === 0 || blob.length > 4096) return json({ error: "Invalid hand-over" }, 400);
-      const { data, error } = await db.from("couchpotato_sync_pairing_codes").update({ secret_blob: blob })
-        .eq("code_hash", codeHash).eq("group_id", device.group_id).gt("expires_at", new Date().toISOString())
-        .select("code_hash");
-      if (error) throw error;
-      if (!data || data.length === 0) return json({ error: "Pairing code expired" }, 404);
-      return json({ ok: true });
-    }
-
     if (action === "pull") {
-      const { data: state, error } = await db.from("couchpotato_sync_state").select("snapshot, updated_at")
-        .eq("group_id", device.group_id).maybeSingle();
+      const { data, error } = await db.from(TABLE).select("blob, version").eq("lookup_hash", lookup).maybeSingle();
       if (error) throw error;
-      return json({ snapshot: state?.snapshot ?? null, updated_at: state?.updated_at ? Date.parse(state.updated_at) : 0 });
+      if (!data) return json({ error: "Unknown household" }, 404);
+      return json({ blob: data.blob, version: data.version });
     }
     if (action === "push") {
-      if (!body.snapshot || body.snapshot.version !== 1 || typeof body.snapshot.preferences !== "object") {
-        return json({ error: "Invalid snapshot" }, 400);
-      }
-      const { data: state, error } = await db.from("couchpotato_sync_state").upsert({
-        group_id: device.group_id, snapshot: body.snapshot, updated_at: new Date().toISOString(),
-      }).select("updated_at").single();
+      const base = Number(body.base_version);
+      if (!blobOk || !Number.isSafeInteger(base)) return json({ error: "Invalid push" }, 400);
+      const { data, error } = await db.from(TABLE)
+        .update({ blob, version: base + 1, updated_at: new Date().toISOString() })
+        .eq("lookup_hash", lookup).eq("version", base).select("version");
       if (error) throw error;
-      return json({ updated_at: Date.parse(state.updated_at) });
+      if (data && data.length > 0) return json({ version: data[0].version });
+      const { data: exists } = await db.from(TABLE).select("version").eq("lookup_hash", lookup).maybeSingle();
+      return exists ? json({ error: "Changed meanwhile" }, 409) : json({ error: "Unknown household" }, 404);
+    }
+    if (action === "delete") {
+      const { error } = await db.from(TABLE).delete().eq("lookup_hash", lookup);
+      if (error) throw error;
+      return json({ ok: true });
     }
     return json({ error: "Unknown action" }, 400);
   } catch (error) {
