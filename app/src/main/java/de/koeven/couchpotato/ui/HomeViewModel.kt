@@ -22,6 +22,7 @@ import de.koeven.couchpotato.data.Themes
 import de.koeven.couchpotato.data.Tmdb
 import de.koeven.couchpotato.data.Recommender
 import de.koeven.couchpotato.data.WatchHistory
+import de.koeven.couchpotato.data.WatchedStore
 import de.koeven.couchpotato.data.MediaPlay
 import de.koeven.couchpotato.data.MediaPlays
 import de.koeven.couchpotato.data.PlayItem
@@ -56,9 +57,9 @@ sealed interface ContinueItem {
     val key: String
     val sortTime: Long
 
-    data class Iptv(val entry: ProgressEntry) : ContinueItem {
+    data class Iptv(val entry: ProgressEntry, val newEpisodes: Boolean = false, val sort: Long = 0L) : ContinueItem {
         override val key: String get() = entry.item.key
-        override val sortTime: Long get() = entry.updatedAt
+        override val sortTime: Long get() = maxOf(entry.updatedAt, sort)
     }
 
     data class External(val program: WatchNextSource.Program, val appLabel: String?) : ContinueItem {
@@ -70,6 +71,12 @@ sealed interface ContinueItem {
     data class Media(val play: MediaPlay, val appLabel: String?) : ContinueItem {
         override val key: String get() = play.key
         override val sortTime: Long get() = play.updatedAt
+    }
+
+    /** A series you watched got new episodes since (provider's "last modified" is newer). */
+    data class NewEpisodes(val series: SearchEntry, val watchedAt: Long) : ContinueItem {
+        override val key: String get() = "new:${series.id}:${series.added}"
+        override val sortTime: Long get() = series.added * 1000
     }
 
     /** Streaming app whose progress we can't read (Netflix …): a tile that opens the app. */
@@ -101,6 +108,7 @@ private val PROVIDER_KEYS = linkedMapOf(
 private val STREAMING_APPS = listOf("com.netflix.ninja", "com.disney.disneyplus")
 
 data class HomeState(
+    val screenLock: String? = null,      // kids: screen time used up / bedtime
     val continueWatching: List<ContinueItem> = emptyList(),
     val apps: List<AppEntry> = emptyList(),
     val movies: List<VodItem> = emptyList(),
@@ -251,6 +259,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 refreshLocal()
+                checkForUpdate()
                 // the big catalogue (search, "Für dich") only after apps and "Weiterschauen" are on screen,
                 // so it doesn't compete with them for the stick's CPU after a reboot
                 ensureIndex(force = false)      // local; talks to the provider at most once a day
@@ -275,6 +284,26 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Series you watched (last 6 months) whose catalogue entry changed after you last watched –
+     * from the daily catalogue sync, no extra request.
+     */
+    private fun newEpisodeSeries(): Map<Long, SearchEntry> {
+        val entries = indexEntries ?: return emptyMap()
+        val seen = history.all()
+        val cutoff = System.currentTimeMillis() - 183L * 24 * 3600 * 1000
+        val watched = seen.filter { (k, t) -> k.startsWith("s:") && t > cutoff }
+            .mapNotNull { (k, t) -> k.removePrefix("s:").toLongOrNull()?.let { it to t } }.toMap()
+        if (watched.isEmpty()) return emptyMap()
+        val out = HashMap<Long, SearchEntry>()
+        for (e in entries) {
+            if (e.kind != SearchEntry.KIND_SERIES) continue
+            val at = watched[e.id] ?: continue
+            if (e.added * 1000 > at + 60_000) out[e.id] = e
+        }
+        return out
+    }
+
     /** Titles started in IsiPro carry no cover: take name and cover from the local catalogue. */
     private fun enrich(e: ProgressEntry): ProgressEntry {
         if (e.item.image != null || e.item.kind != PlayItem.KIND_MOVIE) return e
@@ -283,6 +312,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun refreshLocal() {
+        checkScreenTime()
         val hidden = settings.hiddenApps()
         val kid = Profiles.active(app).kid
         val kidApps = Profiles.kidApps(app)
@@ -296,7 +326,16 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.apps.isEmpty()) _state.update { it.copy(apps = apps, allApps = allApps.sortedBy { a -> a.label.lowercase() }) }
         val hiddenCw = settings.hiddenContinue()
         val cw = withContext(Dispatchers.IO) {
-            val iptv = progress.continueWatching().map { ContinueItem.Iptv(enrich(it)) }
+            val fresh = newEpisodeSeries()
+            val iptv = progress.continueWatching().map { e ->
+                val sid = e.item.seriesId
+                val updated = fresh[sid]
+                // new episodes: the card says so and moves to the front
+                if (updated != null) ContinueItem.Iptv(enrich(e), newEpisodes = true, sort = maxOf(e.updatedAt, updated.added * 1000))
+                else ContinueItem.Iptv(enrich(e))
+            }
+            val inProgress = iptv.mapNotNull { it.entry.item.seriesId }.toSet()
+            val newOnly = fresh.filterKeys { it !in inProgress }.values.map { ContinueItem.NewEpisodes(it, 0L) }
             val media = MediaPlays.all(getApplication())
                 .filter { it.packageName != getApplication<Application>().packageName }
                 .map { ContinueItem.Media(it, labels[it.packageName]) }
@@ -308,7 +347,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val external = watchNextCache.merge(WatchNextSource.load(getApplication())) { pkg -> settings.lastLaunched(pkg) }
                 .filter { it.packageName != getApplication<Application>().packageName }
                 .map { ContinueItem.External(it, it.packageName?.let { pkg -> labels[pkg] }) }
-            (if (kid) iptv else iptv + external + media + tiles)
+            (if (kid) iptv + newOnly else iptv + newOnly + external + media + tiles)
                 .filterNot { it.key in hiddenCw }
                 .distinctBy { it.key }
                 .sortedByDescending { it.sortTime }
@@ -606,6 +645,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             .setDataAndType(Uri.parse(url), "video/*")
             .setPackage(pkg)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
         return runCatching { context.startActivity(intent) }.isSuccess.also { ok ->
             if (ok) settings.markLaunched(pkg)
             else Toast.makeText(context, "IsiPro nimmt keine Sender-Links an – spiele in Couchpotato", Toast.LENGTH_LONG).show()
@@ -828,6 +868,38 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     var settingsSection: String? = null
 
     fun showProfilePicker() = _state.update { it.copy(needsProfilePick = true) }
+
+    /** In-app updates: at most every 6 hours; tells once per new build. */
+    private fun checkForUpdate() {
+        viewModelScope.launch {
+            val r = runCatching { de.koeven.couchpotato.data.Updater.check(app) }.getOrNull() ?: return@launch
+            val p = app.getSharedPreferences("updater", android.content.Context.MODE_PRIVATE)
+            if (p.getInt("told", 0) == r.build) return@launch
+            p.edit().putInt("told", r.build).apply()
+            Toast.makeText(app, "Update auf Build ${r.build} verfügbar – Einstellungen → Über Couchpotato", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Kids profile: daily screen time and bedtime. */
+    fun checkScreenTime() {
+        val msg = when (val st = de.koeven.couchpotato.data.ScreenTime.state(app)) {
+            de.koeven.couchpotato.data.ScreenTime.State.LimitReached -> "Die Bildschirmzeit für heute ist aufgebraucht. Morgen geht's weiter!"
+            is de.koeven.couchpotato.data.ScreenTime.State.Bedtime -> "Ab ${st.at} Uhr ist Schlafenszeit. Gute Nacht!"
+            is de.koeven.couchpotato.data.ScreenTime.State.Allowed -> null
+        }
+        if (_state.value.screenLock != msg) _state.update { it.copy(screenLock = msg) }
+    }
+
+    fun extendScreenTime(minutes: Int) {
+        de.koeven.couchpotato.data.ScreenTime.addBonus(app, Profiles.active(app), minutes)
+        checkScreenTime()
+    }
+
+    /** "45 Min. heute übrig" for the settings. */
+    fun screenTimeInfo(p: Profile): String {
+        val used = de.koeven.couchpotato.data.ScreenTime.usedMs(app, p) / 60_000
+        return "heute $used Min. geschaut"
+    }
     fun closeProfilePicker() = _state.update { it.copy(needsProfilePick = false) }
 
     fun addProfile(name: String, kid: Boolean): Profile {
@@ -1158,6 +1230,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             is ContinueItem.Iptv -> progress.remove(item.key)
             is ContinueItem.External -> settings.hideContinue(item.key)   // can't delete other apps' entries
             is ContinueItem.AppTile -> settings.hideContinue(item.key)
+            is ContinueItem.NewEpisodes -> settings.hideContinue(item.key)   // shows again with the next new episode
             is ContinueItem.Media -> MediaPlays.remove(getApplication(), item.key)
         }
         viewModelScope.launch { refreshLocal() }
@@ -1175,6 +1248,30 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun progressFor(key: String): ProgressEntry? = progress.get(key)
+
+    fun watchedEpisodes(seriesId: Long): Set<Long> = WatchedStore(app).forSeries(seriesId)
+
+    /**
+     * Marks episodes as (un)seen. "Weiterschauen" then continues with the first unseen episode
+     * after the last seen one – or drops the series when everything is seen.
+     */
+    fun markWatched(info: SeriesInfo, episodeIds: Collection<Long>, watched: Boolean) {
+        WatchedStore(app).set(info.id, episodeIds, watched)
+        val seen = WatchedStore(app).forSeries(info.id)
+        val eps = info.episodes
+        val lastSeen = eps.indexOfLast { it.id in seen }
+        if (watched && lastSeen >= 0) {
+            val next = eps.drop(lastSeen + 1).firstOrNull { it.id !in seen }
+            val last = PlayItem.episode(info, eps[lastSeen])
+            if (next != null) progress.finished(last, PlayItem.episode(info, next))
+            else {
+                progress.forSeries(info.id)?.let { progress.remove(it.item.key) }
+                history.add(last)
+            }
+        }
+        _state.update { it.copy(tick = it.tick + 1) }
+        viewModelScope.launch { refreshLocal() }
+    }
 
     /** "Von vorne": forget the position, the player then starts at 0. */
     fun restartFromBeginning(key: String) {

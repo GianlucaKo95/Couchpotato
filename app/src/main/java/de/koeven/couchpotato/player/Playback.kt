@@ -19,6 +19,7 @@ object Playback {
             .putExtra(EXTRA_ITEMS, json)
             .putExtra(EXTRA_INDEX, startIndex)
         if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
         context.startActivity(intent)
     }
 

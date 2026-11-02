@@ -185,7 +185,11 @@ fun HomeScreen(
                                             subtitle = e.item.subtitle,
                                             image = e.item.image,
                                             fraction = if (e.upNext) 0f else e.fraction,
-                                            badge = if (e.upNext) "Nächste Folge · IPTV" else "IPTV",
+                                            badge = when {
+                                                item.newEpisodes -> "Neue Folgen · IPTV"
+                                                e.upNext -> "Nächste Folge · IPTV"
+                                                else -> "IPTV"
+                                            },
                                             onClick = { scope.launch { Playback.start(context, vm.playlistFor(e)) } },
                                             onLongClick = onLong,
                                             modifier = focusMod,
@@ -214,6 +218,18 @@ fun HomeScreen(
                                             fraction = p.fraction,
                                             badge = item.appLabel,
                                             onClick = { vm.openMedia(item) },
+                                            onLongClick = onLong,
+                                            modifier = focusMod,
+                                        )
+                                    }
+                                    is ContinueItem.NewEpisodes -> {
+                                        ContinueCard(
+                                            title = item.series.name,
+                                            subtitle = "Neue Folgen verfügbar",
+                                            image = item.series.image,
+                                            fraction = 0f,
+                                            badge = "Neue Folgen · IPTV",
+                                            onClick = { onOpenSeries(SeriesItem(item.series.id, item.series.name, item.series.image, item.series.added, item.series.categoryId)) },
                                             onLongClick = onLong,
                                             modifier = focusMod,
                                         )
@@ -391,6 +407,7 @@ fun HomeScreen(
                 is ContinueItem.Iptv -> c.entry.item.title
                 is ContinueItem.External -> c.program.title
                 is ContinueItem.AppTile -> c.app.label
+                is ContinueItem.NewEpisodes -> c.series.name
                 is ContinueItem.Media -> c.play.subtitle ?: c.play.title
             },
             actions = listOf(

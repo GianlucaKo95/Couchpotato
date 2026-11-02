@@ -33,6 +33,14 @@ import de.koeven.couchpotato.data.PlayItem
 import de.koeven.couchpotato.data.ProgressStore
 import de.koeven.couchpotato.data.SettingsStore
 import de.koeven.couchpotato.data.XtreamClient
+import de.koeven.couchpotato.data.Profiles
+import de.koeven.couchpotato.data.ScreenTime
+import androidx.media3.common.Tracks
+import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.extractor.DefaultExtractorsFactory
+import android.net.Uri
+import java.io.File
 
 /**
  * Fullscreen VOD player. Saves the position every 10 s and when leaving,
@@ -84,6 +92,19 @@ class PlayerActivity : Activity() {
 
         playerView.player = player
         playerView.keepScreenOn = true
+        playerView.setShowSubtitleButton(true)
+        this.cfg = cfg
+        applyTrackPrefs()
+        player.addListener(listener)
+        buildUpNext()
+        buildOverlays()
+        handler.post(upNextTick)
+
+        if (isLive) {
+            startChannel(currentIndex)
+            playerView.requestFocus()
+            return
+        }
 
         val mediaItems = items.map { item ->
             MediaItem.Builder()
@@ -97,13 +118,248 @@ class PlayerActivity : Activity() {
                 )
                 .build()
         }
-        player.addListener(listener)
         player.setMediaItems(mediaItems, currentIndex, startPositionFor(items[currentIndex]))
         player.prepare()
         player.playWhenReady = true
         playerView.requestFocus()
-        buildUpNext()
-        handler.post(upNextTick)
+    }
+
+    private lateinit var cfg: de.koeven.couchpotato.data.XtreamConfig
+
+    // ---------- audio track & subtitles: remembered per profile ----------
+
+    private val trackPrefs by lazy { getSharedPreferences("player" + Profiles.suffix(this), MODE_PRIVATE) }
+    private var applyingTracks = false
+    private var userChangedTracks = false
+
+    private fun applyTrackPrefs() {
+        val audio = trackPrefs.getString("audio", null)
+        val text = trackPrefs.getString("text", null)
+        applyingTracks = true
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().apply {
+            if (audio != null) setPreferredAudioLanguage(audio)
+            when (text) {
+                null -> Unit
+                "off" -> setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                else -> { setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false); setPreferredTextLanguage(text) }
+            }
+        }.build()
+        applyingTracks = false
+    }
+
+    /** Called after the viewer picked something in the player's audio/subtitle menu. */
+    private fun rememberTracks(tracks: Tracks) {
+        fun selectedLang(type: Int): String? = tracks.groups.firstOrNull { it.type == type && it.isSelected }?.let { g ->
+            (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it).language }
+        }
+        val edit = trackPrefs.edit()
+        selectedLang(C.TRACK_TYPE_AUDIO)?.takeIf { it != "und" }?.let { edit.putString("audio", it) }
+        val hasText = tracks.groups.any { it.type == C.TRACK_TYPE_TEXT }
+        if (hasText) {
+            val text = selectedLang(C.TRACK_TYPE_TEXT)
+            when {
+                text == null -> edit.putString("text", "off")
+                text != "und" -> edit.putString("text", text)
+            }
+        }
+        edit.apply()
+    }
+
+    // ---------- live: timeshift buffer, last channel ----------
+
+    private var timeshift: TimeshiftBuffer? = null
+    private var timeshiftOn = true          // switched off for a channel the buffer can't handle
+    private var liveIndex = -1
+    private var previousChannel = -1
+    private var liveStartWall = 0L          // wall time of the frame the current playback started with
+
+    @androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+    private fun startChannel(index: Int, fromOffset: Long? = null) {
+        val item = items.getOrNull(index) ?: return
+        if (index != liveIndex) {
+            if (liveIndex >= 0) previousChannel = liveIndex
+            liveIndex = index
+            currentIndex = index
+            timeshift?.stop()
+            timeshift = if (timeshiftOn) {
+                TimeshiftBuffer(XtreamClient.streamUrl(cfg, item), File(cacheDir, "timeshift")).start()
+            } else null
+        }
+        val meta = MediaMetadata.Builder().setTitle(item.title).build()
+        val buf = timeshift
+        if (buf == null) {
+            // direct stream (fallback): no rewinding
+            player.setMediaItem(MediaItem.Builder().setUri(XtreamClient.streamUrl(cfg, item)).setMediaId(item.key).setMediaMetadata(meta).build())
+            liveStartWall = System.currentTimeMillis()
+        } else {
+            val from = fromOffset ?: buf.head
+            liveStartWall = if (fromOffset == null) System.currentTimeMillis() else buf.wallAt(from)
+            val source = ProgressiveMediaSource.Factory(
+                { TimeshiftDataSource { timeshift } },
+                DefaultExtractorsFactory(),
+            ).createMediaSource(
+                MediaItem.Builder().setUri(Uri.parse("timeshift://live?from=$from&ch=${item.streamId}"))
+                    .setMediaId(item.key).setMediaMetadata(meta).build()
+            )
+            player.setMediaSource(source)
+        }
+        player.prepare()
+        player.playWhenReady = true
+        updateLiveLabel()
+    }
+
+    /** How far behind live the picture is (0 = live). */
+    private fun behindMs(): Long {
+        if (timeshift == null || !::player.isInitialized) return 0L
+        return ((System.currentTimeMillis() - liveStartWall) - player.currentPosition).coerceAtLeast(0L)
+    }
+
+    private fun timeshiftBy(deltaMs: Long) {
+        val buf = timeshift ?: run { toast("Zurückspulen geht bei diesem Sender nicht"); return }
+        val target = (behindMs() - deltaMs).coerceIn(0L, minOf(TimeshiftBuffer.KEEP_MS, buf.spanMs()))
+        if (target < 8_000L) {
+            goLive(); return
+        }
+        val (offset, _) = buf.offsetAt(target)
+        startChannel(liveIndex, offset)
+        toast("−${fmt(target)} · ▶▶ Richtung Live")
+    }
+
+    private fun goLive() {
+        if (timeshift != null && behindMs() > 8_000L) {
+            startChannel(liveIndex, null)
+            toast("Live")
+        }
+    }
+
+    private fun fmt(ms: Long): String { val s = ms / 1000; return "%d:%02d".format(s / 60, s % 60) }
+
+    private fun toast(text: String) {
+        zapToast?.cancel()
+        zapToast = Toast.makeText(this, text, Toast.LENGTH_SHORT).also { it.show() }
+    }
+
+    private lateinit var liveLabel: TextView
+
+    private fun updateLiveLabel() {
+        if (!::liveLabel.isInitialized) return
+        val behind = if (isLive) behindMs() else 0L
+        val sleep = sleepLabel()
+        val parts = listOfNotNull(
+            if (behind > 10_000L) "⏪ −${fmt(behind)}" else null,
+            sleep,
+        )
+        liveLabel.text = parts.joinToString("   ·   ")
+        liveLabel.visibility = if (parts.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    // ---------- sleep timer ----------
+
+    private var sleepAt = 0L                 // wall clock, 0 = off
+    private var sleepEndOfEpisode = false
+
+    private fun sleepLabel(): String? = when {
+        sleepEndOfEpisode -> "☾ nach dieser Folge"
+        sleepAt > 0 -> "☾ ${((sleepAt - System.currentTimeMillis()) / 60_000 + 1).coerceAtLeast(1)} Min."
+        else -> null
+    }
+
+    private fun cycleSleep() {
+        val steps = buildList {
+            add(0); add(15); add(30); add(60); add(90)
+            if (!isLive && items.getOrNull(player.currentMediaItemIndex)?.kind == PlayItem.KIND_EPISODE) add(-1)
+        }
+        val current = when { sleepEndOfEpisode -> -1; sleepAt > 0 -> ((sleepAt - System.currentTimeMillis()) / 60_000 + 1).toInt(); else -> 0 }
+        // next step after the current one (a running timer counts as its rounded-up step)
+        val idx = steps.indexOfFirst { it == current }.let { if (it < 0) steps.indexOfFirst { s -> s > current }.coerceAtLeast(0) - 1 else it }
+        val next = steps[(idx + 1).mod(steps.size)]
+        sleepEndOfEpisode = next == -1
+        sleepAt = if (next > 0) System.currentTimeMillis() + next * 60_000L else 0L
+        if (!sleepEndOfEpisode && !stillWatching) player.pauseAtEndOfMediaItems = false
+        if (sleepEndOfEpisode) player.pauseAtEndOfMediaItems = true
+        toast(when { next == -1 -> "Sleep-Timer: nach dieser Folge"; next > 0 -> "Sleep-Timer: $next Minuten"; else -> "Sleep-Timer aus" })
+        updateLiveLabel()
+        refreshMenu()
+    }
+
+    private fun goToSleep(message: String) {
+        saveCurrent()
+        player.playWhenReady = false
+        toast(message)
+        finish()
+    }
+
+    // ---------- menu (≡ key): last channel, live, sleep timer ----------
+
+    private lateinit var menuPanel: LinearLayout
+
+    private fun buildOverlays() {
+        liveLabel = TextView(this).apply {
+            setTextColor(Color.WHITE); textSize = 16f; setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(14), dp(6), dp(14), dp(6))
+            background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(0x99000000.toInt()) }
+            visibility = View.GONE
+        }
+        (playerView.parent as FrameLayout).addView(liveLabel, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END,
+        ).apply { setMargins(0, dp(28), dp(40), 0) })
+        menuPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(18), dp(22), dp(18))
+            background = GradientDrawable().apply { cornerRadius = dp(18).toFloat(); setColor(0xE6141414.toInt()) }
+            visibility = View.GONE
+        }
+        (playerView.parent as FrameLayout).addView(menuPanel, FrameLayout.LayoutParams(
+            dp(380), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL or Gravity.END,
+        ).apply { setMargins(0, 0, dp(48), 0) })
+    }
+
+    private fun refreshMenu() {
+        if (!::menuPanel.isInitialized || menuPanel.visibility != View.VISIBLE) return
+        val focused = menuPanel.indexOfChild(menuPanel.findFocus())
+        fillMenu()
+        menuPanel.getChildAt(focused.coerceAtLeast(1))?.requestFocus()
+    }
+
+    private fun fillMenu() {
+        menuPanel.removeAllViews()
+        menuPanel.addView(TextView(this).apply {
+            text = if (isLive) items.getOrNull(liveIndex)?.title ?: "Live-TV" else "Wiedergabe"
+            setTextColor(0xB3FFFFFF.toInt()); textSize = 15f; setPadding(0, 0, 0, dp(10))
+        })
+        fun add(label: String, action: () -> Unit) {
+            menuPanel.addView(pillButton(label).apply { setOnClickListener { action() } },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        }
+        if (isLive) {
+            items.getOrNull(previousChannel)?.let { prev -> add("↩ Zurück zu ${prev.title}") { hideMenu(); switchTo(previousChannel) } }
+            if (behindMs() > 8_000L) add("▶▶ Zurück zu Live") { hideMenu(); goLive() }
+            if (timeshift != null) {
+                add("⏪ 30 Sekunden zurück") { timeshiftBy(-30_000L); refreshMenu() }
+                add("⏪ 5 Minuten zurück") { timeshiftBy(-5 * 60_000L); refreshMenu() }
+            }
+        }
+        add("☾ Sleep-Timer: ${sleepLabel()?.removePrefix("☾ ") ?: "aus"}") { cycleSleep() }
+        add("Schließen") { hideMenu() }
+    }
+
+    private fun showMenu() {
+        fillMenu()
+        playerView.hideController()
+        menuPanel.visibility = View.VISIBLE
+        menuPanel.getChildAt(1)?.requestFocus()
+    }
+
+    private fun hideMenu() {
+        menuPanel.visibility = View.GONE
+        playerView.requestFocus()
+    }
+
+    private fun switchTo(index: Int) {
+        handler.removeCallbacks(zapCommit)
+        zapTarget = -1
+        toast(items[index].title)
+        startChannel(index)
     }
 
     // ---------- "Nächste Folge" like Netflix ----------
@@ -120,9 +376,9 @@ class PlayerActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private fun buildUpNext() {
+    private fun pillButton(text: String): Button {
         fun pill(bg: Int) = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(bg) }
-        fun button(text: String) = Button(this).apply {
+        return Button(this).apply {
             this.text = text
             isAllCaps = false
             textSize = 17f
@@ -140,6 +396,10 @@ class PlayerActivity : Activity() {
             ))
             isFocusable = true
         }
+    }
+
+    private fun buildUpNext() {
+        fun button(text: String) = pillButton(text)
         upNextTitle = TextView(this).apply {
             setTextColor(0xB3FFFFFF.toInt()); textSize = 15f
         }
@@ -174,7 +434,10 @@ class PlayerActivity : Activity() {
     }
 
     private fun updateUpNext() {
-        if (isLive || !::player.isInitialized || !::upNext.isInitialized) return
+        if (!::player.isInitialized) return
+        periodicChecks()
+        if (isLive || !::upNext.isInitialized) return
+        if (sleepEndOfEpisode) return
         val i = player.currentMediaItemIndex
         val next = items.getOrNull(i + 1)
         val dur = player.duration
@@ -194,6 +457,23 @@ class PlayerActivity : Activity() {
         if (left <= 0) playNextNow(auto = true)
     }
 
+    private var lastChecks = 0L
+
+    /** Every few seconds: sleep timer, kids' screen time, the "behind live" label. */
+    private fun periodicChecks() {
+        val now = System.currentTimeMillis()
+        if (now - lastChecks < 2_000L) return
+        lastChecks = now
+        updateLiveLabel()
+        if (sleepAt in 1..now) { sleepAt = 0; goToSleep("Sleep-Timer: Gute Nacht"); return }
+        when (val st = ScreenTime.state(this)) {
+            ScreenTime.State.LimitReached -> goToSleep("Bildschirmzeit für heute ist vorbei")
+            is ScreenTime.State.Bedtime -> goToSleep("Schlafenszeit – ab ${st.at} Uhr ist Schluss")
+            is ScreenTime.State.Allowed -> if (st.remainingMin == 5 && !warned5) { warned5 = true; toast("Noch 5 Minuten Bildschirmzeit") }
+        }
+    }
+    private var warned5 = false
+
     private fun showUpNext(index: Int, next: PlayItem) {
         upNextShownFor = index
         stillWatching = autoInARow >= STILL_WATCHING_AFTER
@@ -211,7 +491,7 @@ class PlayerActivity : Activity() {
 
     private fun hideUpNext() {
         upNext.visibility = View.GONE
-        player.pauseAtEndOfMediaItems = false
+        player.pauseAtEndOfMediaItems = sleepEndOfEpisode
         playerView.requestFocus()
     }
 
@@ -249,7 +529,30 @@ class PlayerActivity : Activity() {
             currentIndex = player.currentMediaItemIndex
         }
 
+        override fun onTrackSelectionParametersChanged(parameters: TrackSelectionParameters) {
+            if (!applyingTracks) userChangedTracks = true
+        }
+
+        override fun onTracksChanged(tracks: Tracks) {
+            if (!userChangedTracks) return
+            userChangedTracks = false
+            rememberTracks(tracks)
+        }
+
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            // sleep timer "nach dieser Folge": the player stopped at the end of the episode
+            if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM && sleepEndOfEpisode) {
+                sleepEndOfEpisode = false
+                goToSleep("Sleep-Timer: Gute Nacht")
+            }
+        }
+
         override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED && isLive) {
+                // live stream ended (provider hiccup): start the channel again
+                startChannel(liveIndex.coerceAtLeast(0), null)
+                return
+            }
             if (playbackState == Player.STATE_ENDED) {
                 ended = true
                 if (!isLive) items.getOrNull(currentIndex)?.let { progress.finished(it, null) }
@@ -266,6 +569,14 @@ class PlayerActivity : Activity() {
             ).show()
             // Live: stay, so you can zap to the next channel. VOD: back to the launcher.
             if (!isLive) finish()
+            else if (timeshift != null) {
+                // the buffer didn't work for this channel: play it directly (without rewinding)
+                timeshiftOn = false
+                timeshift?.stop(); timeshift = null
+                val i = liveIndex; liveIndex = -1
+                startChannel(i)
+                timeshiftOn = true
+            }
         }
     }
 
@@ -287,15 +598,28 @@ class PlayerActivity : Activity() {
         super.onPause()
     }
 
+    private var resumeChannel = -1
+
     override fun onStart() {
         super.onStart()
         handler.postDelayed(saveTask, SAVE_INTERVAL_MS)
+        if (isLive && resumeChannel >= 0 && ::player.isInitialized) {
+            val ch = resumeChannel; resumeChannel = -1
+            startChannel(ch)
+        }
     }
 
     override fun onStop() {
         handler.removeCallbacks(saveTask)
         saveCurrent()
         if (::player.isInitialized) player.playWhenReady = false
+        // live in the background: close the provider connection (most allow only one or two)
+        if (isLive && liveIndex >= 0) {
+            resumeChannel = liveIndex
+            timeshift?.stop(); timeshift = null
+            liveIndex = -1
+            if (::player.isInitialized) player.stop()
+        }
         super.onStop()
     }
 
@@ -303,6 +627,7 @@ class PlayerActivity : Activity() {
         handler.removeCallbacks(zapCommit)
         handler.removeCallbacks(saveTask)
         handler.removeCallbacks(upNextTick)
+        timeshift?.stop(); timeshift = null
         if (::player.isInitialized) player.release()
         super.onDestroy()
     }
@@ -320,6 +645,34 @@ class PlayerActivity : Activity() {
                 hideUpNext()
             } else {
                 return super.dispatchKeyEvent(event)
+            }
+        }
+        // ≡ menu panel: last channel, live, sleep timer
+        if (::menuPanel.isInitialized && menuPanel.visibility == View.VISIBLE) {
+            if (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_MENU) {
+                if (event.action == KeyEvent.ACTION_UP) hideMenu()
+                return true
+            }
+            return super.dispatchKeyEvent(event)
+        }
+        if (event.keyCode == KeyEvent.KEYCODE_MENU && ::player.isInitialized) {
+            if (event.action == KeyEvent.ACTION_UP) showMenu()
+            return true
+        }
+        if (isLive && ::player.isInitialized && event.keyCode == KeyEvent.KEYCODE_LAST_CHANNEL) {
+            if (event.action == KeyEvent.ACTION_DOWN && previousChannel >= 0) switchTo(previousChannel)
+            return true
+        }
+        // Live timeshift: ◀ / ⏪ back 30 s, ▶ / ⏩ forward 30 s (towards live) while the controls are hidden
+        if (isLive && ::player.isInitialized && !playerView.isControllerFullyVisible) {
+            val delta = when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> -30_000L
+                KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> 30_000L
+                else -> 0L
+            }
+            if (delta != 0L) {
+                if (event.action == KeyEvent.ACTION_DOWN) timeshiftBy(delta)
+                return true
             }
         }
         // Live: up/down (while the controls are hidden) and channel keys zap through the list.
@@ -351,16 +704,14 @@ class PlayerActivity : Activity() {
     private val zapCommit = Runnable {
         val target = zapTarget
         zapTarget = -1
-        if (target < 0 || target == player.currentMediaItemIndex) return@Runnable
-        player.seekToDefaultPosition(target)
-        if (player.playbackState == Player.STATE_IDLE) player.prepare()
-        player.playWhenReady = true
+        if (target < 0 || target == liveIndex) return@Runnable
+        startChannel(target)
     }
 
     private fun zap(step: Int) {
         if (items.size < 2) return
         val n = items.size
-        val from = if (zapTarget >= 0) zapTarget else player.currentMediaItemIndex
+        val from = if (zapTarget >= 0) zapTarget else liveIndex.coerceAtLeast(0)
         zapTarget = ((from + step) % n + n) % n
         zapToast?.cancel()
         zapToast = Toast.makeText(this, items[zapTarget].title, Toast.LENGTH_SHORT).also { it.show() }

@@ -174,11 +174,26 @@ class SettingsStore(context: Context) {
     fun lastLaunched(pkg: String): Long = p.getLong("launch:$pkg", 0L)
 }
 
+/** Episodes marked as seen ("s:<series id>" → episode ids) – per profile, synced with the household. */
+class WatchedStore(context: Context) {
+    private val p = context.getSharedPreferences("watched" + Profiles.suffix(context), Context.MODE_PRIVATE)
+
+    fun forSeries(seriesId: Long): Set<Long> =
+        p.getStringSet("s:$seriesId", null)?.mapNotNull { it.toLongOrNull() }?.toSet().orEmpty()
+
+    fun set(seriesId: Long, episodeIds: Collection<Long>, watched: Boolean) {
+        val now = forSeries(seriesId)
+        val next = if (watched) now + episodeIds else now - episodeIds.toSet()
+        p.edit().putStringSet("s:$seriesId", next.map { it.toString() }.toSet()).apply()
+    }
+}
+
 /** Playback positions. One entry per movie, and at most one per series. */
 /** Positions for "Weiterschauen" – one store per profile. */
 class ProgressStore(context: Context) {
     private val p = context.getSharedPreferences("progress" + Profiles.suffix(context), Context.MODE_PRIVATE)
     private val history = WatchHistory(context)
+    private val watched = WatchedStore(context)
 
     fun get(key: String): ProgressEntry? = p.getString(key, null)?.let(::parse)
 
@@ -195,6 +210,7 @@ class ProgressStore(context: Context) {
     /** Item played to the end: drop it; for series queue the next episode instead. */
     fun finished(item: PlayItem, next: PlayItem?) {
         history.add(item)
+        item.seriesId?.let { sid -> watched.set(sid, listOf(item.streamId), true) }
         if (next != null && item.seriesId != null && next.seriesId == item.seriesId) {
             put(ProgressEntry(next, 0, 0, System.currentTimeMillis(), upNext = true))
         } else {
