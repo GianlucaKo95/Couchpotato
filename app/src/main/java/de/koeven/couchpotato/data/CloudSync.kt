@@ -64,7 +64,7 @@ class CloudSync(context: Context) {
     }
 
     /** Result of a sync or join – with the IPTV login if the main TV shares it and this TV needs it. */
-    data class Result(val message: String, val iptv: XtreamConfig?)
+    data class Result(val message: String, val iptv: JSONObject?)
 
     /** This TV becomes the main device of a new household. Returns the code to type on the other TVs. */
     suspend fun createHousehold(): String = withContext(Dispatchers.IO) {
