@@ -529,7 +529,7 @@ class PlayerActivity : Activity() {
         updateLiveLabel()
         if (sleepAt in 1..now) { sleepAt = 0; goToSleep("Sleep-Timer: Gute Nacht"); return }
         when (val st = ScreenTime.state(this)) {
-            ScreenTime.State.LimitReached -> goToSleep("Bildschirmzeit für heute ist vorbei")
+            is ScreenTime.State.LimitReached -> goToSleep(if (st.evening) "Schlafenszeit – gute Nacht!" else "Bildschirmzeit für heute ist vorbei")
             is ScreenTime.State.Bedtime -> goToSleep("Schlafenszeit – ab ${st.at} Uhr ist Schluss")
             is ScreenTime.State.Allowed -> if (st.remainingMin == 5 && !warned5) { warned5 = true; toast("Noch 5 Minuten Bildschirmzeit") }
         }

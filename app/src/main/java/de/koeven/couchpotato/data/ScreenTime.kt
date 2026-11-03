@@ -17,7 +17,8 @@ object ScreenTime {
 
     sealed interface State {
         data class Allowed(val remainingMin: Int?) : State
-        data object LimitReached : State
+        /** [evening]: from 19 o'clock on the "Gute Nacht" version, even without a bedtime set. */
+        data class LimitReached(val evening: Boolean) : State
         data class Bedtime(val at: String) : State
     }
 
@@ -73,7 +74,9 @@ object ScreenTime {
         }
         if (p.dailyMinutes <= 0) return State.Allowed(null)
         val left = p.dailyMinutes + bonus - (usedMs(c, p) / 60_000).toInt()
-        return if (left <= 0) State.LimitReached else State.Allowed(left)
+        if (left > 0) return State.Allowed(left)
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        return State.LimitReached(evening = hour >= 19 || hour < 6)
     }
 
     fun clock(minuteOfDay: Int) = "%d:%02d".format(minuteOfDay / 60, minuteOfDay % 60)

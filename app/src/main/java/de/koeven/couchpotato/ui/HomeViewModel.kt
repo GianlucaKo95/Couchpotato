@@ -914,7 +914,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** Kids profile: daily screen time and bedtime. */
     fun checkScreenTime() {
         val msg = when (val st = de.koeven.couchpotato.data.ScreenTime.state(app)) {
-            de.koeven.couchpotato.data.ScreenTime.State.LimitReached -> "Die Bildschirmzeit für heute ist aufgebraucht. Morgen geht's weiter!"
+            is de.koeven.couchpotato.data.ScreenTime.State.LimitReached ->
+                if (st.evening) "Jetzt ist Schlafenszeit. Gute Nacht und schlaf schön!"
+                else "Die Bildschirmzeit für heute ist aufgebraucht. Morgen geht's weiter!"
             is de.koeven.couchpotato.data.ScreenTime.State.Bedtime -> "Ab ${st.at} Uhr ist Schlafenszeit. Gute Nacht!"
             is de.koeven.couchpotato.data.ScreenTime.State.Allowed -> null
         }
