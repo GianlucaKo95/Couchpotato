@@ -63,8 +63,18 @@ private fun SleepingBear() {
 
 /** Kids profile after the daily screen time or at bedtime: friendly, but closed – parents can extend. */
 @Composable
-fun ScreenTimeLock(vm: HomeViewModel, message: String, hasPin: Boolean) {
+fun ScreenTimeLock(vm: HomeViewModel, message: String, hasPin: Boolean, night: Boolean) {
     var askPin by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // the recorded sentence, once when the lock screen appears
+    androidx.compose.runtime.DisposableEffect(message) {
+        de.koeven.couchpotato.data.Speaker.play(
+            context,
+            if (night) R.raw.schluss_nacht else R.raw.schluss_zeit,
+            if (night) "Jetzt ist Schlafenszeit! Gute Nacht und schlaf schön!" else "Für heute ist deine Fernsehzeit vorbei. Morgen geht's weiter.",
+        )
+        onDispose { de.koeven.couchpotato.data.Speaker.stop() }
+    }
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(150); runCatching { first.requestFocus() } }
     KidTheme {

@@ -178,6 +178,7 @@ fun MovieScreen(
                         KidLockedBubble(
                             "Ohoh, dieser Film ist noch nichts für dich. Frag Mama oder Papa!",
                             spoken = "Oh oh! Dieser Film ist noch nichts für dich. Frag doch mal Mama oder Papa!",
+                            sound = de.koeven.couchpotato.R.raw.fsk_film,
                         )
                         Spacer(Modifier.height(12.dp))
                     }

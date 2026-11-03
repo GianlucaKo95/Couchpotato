@@ -109,6 +109,7 @@ private val STREAMING_APPS = listOf("com.netflix.ninja", "com.disney.disneyplus"
 
 data class HomeState(
     val screenLock: String? = null,      // kids: screen time used up / bedtime
+    val screenLockNight: Boolean = false, // "Gute Nacht" version (bedtime, or limit used up from 19:00)
     val continueWatching: List<ContinueItem> = emptyList(),
     val apps: List<AppEntry> = emptyList(),
     val movies: List<VodItem> = emptyList(),
@@ -920,7 +921,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             is de.koeven.couchpotato.data.ScreenTime.State.Bedtime -> "Ab ${st.at} Uhr ist Schlafenszeit. Gute Nacht!"
             is de.koeven.couchpotato.data.ScreenTime.State.Allowed -> null
         }
-        if (_state.value.screenLock != msg) _state.update { it.copy(screenLock = msg) }
+        val st = de.koeven.couchpotato.data.ScreenTime.state(app)
+        val night = st is de.koeven.couchpotato.data.ScreenTime.State.Bedtime ||
+            (st is de.koeven.couchpotato.data.ScreenTime.State.LimitReached && st.evening)
+        if (_state.value.screenLock != msg) _state.update { it.copy(screenLock = msg, screenLockNight = night) }
     }
 
     fun extendScreenTime(minutes: Int) {

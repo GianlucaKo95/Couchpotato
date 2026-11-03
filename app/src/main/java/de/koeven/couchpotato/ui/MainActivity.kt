@@ -172,7 +172,7 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
     }
     if (state.profile.kid && state.screenLock != null) {
         BackHandler { }
-        ScreenTimeLock(vm, state.screenLock!!, state.hasPin)
+        ScreenTimeLock(vm, state.screenLock!!, state.hasPin, state.screenLockNight)
         return
     }
 

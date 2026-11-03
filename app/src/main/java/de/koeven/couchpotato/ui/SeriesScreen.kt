@@ -217,6 +217,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                             KidLockedBubble(
                                 "Ohoh, diese Serie ist noch nichts für dich. Frag Mama oder Papa!",
                                 spoken = "Oh oh! Diese Serie ist noch nichts für dich. Frag doch mal Mama oder Papa!",
+                                sound = de.koeven.couchpotato.R.raw.fsk_serie,
                             )
                             Spacer(Modifier.height(12.dp))
                         }

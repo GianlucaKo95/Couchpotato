@@ -330,10 +330,11 @@ fun KidRowTitle(text: String) {
 
 /** The bear explains that a title is locked – and says it out loud. */
 @Composable
-fun KidLockedBubble(text: String, spoken: String = text) {
+fun KidLockedBubble(text: String, spoken: String = text, sound: Int? = null) {
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.DisposableEffect(spoken) {
-        de.koeven.couchpotato.data.Speaker.say(context, spoken)
+        if (sound != null) de.koeven.couchpotato.data.Speaker.play(context, sound, spoken)
+        else de.koeven.couchpotato.data.Speaker.say(context, spoken)
         onDispose { de.koeven.couchpotato.data.Speaker.stop() }
     }
     Row(verticalAlignment = Alignment.CenterVertically) {

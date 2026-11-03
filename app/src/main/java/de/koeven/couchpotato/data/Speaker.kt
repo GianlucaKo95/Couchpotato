@@ -38,9 +38,23 @@ object Speaker {
         if (ready) speak(t, text) else pending = text
     }
 
+    private var player: android.media.MediaPlayer? = null
+
+    /** Plays a recorded sentence (res/raw); without it the speech engine reads [fallback]. */
+    fun play(context: Context, resId: Int, fallback: String) {
+        stop()
+        val mp = runCatching { android.media.MediaPlayer.create(context.applicationContext, resId) }.getOrNull()
+        if (mp == null) { say(context, fallback); return }
+        player = mp
+        mp.setOnCompletionListener { it.release(); if (player === it) player = null }
+        mp.start()
+    }
+
     fun stop() {
         pending = null
         runCatching { tts?.stop() }
+        player?.let { runCatching { it.stop(); it.release() } }
+        player = null
     }
 
     private fun speak(engine: TextToSpeech, text: String) {
