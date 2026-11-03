@@ -84,8 +84,24 @@ class PlayerActivity : Activity() {
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(30_000)
 
+        val upstream = DefaultDataSource.Factory(this, http)
+        val vodLive = runCatching { Playback.decode(intent.getStringExtra(Playback.EXTRA_ITEMS)).firstOrNull()?.kind == PlayItem.KIND_LIVE }.getOrDefault(false)
+        // films & series: through the cache on the stick (rewinding needs no new request), bigger read-ahead
+        val sourceFactory = if (vodLive) upstream else {
+            androidx.media3.datasource.cache.CacheDataSource.Factory()
+                .setCache(PlayerCache.get(this))
+                .setUpstreamDataSourceFactory(upstream)
+                .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        }
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            // up to 3 minutes ahead, but never more than 64 MB in memory (4K: about 30 s, HD: 2–3 min)
+            .setBufferDurationsMs(30_000, 180_000, 2_500, 5_000)
+            .setTargetBufferBytes(64 * 1024 * 1024)
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .build()
         player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(sourceFactory))
+            .setLoadControl(if (vodLive) androidx.media3.exoplayer.DefaultLoadControl() else loadControl)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
             .build()
