@@ -116,8 +116,8 @@ object PhoneLink {
 
     private fun page(): String {
         val esc = title.replace("&", "&amp;").replace("<", "&lt;")
-        val field = if (password) """<input id="t" type="password" autocomplete="off">"""
-            else """<textarea id="t" rows="4" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>"""
+        val field = if (password) """<input id="t" type="password" autocomplete="off" aria-label="$esc">"""
+            else """<textarea id="t" rows="4" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="$esc"></textarea>"""
         return """<!doctype html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Couchpotato</title>
@@ -135,7 +135,7 @@ button{margin-top:18px;width:100%;min-height:52px;border:0;border-radius:999px;b
 <label for="p">Code vom Fernseher</label><input id="p" inputmode="numeric" maxlength="4" autocomplete="one-time-code">
 <button id="l" type="button">Anmelden</button><div id="ls" role="status"></div></section>
 <section id="form" style="display:none">
-<label for="t">$esc</label>$field
+$field
 <div id="s" role="status"></div></section>
 </main><script>
 function show(){document.getElementById('login').style.display='none';document.getElementById('form').style.display='block';document.getElementById('t').focus();}
