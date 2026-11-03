@@ -48,15 +48,15 @@ import java.io.File
  */
 class PlayerActivity : Activity() {
 
-    private lateinit var player: ExoPlayer
-    private lateinit var playerView: PlayerView
+    internal lateinit var player: ExoPlayer
+    internal lateinit var playerView: PlayerView
     private lateinit var progress: ProgressStore
-    private var items: List<PlayItem> = emptyList()
+    internal var items: List<PlayItem> = emptyList()
     private var currentIndex = 0
     private var ended = false
     private val isLive: Boolean get() = items.firstOrNull()?.kind == PlayItem.KIND_LIVE
 
-    private val handler = Handler(Looper.getMainLooper())
+    internal val handler = Handler(Looper.getMainLooper())
     private val saveTask = object : Runnable {
         override fun run() {
             saveCurrent()
@@ -96,6 +96,11 @@ class PlayerActivity : Activity() {
         this.cfg = cfg
         applyTrackPrefs()
         player.addListener(listener)
+        if (!isLive) {
+            // films & series: our own Netflix-like controls instead of the standard ones
+            playerView.useController = false
+            controls = VodControls(this, playerView.parent as FrameLayout)
+        }
         buildUpNext()
         buildOverlays()
         handler.post(upNextTick)
@@ -125,6 +130,7 @@ class PlayerActivity : Activity() {
     }
 
     private lateinit var cfg: de.koeven.couchpotato.data.XtreamConfig
+    private var controls: VodControls? = null
 
     // ---------- audio track & subtitles: remembered per profile ----------
 
@@ -238,7 +244,7 @@ class PlayerActivity : Activity() {
     private lateinit var menuHint: TextView
     private val hideNotice = Runnable { if (::notice.isInitialized) notice.visibility = View.GONE }
 
-    private fun toast(text: String) {
+    internal fun toast(text: String) {
         if (!::notice.isInitialized) {
             Toast.makeText(this, text, Toast.LENGTH_SHORT).show(); return
         }
@@ -267,13 +273,13 @@ class PlayerActivity : Activity() {
     private var sleepAt = 0L                 // wall clock, 0 = off
     private var sleepEndOfEpisode = false
 
-    private fun sleepLabel(): String? = when {
+    internal fun sleepLabel(): String? = when {
         sleepEndOfEpisode -> "☾ nach dieser Folge"
         sleepAt > 0 -> "☾ ${((sleepAt - System.currentTimeMillis()) / 60_000 + 1).coerceAtLeast(1)} Min."
         else -> null
     }
 
-    private fun cycleSleep() {
+    internal fun cycleSleep() {
         val steps = buildList {
             add(0); add(15); add(30); add(60); add(90)
             if (!isLive && items.getOrNull(player.currentMediaItemIndex)?.kind == PlayItem.KIND_EPISODE) add(-1)
@@ -376,7 +382,7 @@ class PlayerActivity : Activity() {
         add("Schließen") { hideMenu() }
     }
 
-    private fun showMenu() {
+    internal fun showMenu() {
         fillMenu()
         playerView.hideController()
         menuHint.visibility = View.GONE
@@ -408,14 +414,14 @@ class PlayerActivity : Activity() {
     private var stillWatching = false        // "Schaust du noch?" instead of a countdown
     private var autoInARow = 0               // episodes started without any key press in between
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    internal fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     /** Couchpotato's look in the player too: petrol panels, gold focus (like the menus in the launcher). */
-    private fun panelBackground() = GradientDrawable().apply {
+    internal fun panelBackground() = GradientDrawable().apply {
         cornerRadius = dp(18).toFloat(); setColor(PANEL); setStroke(dp(2), 0x40FFFFFF)
     }
 
-    private fun pillButton(text: String): Button {
+    internal fun pillButton(text: String): Button {
         fun pill(bg: Int) = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(bg) }
         return Button(this).apply {
             this.text = text
@@ -475,6 +481,7 @@ class PlayerActivity : Activity() {
     private fun updateUpNext() {
         if (!::player.isInitialized) return
         periodicChecks()
+        controls?.takeIf { it.visible }?.refresh()
         if (isLive || !::upNext.isInitialized) return
         if (sleepEndOfEpisode) return
         val i = player.currentMediaItemIndex
@@ -524,6 +531,7 @@ class PlayerActivity : Activity() {
         player.pauseAtEndOfMediaItems = stillWatching
         upNextDeadline = System.currentTimeMillis() + UP_NEXT_COUNTDOWN_MS
         playerView.hideController()
+        controls?.hide()
         upNext.visibility = View.VISIBLE
         upNextPlay.requestFocus()
     }
@@ -539,7 +547,7 @@ class PlayerActivity : Activity() {
         hideUpNext()   // credits play on; ExoPlayer still moves on at the very end
     }
 
-    private fun playNextNow(auto: Boolean = false) {
+    internal fun playNextNow(auto: Boolean = false) {
         val i = player.currentMediaItemIndex
         if (i + 1 > items.lastIndex) return
         autoInARow = if (auto) autoInARow + 1 else 0
@@ -695,6 +703,11 @@ class PlayerActivity : Activity() {
         if (event.keyCode == KeyEvent.KEYCODE_MENU && ::player.isInitialized) {
             if (event.action == KeyEvent.ACTION_UP) showMenu()
             return true
+        }
+        // films & series: Netflix-like controls
+        controls?.let { c ->
+            if (c.handleKey(event)) return true
+            if (c.visible) return super.dispatchKeyEvent(event)      // D-pad between the buttons
         }
         if (isLive && ::player.isInitialized && event.keyCode == KeyEvent.KEYCODE_LAST_CHANNEL) {
             if (event.action == KeyEvent.ACTION_DOWN && previousChannel >= 0) switchTo(previousChannel)
