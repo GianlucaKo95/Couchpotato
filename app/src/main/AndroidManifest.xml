@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- in-app updates (Couchpotato installs its own new versions) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android projectors: find the maker's hidden keystone/zoom window (HY300 & co.) -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <!-- Experimental: read the system "Watch Next" row of other apps (may be denied on Fire OS) -->
     <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
     <uses-permission android:name="com.android.providers.tv.permission.ACCESS_WATCHED_PROGRAMS" />

@@ -14,6 +14,81 @@ object AppsRepository {
     // Rendering banners is the slow part; keep them per package + update time.
     private val cache = HashMap<String, Pair<Long, AppEntry>>()
 
+    // ---------------- projector settings (HY300 & co.) ----------------
+
+    /**
+     * Android projectors keep keystone, zoom and projection direction in a hidden window of
+     * their own launcher. With Couchpotato as launcher it would be unreachable – so it comes
+     * back as a tile. Known windows first, then a search through the projector's system apps.
+     * "pkg/class" in [AppEntry.packageName] marks such a tile.
+     */
+    private val KNOWN_EXTRAS = listOf(
+        "com.htc.luminaos/.activity.ProjectActivity" to "Projektion",       // HY300 / HY300 Pro (LuminaOS)
+        "com.htc.magcubicos/.activity.ProjectActivity" to "Projektion",     // Magcubic OS
+        "com.hysd.vafocus/.VajzActivity" to "Fokus",                        // HY300 Pro autofocus calibration
+    )
+    private val EXTRA_PACKAGES = listOf("com.htc.", "com.hysd.", "com.softwinner.", "com.allwinner.", "com.magcubic.", "com.xgimi.", "com.dangbei.")
+    private val EXTRA_WORDS = Regex("(?i)project|keystone|trapez|correct|zoom|focus")
+
+    private var extras: List<AppEntry>? = null
+
+    fun projectorExtras(context: Context): List<AppEntry> {
+        extras?.let { return it }
+        val pm = context.packageManager
+        val found = LinkedHashMap<String, String>()   // component → label
+        for ((comp, label) in KNOWN_EXTRAS) {
+            val cn = android.content.ComponentName.unflattenFromString(comp) ?: continue
+            val ai = runCatching { pm.getActivityInfo(cn, 0) }.getOrNull() ?: continue
+            if (ai.exported) found[cn.flattenToShortString()] = label
+        }
+        if (found.isEmpty()) {
+            // unknown model: look through the projector maker's apps for such windows
+            val pkgs = runCatching { pm.getInstalledPackages(0) }.getOrDefault(emptyList())
+                .map { it.packageName }.filter { n -> EXTRA_PACKAGES.any { n.startsWith(it) } }
+            for (pkgName in pkgs) {
+                val pi = runCatching { pm.getPackageInfo(pkgName, android.content.pm.PackageManager.GET_ACTIVITIES) }.getOrNull() ?: continue
+                for (ai in pi.activities.orEmpty()) {
+                    if (!ai.exported || !EXTRA_WORDS.containsMatchIn(ai.name.substringAfterLast('.'))) continue
+                    val name = ai.name.substringAfterLast('.')
+                    val label = when {
+                        name.contains("focus", true) -> "Fokus"
+                        name.contains("zoom", true) -> "Zoom"
+                        else -> "Projektion"
+                    }
+                    found[android.content.ComponentName(pi.packageName, ai.name).flattenToShortString()] = label
+                    if (found.size >= 4) break
+                }
+            }
+        }
+        return found.map { (comp, label) ->
+            val bmp = extraBanner(label)
+            AppEntry(packageName = comp, label = "Beamer · $label", banner = bmp.asImageBitmap(), icon = null)
+        }.also { extras = it }
+    }
+
+    /** A simple banner in Couchpotato's colours: petrol, a projector symbol, the name. */
+    private fun extraBanner(label: String): Bitmap {
+        val w = 480; val h = 270
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(bmp)
+        c.drawColor(0xFF0B3236.toInt())
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        // projector: body, lens and a light cone
+        p.color = 0x40E8B86D
+        c.drawPath(android.graphics.Path().apply { moveTo(238f, 92f); lineTo(400f, 40f); lineTo(400f, 170f); close() }, p)
+        p.color = 0xFFF4F1EC.toInt()
+        c.drawRoundRect(80f, 70f, 250f, 140f, 18f, 18f, p)
+        p.color = 0xFFE8B86D.toInt()
+        c.drawCircle(214f, 105f, 22f, p)
+        p.color = 0xFF0B3236.toInt()
+        c.drawCircle(214f, 105f, 11f, p)
+        p.color = 0xFFF4F1EC.toInt()
+        p.textSize = 46f
+        p.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        c.drawText(label, 80f, 222f, p)
+        return bmp
+    }
+
     fun load(context: Context): List<AppEntry> {
         val pm = context.packageManager
         val found = LinkedHashMap<String, ResolveInfo>()
@@ -43,7 +118,7 @@ object AppsRepository {
                         icon = iconBmp?.asImageBitmap(),
                     )
                 }.also { cache[ai.packageName] = updated to it }
-        }.getOrNull() }
+        }.getOrNull() } + projectorExtras(context)
     }
 
     /*
@@ -87,6 +162,12 @@ object AppsRepository {
 
     fun launch(context: Context, pkg: String): Boolean {
         val pm = context.packageManager
+        // projector settings tile: start that window directly
+        android.content.ComponentName.unflattenFromString(pkg)?.takeIf { pkg.contains('/') }?.let { cn ->
+            return runCatching {
+                context.startActivity(Intent(Intent.ACTION_MAIN).setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.isSuccess
+        }
         val intent = pm.getLeanbackLaunchIntentForPackage(pkg) ?: pm.getLaunchIntentForPackage(pkg) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
