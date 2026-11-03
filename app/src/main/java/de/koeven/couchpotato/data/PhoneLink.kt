@@ -134,9 +134,9 @@ button{margin-top:18px;width:100%;min-height:52px;border:0;border-radius:999px;b
 <section id="login"><p>Gib den Code ein, der auf dem Fernseher steht.</p>
 <label for="p">Code vom Fernseher</label><input id="p" inputmode="numeric" maxlength="4" autocomplete="one-time-code">
 <button id="l" type="button">Anmelden</button><div id="ls" role="status"></div></section>
-<section id="form" style="display:none"><p>Eingabe für „$esc“ auf dem Fernseher</p>
-<label for="t">Text oder Link einfügen</label>$field
-<div id="s" role="status">Was du hier tippst, steht sofort auf dem Fernseher.</div></section>
+<section id="form" style="display:none">
+<label for="t">$esc</label>$field
+<div id="s" role="status"></div></section>
 </main><script>
 function show(){document.getElementById('login').style.display='none';document.getElementById('form').style.display='block';document.getElementById('t').focus();}
 var q=new URLSearchParams(location.search).get('p');
@@ -154,7 +154,7 @@ if(busy){again=true;return;}busy=true;
 var s=document.getElementById('s');
 fetch('/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
 body:new URLSearchParams({text:document.getElementById('t').value,pin:document.getElementById('p').value})})
-.then(function(r){return r.text().then(function(t){s.textContent=r.ok?'✓ Live mit dem Fernseher verbunden – dort mit „Übernehmen“ bestätigen':t;});})
+.then(function(r){return r.text().then(function(t){s.textContent=r.ok?'':t;});})
 .catch(function(){s.textContent='Fernseher nicht erreichbar – gleiches WLAN?';})
 .then(function(){busy=false;if(again){again=false;push();}});}
 var t=document.getElementById('t');
