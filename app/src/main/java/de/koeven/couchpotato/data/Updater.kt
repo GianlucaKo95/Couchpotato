@@ -45,9 +45,14 @@ object Updater {
         val p = prefs(c)
         if (!force && System.currentTimeMillis() - p.getLong("checkedAt", 0L) < CHECK_GAP_MS) return@withContext known(c)
         p.edit().putLong("checkedAt", System.currentTimeMillis()).apply()
-        val text = get("$API/releases/latest")
-        p.edit().putString("latest", text).apply()
-        parse(text)?.takeIf { it.build > currentBuild }
+        // the highest build number wins – GitHub's "latest" flag can lag when two builds finish together
+        val list = org.json.JSONArray(get("$API/releases?per_page=10"))
+        val best = (0 until list.length()).map { list.getJSONObject(it) }
+            .filter { !it.optBoolean("draft") }
+            .maxByOrNull { it.optString("tag_name").removePrefix("build-").toIntOrNull() ?: -1 }
+            ?.toString() ?: return@withContext null
+        p.edit().putString("latest", best).apply()
+        parse(best)?.takeIf { it.build > currentBuild }
     }
 
     private fun parse(text: String): Release? = runCatching {
