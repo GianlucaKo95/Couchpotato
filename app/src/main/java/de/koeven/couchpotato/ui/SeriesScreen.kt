@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -358,6 +359,7 @@ private fun EpisodeCard(
 ) {
     val watched = seen && progress?.upNext != true || progress?.watched() == true
     val image = episode.image ?: fallbackImage
+    var focused by remember { mutableStateOf(false) }
     Column(Modifier.width(width)) {
         Card(
             onClick = onClick,
@@ -365,6 +367,7 @@ private fun EpisodeCard(
             modifier = Modifier
                 .width(width)
                 .aspectRatio(16f / 9f)
+                .onFocusChanged { focused = it.isFocused }
                 .glowFrom(image),
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
@@ -411,13 +414,11 @@ private fun EpisodeCard(
                 }
             }
         }
-        Text(
-            "${episode.number}. ${episode.title}",
-            style = MaterialTheme.typography.labelMedium,
+        CaptionText(
+            text = "${episode.number}. ${episode.title}",
+            focused = focused,
             fontWeight = FontWeight.SemiBold,
-            color = if (watched) CpColors.TextMuted else CpColors.Text,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            color = if (watched && !focused) CpColors.TextMuted else CpColors.Text,
             modifier = Modifier.padding(top = 7.dp),
         )
         val minutes = episode.durationSec / 60

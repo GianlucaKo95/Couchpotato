@@ -1,5 +1,6 @@
 package de.koeven.couchpotato.ui
 
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -131,6 +132,34 @@ fun Shelf(
     }
 }
 
+/**
+ * One line under a tile. Too long? While the tile is focused it scrolls slowly after a moment
+ * (like the Fire TV home screen), otherwise it ends with "…".
+ */
+@Composable
+fun CaptionText(
+    text: String,
+    focused: Boolean,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+    fontWeight: FontWeight? = null,
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = fontWeight,
+        color = color,
+        maxLines = 1,
+        overflow = if (focused) TextOverflow.Clip else TextOverflow.Ellipsis,
+        modifier = if (focused) modifier.basicMarquee(
+            iterations = Int.MAX_VALUE,
+            initialDelayMillis = 900,
+            repeatDelayMillis = 1_800,
+            velocity = 32.dp,
+        ) else modifier,
+    )
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun PosterCard(
@@ -140,12 +169,14 @@ fun PosterCard(
     modifier: Modifier = Modifier,
     width: Dp = PosterWidth,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Column(Modifier.width(width)) {
         Card(
             onClick = onClick,
             modifier = modifier
                 .width(width)
                 .aspectRatio(2f / 3f)
+                .onFocusChanged { focused = it.isFocused }
                 .glowFrom(image),
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
@@ -169,12 +200,10 @@ fun PosterCard(
                 }
             }
         }
-        Text(
+        CaptionText(
             text = title,
-            style = MaterialTheme.typography.labelMedium,
-            color = CpColors.TextMuted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            focused = focused,
+            color = if (focused) CpColors.Text else CpColors.TextMuted,
             modifier = Modifier.padding(top = 6.dp),
         )
     }
@@ -313,13 +342,11 @@ fun ContinueCard(
                 }
             }
         }
-        Text(
+        CaptionText(
             text = listOfNotNull(title, subtitle).joinToString(" · "),
-            style = MaterialTheme.typography.labelMedium,
+            focused = focused,
             fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
             color = if (focused) CpColors.Text else CpColors.TextMuted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 6.dp),
         )
     }
@@ -414,13 +441,15 @@ fun ChannelCard(
     modifier: Modifier = Modifier,
     width: Dp = ChannelWidth,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Column(Modifier.width(width)) {
         Card(
             onClick = onClick,
             onLongClick = onLongClick,
             modifier = modifier
                 .width(width)
-                .aspectRatio(16f / 9f),
+                .aspectRatio(16f / 9f)
+                .onFocusChanged { focused = it.isFocused },
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
             scale = cardScale(),
@@ -438,20 +467,8 @@ fun ChannelCard(
                 }
             }
         }
-        Text(
-            text = name,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-        Text(
-            text = nowPlaying?.let { "Jetzt: $it" } ?: " ",
-            style = MaterialTheme.typography.labelMedium,
-            color = CpColors.TextMuted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        CaptionText(text = name, focused = focused, color = CpColors.Text, modifier = Modifier.padding(top = 6.dp))
+        CaptionText(text = nowPlaying?.let { "Jetzt: $it" } ?: " ", focused = focused, color = CpColors.TextMuted)
     }
 }
 
