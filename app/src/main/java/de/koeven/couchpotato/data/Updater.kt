@@ -20,22 +20,21 @@ import java.net.URL
 import java.security.MessageDigest
 
 /**
- * In-app updates: every build from main is stored by GitHub Actions in Supabase Storage.
- * Couchpotato looks there at most every 6 hours, downloads the APK, checks its SHA-256 and
- * hands it to Android's installer – no adb needed any more.
+ * In-app updates straight from this repo's GitHub releases (read-only token from the build).
+ * Couchpotato looks at most every 6 hours, downloads the APK, checks its SHA-256 (when GitHub
+ * provides one) and hands it to Android's installer – no adb needed any more.
  */
 object Updater {
-    data class Release(val build: Int, val url: String, val size: Long, val sha256: String)
+    data class Release(val build: Int, val url: String, val size: Long, val sha256: String?)
 
     private const val PREFS = "updater"
     private const val CHECK_GAP_MS = 6 * 3600_000L
-    private const val BUCKET = "couchpotato-updates"
+    private const val API = "https://api.github.com/repos/GianlucaKo95/Couchpotato"
 
-    val configured: Boolean get() = BuildConfig.SUPABASE_URL.isNotBlank()
+    val configured: Boolean get() = BuildConfig.UPDATE_TOKEN.isNotBlank()
     val currentBuild: Int get() = BuildConfig.VERSION_CODE
 
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private fun base() = "${BuildConfig.SUPABASE_URL}/storage/v1/object/public/$BUCKET"
 
     /** Last known newer release (from the last check), or null. */
     fun known(c: Context): Release? = prefs(c).getString("latest", null)?.let { parse(it) }?.takeIf { it.build > currentBuild }
@@ -46,14 +45,22 @@ object Updater {
         val p = prefs(c)
         if (!force && System.currentTimeMillis() - p.getLong("checkedAt", 0L) < CHECK_GAP_MS) return@withContext known(c)
         p.edit().putLong("checkedAt", System.currentTimeMillis()).apply()
-        val text = get("${base()}/latest.json?t=${System.currentTimeMillis() / 60_000}")
+        val text = get("$API/releases/latest")
         p.edit().putString("latest", text).apply()
         parse(text)?.takeIf { it.build > currentBuild }
     }
 
     private fun parse(text: String): Release? = runCatching {
         val o = JSONObject(text)
-        Release(o.getInt("build"), "${base()}/${o.getString("path")}", o.optLong("size"), o.getString("sha256"))
+        val build = o.getString("tag_name").removePrefix("build-").toInt()
+        val assets = o.getJSONArray("assets")
+        val apk = (0 until assets.length()).map { assets.getJSONObject(it) }.first { it.optString("name") == "couchpotato.apk" }
+        Release(
+            build = build,
+            url = "$API/releases/assets/${apk.getLong("id")}",
+            size = apk.optLong("size"),
+            sha256 = apk.optString("digest").takeIf { it.startsWith("sha256:") }?.removePrefix("sha256:"),
+        )
     }.getOrNull()
 
     /** May Couchpotato install apps? (Fire TV: Einstellungen → Mein Fire TV → Entwickleroptionen.) */
@@ -74,8 +81,19 @@ object Updater {
     /** Downloads, verifies and starts the installation (Android then asks once to confirm). */
     suspend fun install(c: Context, r: Release, onProgress: (Int) -> Unit = {}) = withContext(Dispatchers.IO) {
         val file = File(c.cacheDir, "update.apk")
-        val conn = URL(r.url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 15_000; conn.readTimeout = 30_000
+        val api = (URL(r.url).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
+            connectTimeout = 15_000; readTimeout = 30_000
+            setRequestProperty("Authorization", "Bearer ${BuildConfig.UPDATE_TOKEN}")
+            setRequestProperty("Accept", "application/octet-stream")
+            setRequestProperty("User-Agent", "Couchpotato-Updater")
+        }
+        val conn = if (api.responseCode in 300..399) {
+            // the signed download link must be fetched without our token
+            val location = api.getHeaderField("Location") ?: throw IOException("Download-Link fehlt")
+            api.disconnect()
+            (URL(location).openConnection() as HttpURLConnection).apply { connectTimeout = 15_000; readTimeout = 30_000 }
+        } else api
         val digest = MessageDigest.getInstance("SHA-256")
         try {
             if (conn.responseCode !in 200..299) throw IOException("Download fehlgeschlagen (HTTP ${conn.responseCode})")
@@ -97,7 +115,10 @@ object Updater {
             }
         } finally { conn.disconnect() }
         val hash = digest.digest().joinToString("") { "%02x".format(it) }
-        if (!hash.equals(r.sha256, ignoreCase = true)) { file.delete(); throw IOException("Download beschädigt – bitte noch einmal") }
+        val sizeWrong = r.size > 0 && file.length() != r.size
+        if (sizeWrong || (r.sha256 != null && !hash.equals(r.sha256, ignoreCase = true))) {
+            file.delete(); throw IOException("Download beschädigt – bitte noch einmal")
+        }
 
         val installer = c.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
@@ -118,8 +139,11 @@ object Updater {
     private fun get(url: String): String {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000; conn.readTimeout = 20_000
+        conn.setRequestProperty("Authorization", "Bearer ${BuildConfig.UPDATE_TOKEN}")
+        conn.setRequestProperty("Accept", "application/vnd.github+json")
+        conn.setRequestProperty("User-Agent", "Couchpotato-Updater")
         try {
-            if (conn.responseCode !in 200..299) throw IOException("Update-Server antwortet mit HTTP ${conn.responseCode}")
+            if (conn.responseCode !in 200..299) throw IOException(if (conn.responseCode == 401) "Update-Schlüssel ungültig oder abgelaufen" else "GitHub antwortet mit HTTP ${conn.responseCode}")
             return conn.inputStream.bufferedReader().use { it.readText() }
         } finally { conn.disconnect() }
     }

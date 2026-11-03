@@ -10,6 +10,8 @@ val keystorePath: String? = System.getenv("CP_KEYSTORE")
 val keystorePassword: String? = System.getenv("CP_KEYSTORE_PASSWORD")
 // TMDB key/token from the repo secret TMDB_TOKEN (empty = TMDB off, unless set on the stick)
 val tmdbToken: String = (System.getenv("TMDB_TOKEN") ?: "").trim().replace("\"", "")
+// read-only GitHub token (this repo, Contents: read) for the in-app updater; empty = updater off
+val updateToken: String = (System.getenv("UPDATE_TOKEN") ?: "").trim().replace("\"", "")
 val supabaseUrl: String = (System.getenv("SUPABASE_URL") ?: "").trim().trimEnd('/')
 val supabasePublishableKey: String = (System.getenv("SUPABASE_PUBLISHABLE_KEY") ?: "").trim()
 fun String.asBuildConfigLiteral() = "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -25,6 +27,7 @@ android {
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"
         buildConfigField("String", "TMDB_TOKEN", "\"$tmdbToken\"")
+        buildConfigField("String", "UPDATE_TOKEN", "\"$updateToken\"")
         buildConfigField("String", "SUPABASE_URL", supabaseUrl.asBuildConfigLiteral())
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", supabasePublishableKey.asBuildConfigLiteral())
     }
