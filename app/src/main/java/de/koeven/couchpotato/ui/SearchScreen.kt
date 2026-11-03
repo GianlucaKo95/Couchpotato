@@ -216,7 +216,7 @@ fun SearchScreen(
                     }
                     if (phoneOpen) {
                         // live: the search runs while you type on the phone
-                        PhoneLinkPanel("Suche") { text -> vm.setQuery(text) }
+                        PhoneLinkPanel("Suche") { text -> vm.setQuery(text.replace(Regex("\\s+"), " ").trimStart()) }
                     }
                     if (voiceAvailable) Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         Key("🎤 Sprechen", keyWidth * 7 + KeyGap * 6) { runCatching { voice.launch(voiceIntent) } }

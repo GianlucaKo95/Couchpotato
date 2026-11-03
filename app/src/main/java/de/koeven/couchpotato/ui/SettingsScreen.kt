@@ -828,7 +828,8 @@ private fun TextFieldButton(
                 }
                 if (phone) {
                     // live from the phone into the field; "Übernehmen" on the TV confirms
-                    PhoneLinkPanel(label, password, compact = true) { text -> draft = text }
+                    // copied links often carry a line break or spaces at the end – one line in the field
+                    PhoneLinkPanel(label, password, compact = true) { text -> draft = text.replace(Regex("[\r\n\t]+"), "").trim() }
                 }
             }
           }

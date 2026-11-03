@@ -157,7 +157,11 @@ body:new URLSearchParams({text:document.getElementById('t').value,pin:document.g
 .then(function(r){return r.text().then(function(t){s.textContent=r.ok?'✓ Live mit dem Fernseher verbunden – dort mit „Übernehmen“ bestätigen':t;});})
 .catch(function(){s.textContent='Fernseher nicht erreichbar – gleiches WLAN?';})
 .then(function(){busy=false;if(again){again=false;push();}});}
-document.getElementById('t').addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(push,200);});
+var t=document.getElementById('t');
+t.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(push,200);});
+// pasting: the whole field goes out at once, right away
+t.addEventListener('paste',function(){clearTimeout(timer);setTimeout(push,30);});
+t.addEventListener('change',function(){clearTimeout(timer);push();});
 </script></body></html>"""
     }
 
