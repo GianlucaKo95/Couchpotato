@@ -113,6 +113,7 @@ fun SearchScreen(
     }
 
     fun type(s: String) = vm.setQuery(query + s)
+    var phoneOpen by remember { mutableStateOf(false) }
 
     // voice search – only if this Fire TV offers speech recognition to apps (Alexa itself is reserved for Amazon)
     val voiceIntent = remember {
@@ -209,6 +210,12 @@ fun SearchScreen(
                         Key("Leerzeichen", keyWidth * 3 + KeyGap * 2) { if (query.isNotEmpty() && !query.endsWith(" ")) type(" ") }
                         Key("⌫ Löschen", keyWidth * 2 + KeyGap) { vm.setQuery(query.dropLast(1)) }
                         Key(if (digits) "abc" else "123", keyWidth * 2 + KeyGap) { digits = !digits }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
+                        Key(if (phoneOpen) "Handy-Eingabe beenden" else "Mit dem Handy tippen", keyWidth * 7 + KeyGap * 6, muted = true) { phoneOpen = !phoneOpen }
+                    }
+                    if (phoneOpen) {
+                        PhoneLinkPanel("Suche") { text -> vm.setQuery(text); phoneOpen = false }
                     }
                     if (voiceAvailable) Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         Key("🎤 Sprechen", keyWidth * 7 + KeyGap * 6) { runCatching { voice.launch(voiceIntent) } }

@@ -219,7 +219,7 @@ private fun LoginSection(vm: HomeViewModel, setStatus: (String?) -> Unit) {
             keyboardType = KeyboardType.Uri,
             onValueChange = { link = it },
         )
-        Hint("Am einfachsten vom PC aus: adb shell \"am start -n de.koeven.couchpotato/.ui.MainActivity --es m3u 'LINK'\"")
+        Hint("Am einfachsten: „M3U-Link“ öffnen → „Mit dem Handy eingeben“ → QR-Code scannen und den Link auf dem Handy einfügen.")
     } else {
         TextFieldButton(
             label = "Server",
@@ -781,6 +781,7 @@ private fun TextFieldButton(
 
     if (editing) {
         var draft by remember { mutableStateOf(value) }
+        var phone by remember { mutableStateOf(false) }
         val fieldFocus = remember { FocusRequester() }
         fun accept() {
             onValueChange(draft.trim())
@@ -812,8 +813,13 @@ private fun TextFieldButton(
                         .fillMaxWidth()
                         .focusRequester(fieldFocus),
                 )
+                if (phone) {
+                    // whatever arrives from the phone is taken over right away
+                    PhoneLinkPanel(label, password) { text -> draft = text; accept() }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     PrimaryPill("Übernehmen") { accept() }
+                    SecondaryPill(if (phone) "Handy-Eingabe beenden" else "Mit dem Handy eingeben") { phone = !phone }
                     SecondaryPill("Abbrechen") { editing = false }
                 }
             }

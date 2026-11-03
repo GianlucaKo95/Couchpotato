@@ -82,6 +82,7 @@ dependencies {
     implementation("androidx.tv:tv-material:1.0.0")
 
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("com.google.zxing:core:3.5.3")     // QR code for "Mit dem Handy eingeben"
     implementation("com.squareup.okhttp3:okhttp:4.12.0")   // image loading through ImageGate
     implementation("androidx.palette:palette-ktx:1.0.0")   // background glow colours from covers
 
