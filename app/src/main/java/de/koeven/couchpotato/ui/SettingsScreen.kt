@@ -781,7 +781,7 @@ private fun TextFieldButton(
 
     if (editing) {
         var draft by remember { mutableStateOf(value) }
-        var phone by remember { mutableStateOf(false) }
+        var phone by remember { mutableStateOf(true) }      // QR code right away, next to the field
         val fieldFocus = remember { FocusRequester() }
         fun accept() {
             onValueChange(draft.trim())
@@ -791,10 +791,18 @@ private fun TextFieldButton(
             delay(100)
             runCatching { fieldFocus.requestFocus() }
         }
-        Dialog(onDismissRequest = { editing = false }) {
+        Dialog(
+            onDismissRequest = { editing = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+          // at the top of the screen: the Fire TV keyboard takes the lower half
+          androidx.compose.foundation.layout.Box(
+              Modifier.fillMaxSize().padding(top = 28.dp),
+              contentAlignment = androidx.compose.ui.Alignment.TopCenter,
+          ) {
             Column(
                 Modifier
-                    .width(600.dp)
+                    .width(if (phone) 860.dp else 600.dp)
                     .background(androidx.compose.ui.graphics.Color(0xFF0B3236), RoundedCornerShape(18.dp))
                     .border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
                     .padding(24.dp),
@@ -813,16 +821,17 @@ private fun TextFieldButton(
                         .fillMaxWidth()
                         .focusRequester(fieldFocus),
                 )
-                if (phone) {
-                    // whatever arrives from the phone is taken over right away
-                    PhoneLinkPanel(label, password) { text -> draft = text; accept() }
-                }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     PrimaryPill("Übernehmen") { accept() }
-                    SecondaryPill(if (phone) "Handy-Eingabe beenden" else "Mit dem Handy eingeben") { phone = !phone }
+                    SecondaryPill(if (phone) "QR-Code ausblenden" else "Mit dem Handy eingeben") { phone = !phone }
                     SecondaryPill("Abbrechen") { editing = false }
                 }
+                if (phone) {
+                    // whatever arrives from the phone is taken over right away
+                    PhoneLinkPanel(label, password, compact = true) { text -> draft = text; accept() }
+                }
             }
+          }
         }
     }
 }

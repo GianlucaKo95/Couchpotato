@@ -30,7 +30,7 @@ import de.koeven.couchpotato.data.PhoneLink
  * The little web server only runs while this panel is on screen.
  */
 @Composable
-fun PhoneLinkPanel(title: String, password: Boolean = false, onText: (String) -> Unit) {
+fun PhoneLinkPanel(title: String, password: Boolean = false, compact: Boolean = false, onText: (String) -> Unit) {
     val session = remember { PhoneLink.start(title, password) }
     DisposableEffect(Unit) { onDispose { PhoneLink.stop() } }
     val got by PhoneLink.received.collectAsState()
@@ -46,16 +46,15 @@ fun PhoneLinkPanel(title: String, password: Boolean = false, onText: (String) ->
             contentDescription = "QR-Code für die Handy-Eingabe",
             filterQuality = FilterQuality.None,
             modifier = Modifier
-                .size(170.dp)
+                .size(if (compact) 120.dp else 170.dp)
                 .background(Color.White, RoundedCornerShape(10.dp))
                 .padding(6.dp),
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Mit der Handy-Kamera den Code scannen", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text("oder im Handy-Browser öffnen:", style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted)
-            Text(session.url, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = CpColors.Accent)
+            Text("Bequemer mit dem Handy: Code mit der Kamera scannen", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text("oder im Handy-Browser öffnen:  ${session.url}", style = MaterialTheme.typography.bodyMedium, color = CpColors.Accent)
             Text("Code: ${session.pin}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("Handy und Fernseher müssen im selben WLAN sein.", style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted)
+            if (!compact) Text("Handy und Fernseher müssen im selben WLAN sein.", style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted)
         }
     }
 }
