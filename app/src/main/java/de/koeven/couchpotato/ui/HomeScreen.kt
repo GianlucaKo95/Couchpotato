@@ -1,5 +1,6 @@
 package de.koeven.couchpotato.ui
 
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Box
 import android.widget.Toast
@@ -523,7 +524,7 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
     Column(
         Modifier
             .fillMaxWidth()
-            .height(104.dp)
+            .height(124.dp)
             .padding(start = ScreenPadding, end = ScreenPadding * 3, top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -556,8 +557,10 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
             hero.remaining?.let { Text(it, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1) }
         }
         plot?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted, maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            // two short lines instead of one endless one – easier to read from the sofa
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted, maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 640.dp))
         }
     }
 }
