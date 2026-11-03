@@ -123,7 +123,7 @@ fun KidHeader(profile: Profile, title: String, subtitle: String, avatar: Dp = 60
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = KidColors.Soft, maxLines = 1)
+            Text(subtitle, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
         }
         KidSmallButton("Eltern", R.drawable.ic_lock) { nav?.settings?.invoke() }
         Spacer(Modifier.width(14.dp))

@@ -171,7 +171,7 @@ fun PosterCard(
         }
         Text(
             text = title,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = CpColors.TextMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -292,7 +292,7 @@ fun ContinueCard(
                 badge?.let {
                     Text(
                         it,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = CpColors.Text,
                         maxLines = 1,
@@ -382,7 +382,7 @@ fun AppCard(
                     )
                     else -> Text(
                         app.label,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(4.dp),
                     )
@@ -391,7 +391,7 @@ fun AppCard(
         }
         Text(
             text = app.label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = if (focused) CpColors.Text else Color.Transparent,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -447,7 +447,7 @@ fun ChannelCard(
         )
         Text(
             text = nowPlaying?.let { "Jetzt: $it" } ?: " ",
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = CpColors.TextMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -469,7 +469,7 @@ fun TileCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, 
             scale = cardScale(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.Surface), contentAlignment = Alignment.Center) {
-                Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
             }
         }
     }

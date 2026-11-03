@@ -221,12 +221,12 @@ fun SearchScreen(
                 Spacer(Modifier.height(14.dp))
                 Text(
                     "Zurück = schließen",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = CpColors.TextMuted,
                 )
                 Text(
                     state.indexStatus,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = CpColors.TextMuted,
                     maxLines = 2,
                     modifier = Modifier.padding(top = 4.dp),
@@ -311,7 +311,7 @@ fun SearchScreen(
                                             )
                                             Text(
                                                 r.apps.joinToString(" · ") { it.label },
-                                                style = MaterialTheme.typography.labelSmall,
+                                                style = MaterialTheme.typography.labelMedium,
                                                 color = CpColors.Accent,
                                                 fontWeight = FontWeight.SemiBold,
                                                 maxLines = 1,
@@ -339,7 +339,7 @@ fun SearchScreen(
                                         )
                                         Text(
                                             r.apps.joinToString(" · ") { it.label },
-                                            style = MaterialTheme.typography.labelSmall,
+                                            style = MaterialTheme.typography.labelMedium,
                                             color = CpColors.Accent,
                                             fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
@@ -350,7 +350,7 @@ fun SearchScreen(
                             }
                             Text(
                                 "Wo es läuft: JustWatch über TMDB · ein Klick sucht den Titel in der App",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = CpColors.TextMuted,
                                 modifier = Modifier.padding(top = 2.dp),
                             )
@@ -371,11 +371,7 @@ fun SearchScreen(
                                         onLongClick = {
                                             val wasFav = ch.id in favIds
                                             vm.toggleFavorite(ch)
-                                            Toast.makeText(
-                                                context,
-                                                if (wasFav) "${ch.name} aus Favoriten entfernt" else "${ch.name} zu Favoriten hinzugefügt",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            Notice.show(if (wasFav) "${ch.name} aus Favoriten entfernt" else "${ch.name} zu Favoriten hinzugefügt")
                                         },
                                     )
                                 }

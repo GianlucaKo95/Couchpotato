@@ -234,9 +234,18 @@ class PlayerActivity : Activity() {
 
     private fun fmt(ms: Long): String { val s = ms / 1000; return "%d:%02d".format(s / 60, s % 60) }
 
+    private lateinit var notice: TextView
+    private lateinit var menuHint: TextView
+    private val hideNotice = Runnable { if (::notice.isInitialized) notice.visibility = View.GONE }
+
     private fun toast(text: String) {
-        zapToast?.cancel()
-        zapToast = Toast.makeText(this, text, Toast.LENGTH_SHORT).also { it.show() }
+        if (!::notice.isInitialized) {
+            Toast.makeText(this, text, Toast.LENGTH_SHORT).show(); return
+        }
+        notice.text = text
+        notice.visibility = View.VISIBLE
+        handler.removeCallbacks(hideNotice)
+        handler.postDelayed(hideNotice, 2_600L)
     }
 
     private lateinit var liveLabel: TextView
@@ -285,7 +294,7 @@ class PlayerActivity : Activity() {
     private fun goToSleep(message: String) {
         saveCurrent()
         player.playWhenReady = false
-        toast(message)
+        de.koeven.couchpotato.ui.Notice.show(message, long = true)   // shown in the launcher
         finish()
     }
 
@@ -295,18 +304,42 @@ class PlayerActivity : Activity() {
 
     private fun buildOverlays() {
         liveLabel = TextView(this).apply {
-            setTextColor(Color.WHITE); textSize = 16f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(TEXT); textSize = 16f; setTypeface(typeface, Typeface.BOLD)
             setPadding(dp(14), dp(6), dp(14), dp(6))
-            background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(0x99000000.toInt()) }
+            background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(PANEL) }
             visibility = View.GONE
         }
+        // notices in Couchpotato's style instead of the small system toasts
+        notice = TextView(this).apply {
+            setTextColor(TEXT); textSize = 18f; setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(22), dp(12), dp(22), dp(12))
+            background = panelBackground()
+            visibility = View.GONE
+        }
+        (playerView.parent as FrameLayout).addView(notice, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+        ).apply { setMargins(0, dp(28), 0, 0) })
+        // "≡ Menü" while the controls are visible, so the menu can be found
+        menuHint = TextView(this).apply {
+            text = "≡  Menü: Sleep-Timer" + if (isLive) " · letzter Sender · zurückspulen" else ""
+            setTextColor(TEXT); textSize = 15f; setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(14), dp(6), dp(14), dp(6))
+            background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(PANEL) }
+            visibility = View.GONE
+        }
+        (playerView.parent as FrameLayout).addView(menuHint, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START,
+        ).apply { setMargins(dp(40), dp(28), 0, 0) })
+        playerView.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v ->
+            menuHint.visibility = if (v == View.VISIBLE && menuPanel.visibility != View.VISIBLE) View.VISIBLE else View.GONE
+        })
         (playerView.parent as FrameLayout).addView(liveLabel, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END,
         ).apply { setMargins(0, dp(28), dp(40), 0) })
         menuPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(18), dp(22), dp(18))
-            background = GradientDrawable().apply { cornerRadius = dp(18).toFloat(); setColor(0xE6141414.toInt()) }
+            background = panelBackground()
             visibility = View.GONE
         }
         (playerView.parent as FrameLayout).addView(menuPanel, FrameLayout.LayoutParams(
@@ -325,7 +358,7 @@ class PlayerActivity : Activity() {
         menuPanel.removeAllViews()
         menuPanel.addView(TextView(this).apply {
             text = if (isLive) items.getOrNull(liveIndex)?.title ?: "Live-TV" else "Wiedergabe"
-            setTextColor(0xB3FFFFFF.toInt()); textSize = 15f; setPadding(0, 0, 0, dp(10))
+            setTextColor(ACCENT); textSize = 15f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 0, 0, dp(10))
         })
         fun add(label: String, action: () -> Unit) {
             menuPanel.addView(pillButton(label).apply { setOnClickListener { action() } },
@@ -346,6 +379,7 @@ class PlayerActivity : Activity() {
     private fun showMenu() {
         fillMenu()
         playerView.hideController()
+        menuHint.visibility = View.GONE
         menuPanel.visibility = View.VISIBLE
         menuPanel.getChildAt(1)?.requestFocus()
     }
@@ -376,6 +410,11 @@ class PlayerActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+    /** Couchpotato's look in the player too: petrol panels, gold focus (like the menus in the launcher). */
+    private fun panelBackground() = GradientDrawable().apply {
+        cornerRadius = dp(18).toFloat(); setColor(PANEL); setStroke(dp(2), 0x40FFFFFF)
+    }
+
     private fun pillButton(text: String): Button {
         fun pill(bg: Int) = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(bg) }
         return Button(this).apply {
@@ -387,12 +426,12 @@ class PlayerActivity : Activity() {
             minHeight = dp(44); minimumHeight = dp(44)
             stateListAnimator = null
             background = StateListDrawable().apply {
-                addState(intArrayOf(android.R.attr.state_focused), pill(Color.WHITE))
-                addState(intArrayOf(), pill(0x33FFFFFF))
+                addState(intArrayOf(android.R.attr.state_focused), pill(ACCENT))
+                addState(intArrayOf(), pill(0x1FFFFFFF))
             }
             setTextColor(ColorStateList(
                 arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
-                intArrayOf(Color.BLACK, Color.WHITE),
+                intArrayOf(ON_ACCENT, TEXT),
             ))
             isFocusable = true
         }
@@ -401,10 +440,10 @@ class PlayerActivity : Activity() {
     private fun buildUpNext() {
         fun button(text: String) = pillButton(text)
         upNextTitle = TextView(this).apply {
-            setTextColor(0xB3FFFFFF.toInt()); textSize = 15f
+            setTextColor(ACCENT); textSize = 15f; setTypeface(typeface, Typeface.BOLD)
         }
         upNextSub = TextView(this).apply {
-            setTextColor(Color.WHITE); textSize = 21f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(TEXT); textSize = 21f; setTypeface(typeface, Typeface.BOLD)
             maxLines = 2; setPadding(0, dp(2), 0, dp(14))
         }
         upNextPlay = button("Jetzt abspielen").apply { setOnClickListener { playNextNow() } }
@@ -417,7 +456,7 @@ class PlayerActivity : Activity() {
         upNext = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(26), dp(20), dp(26), dp(22))
-            background = GradientDrawable().apply { cornerRadius = dp(18).toFloat(); setColor(0xE6141414.toInt()) }
+            background = panelBackground()
             visibility = View.GONE
             addView(upNextTitle); addView(upNextSub); addView(row)
         }
@@ -562,11 +601,8 @@ class PlayerActivity : Activity() {
 
         override fun onPlayerError(error: PlaybackException) {
             saveCurrent()
-            Toast.makeText(
-                this@PlayerActivity,
-                "Wiedergabe fehlgeschlagen (${error.errorCodeName})",
-                Toast.LENGTH_LONG
-            ).show()
+            if (isLive) toast("Wiedergabe fehlgeschlagen (${error.errorCodeName})")
+            else de.koeven.couchpotato.ui.Notice.show("Wiedergabe fehlgeschlagen (${error.errorCodeName})", long = true)
             // Live: stay, so you can zap to the next channel. VOD: back to the launcher.
             if (!isLive) finish()
             else if (timeshift != null) {
@@ -627,6 +663,7 @@ class PlayerActivity : Activity() {
         handler.removeCallbacks(zapCommit)
         handler.removeCallbacks(saveTask)
         handler.removeCallbacks(upNextTick)
+        handler.removeCallbacks(hideNotice)
         timeshift?.stop(); timeshift = null
         if (::player.isInitialized) player.release()
         super.onDestroy()
@@ -713,14 +750,18 @@ class PlayerActivity : Activity() {
         val n = items.size
         val from = if (zapTarget >= 0) zapTarget else liveIndex.coerceAtLeast(0)
         zapTarget = ((from + step) % n + n) % n
-        zapToast?.cancel()
-        zapToast = Toast.makeText(this, items[zapTarget].title, Toast.LENGTH_SHORT).also { it.show() }
+        toast(items[zapTarget].title)
         handler.removeCallbacks(zapCommit)
         handler.postDelayed(zapCommit, ZAP_DELAY_MS)
     }
 
     private companion object {
         const val ZAP_DELAY_MS = 800L
+        // Couchpotato colours (ui/Theme.kt): menu petrol, gold accent, cream text
+        const val PANEL = 0xF20B3236.toInt()
+        const val ACCENT = 0xFFE8B86D.toInt()
+        const val ON_ACCENT = 0xFF1B1408.toInt()
+        const val TEXT = 0xFFF4F1EC.toInt()
         const val UP_NEXT_BEFORE_END_MS = 25_000L   // panel appears 25 s before the end (credits)
         const val UP_NEXT_COUNTDOWN_MS = 10_000L
         const val STILL_WATCHING_AFTER = 3          // episodes in a row without touching the remote
