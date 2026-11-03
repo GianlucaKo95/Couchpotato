@@ -131,7 +131,7 @@ button{margin-top:18px;width:100%;min-height:52px;border:0;border-radius:999px;b
 #s,#ls{margin-top:14px;font-weight:600;min-height:1.4em}
 </style></head><body><main>
 <h1>Couchpotato</h1>
-<section id="login"><p>Gib den Code ein, der auf dem Fernseher steht.</p>
+<section id="login">
 <label for="p">Code vom Fernseher</label><input id="p" inputmode="numeric" maxlength="4" autocomplete="one-time-code">
 <button id="l" type="button">Anmelden</button><div id="ls" role="status"></div></section>
 <section id="form" style="display:none">
