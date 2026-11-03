@@ -74,6 +74,16 @@ object PhoneLink {
         val lines = head.split("\r\n")
         val (method, path) = lines.first().split(" ").let { (it.getOrNull(0) ?: "") to (it.getOrNull(1) ?: "/") }
         val length = lines.firstOrNull { it.startsWith("Content-Length:", true) }?.substringAfter(':')?.trim()?.toIntOrNull() ?: 0
+        if (method == "POST" && path.startsWith("/check")) {
+            val body = ByteArray(length.coerceAtMost(200)).also { var off = 0; while (off < it.size) { val n = input.read(it, off, it.size - off); if (n < 0) break; off += n } }
+            val given = String(body, Charsets.UTF_8).substringAfter("pin=", "").take(8)
+            if (given != pin) {
+                wrong++
+                if (wrong >= 5) stop()
+                return respond(c, 403, "text/plain; charset=utf-8", "Code falsch – er steht auf dem Fernseher.")
+            }
+            return respond(c, 200, "text/plain; charset=utf-8", "ok")
+        }
         if (method == "POST" && path.startsWith("/send")) {
             if (length > 16_000) return respond(c, 413, "text/plain", "zu lang")
             val body = ByteArray(length).also { var off = 0; while (off < length) { val n = input.read(it, off, length - off); if (n < 0) break; off += n } }
@@ -119,16 +129,25 @@ h1{font-size:24px;margin:0 0 4px}p{margin:0 0 18px;color:#C3D6D7}
 label{display:block;font-weight:600;margin:14px 0 6px}
 textarea,input{box-sizing:border-box;width:100%;border:0;border-radius:12px;padding:14px;font:inherit;background:#F4F1EC;color:#1B1408}
 button{margin-top:18px;width:100%;min-height:52px;border:0;border-radius:999px;background:#E8B86D;color:#1B1408;font:inherit;font-weight:700}
-#s{margin-top:14px;font-weight:600;min-height:1.4em}
+#s,#ls{margin-top:14px;font-weight:600;min-height:1.4em}
 </style></head><body><main>
-<h1>Couchpotato</h1><p>Eingabe für „$esc“ auf dem Fernseher</p>
+<h1>Couchpotato</h1>
+<section id="login"><p>Gib den Code ein, der auf dem Fernseher steht.</p>
+<label for="p">Code vom Fernseher</label><input id="p" inputmode="numeric" maxlength="4" autocomplete="one-time-code">
+<button id="l" type="button">Anmelden</button><div id="ls" role="status"></div></section>
+<section id="form" style="display:none"><p>Eingabe für „$esc“ auf dem Fernseher</p>
 <label for="t">Text oder Link einfügen</label>$field
-<div id="pin"><label for="p">Code vom Fernseher</label><input id="p" inputmode="numeric" maxlength="4" autocomplete="off"></div>
-<button id="b" type="button">An den Fernseher senden</button><div id="s" role="status"></div>
+<button id="b" type="button">An den Fernseher senden</button><div id="s" role="status"></div></section>
 </main><script>
+function show(){document.getElementById('login').style.display='none';document.getElementById('form').style.display='block';document.getElementById('t').focus();}
 var q=new URLSearchParams(location.search).get('p');
-// opened via the QR code: it brings the code along, so the field isn't needed
-if(q){document.getElementById('p').value=q;document.getElementById('pin').style.display='none';}
+// opened via the QR code: it brings the code along – straight to the field
+if(q){document.getElementById('p').value=q;show();}
+document.getElementById('l').onclick=function(){
+var ls=document.getElementById('ls');ls.textContent='Prüfe …';
+fetch('/check',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({pin:document.getElementById('p').value})})
+.then(function(r){return r.text().then(function(t){if(r.ok){ls.textContent='';show();}else ls.textContent=t;});})
+.catch(function(){ls.textContent='Fernseher nicht erreichbar – gleiches WLAN?';});};
 document.getElementById('b').onclick=function(){
 var s=document.getElementById('s');s.textContent='Sende …';
 fetch('/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
