@@ -337,7 +337,7 @@ fun HomeScreen(
                                     onLongClick = { menu = HomeMenu.App(app) },
                                     modifier = Modifier
                                         .then(if (i == 0 && firstRow == HomeRows.APPS) Modifier.focusRequester(firstFocus) else Modifier)
-                                        .heroOn { Hero("App", app.label, "OK = öffnen") }
+                                        .heroOn { Hero("App", app.label) }
                                         .movable(HomeRows.APPS, app.packageName) { delta ->
                                             val j = vm.moveApp(app.packageName, delta)
                                             scope.launch { appsRowState.keepVisible(j) }
