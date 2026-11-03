@@ -103,6 +103,21 @@ class Tmdb(context: Context) {
         runCatching { File(dir, "ratings.tsv").appendText("$key\t${d.rating}\n") }
     }
 
+    /**
+     * Plot of one episode. Kept on the stick for good; with [fetch] one request the first time,
+     * otherwise only what is already there.
+     */
+    suspend fun episodePlot(tvId: Long, season: Int, episode: Int, fetch: Boolean): String? = withContext(Dispatchers.IO) {
+        val f = File(dir, "ep/${tvId}_${season}_$episode.json")
+        if (f.exists()) return@withContext runCatching { JSONObject(f.readText()).optString("overview").ifBlank { null } }.getOrNull()
+        if (!fetch || !enabled) return@withContext null
+        val json = runCatching { get("tv/$tvId/season/$season/episode/$episode?language=de-DE") }.getOrNull()
+            ?: return@withContext null      // offline / TMDB busy: try again another time
+        f.parentFile?.mkdirs()
+        f.writeText(JSONObject().put("overview", json.optString("overview")).toString())
+        json.optString("overview").ifBlank { null }
+    }
+
     /** Details already on the stick – never a request (for the info area on the home screen). */
     fun cachedDetails(kind: Char, providerId: Long): TitleDetails? {
         val f = File(dir, "${kind}_$providerId.json")

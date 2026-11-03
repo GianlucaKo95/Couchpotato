@@ -374,6 +374,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 tmdbOn = tmdb.enabled,
             )
         }
+        prefetchHeroPlots(cw)
     }
 
     private fun syncInfo(): String {
@@ -1303,9 +1304,48 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun progressFor(key: String): ProgressEntry? = progress.get(key)
 
     /** Short plot for the info area: TMDB if already on the stick, else the provider's series text. No request. */
-    suspend fun heroPlot(kind: Char, id: Long): String? = withContext(Dispatchers.IO) {
-        tmdb.cachedDetails(kind, id)?.plot?.takeIf { it.isNotBlank() }
+    suspend fun heroPlot(kind: Char, id: Long, season: Int? = null, episode: Int? = null): String? = withContext(Dispatchers.IO) {
+        val details = tmdb.cachedDetails(kind, id)
+        // an episode: its own plot if TMDB knows it, else the series'
+        val ep = if (season != null && episode != null) details?.tmdbId?.let { tmdb.episodePlot(it, season, episode, fetch = false) } else null
+        ep ?: details?.plot?.takeIf { it.isNotBlank() }
             ?: if (kind == SearchEntry.KIND_SERIES) seriesCache[id]?.plot?.takeIf { it.isNotBlank() } else null
+    }
+
+    private val heroPrefetched = HashSet<String>()
+
+    /**
+     * "Weiterschauen": fetch the missing TMDB plots in the background (films, series and the
+     * episode itself) – a handful of TMDB requests, nothing at the IPTV provider. Once per title.
+     */
+    private fun prefetchHeroPlots(cw: List<ContinueItem>) {
+        if (!tmdb.enabled) return
+        val todo = cw.take(12).mapNotNull { c ->
+            when (c) {
+                is ContinueItem.Iptv -> c.entry.item
+                    .takeIf { it.kind != PlayItem.KIND_LIVE }
+                    ?.let { if (it.kind == PlayItem.KIND_EPISODE) it.seriesId?.let { sid -> Triple(SearchEntry.KIND_SERIES, sid, it) } else Triple(SearchEntry.KIND_MOVIE, it.streamId, it) }
+                is ContinueItem.NewEpisodes -> Triple(SearchEntry.KIND_SERIES, c.series.id, null)
+                else -> null
+            }
+        }.filter { (k, id, item) -> heroPrefetched.add("$k$id:${item?.streamId}") }
+        if (todo.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            for ((kind, id, item) in todo) {
+                runCatching {
+                    val details = tmdb.cachedDetails(kind, id) ?: run {
+                        val e = catalogEntry(kind, id)
+                        tmdb.details(kind, id, e?.name ?: item?.title ?: return@runCatching, e?.year, e?.tmdbId)
+                    }
+                    // the episode: "S01 E03 · …" → its own plot
+                    val m = item?.subtitle?.let { Regex("""^S(\d+) E(\d+)""").find(it) }
+                    val tv = details?.tmdbId
+                    if (m != null && tv != null) {
+                        tmdb.episodePlot(tv, m.groupValues[1].toInt(), m.groupValues[2].toInt(), fetch = true)
+                    }
+                }
+            }
+        }
     }
 
     fun watchedEpisodes(seriesId: Long): Set<Long> = WatchedStore(app).forSeries(seriesId)

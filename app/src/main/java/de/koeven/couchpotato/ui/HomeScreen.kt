@@ -213,6 +213,8 @@ fun HomeScreen(
                                                     remaining = left?.let { m -> "noch $m Min." },
                                                     plotKind = if (episode) SearchEntry.KIND_SERIES else SearchEntry.KIND_MOVIE,
                                                     plotId = if (episode) e.item.seriesId else e.item.streamId,
+                                                    season = e.item.subtitle?.let { s -> Regex("""^S(\d+) E""").find(s)?.groupValues?.get(1)?.toIntOrNull() },
+                                                    episode = e.item.subtitle?.let { s -> Regex("""^S\d+ E(\d+)""").find(s)?.groupValues?.get(1)?.toIntOrNull() },
                                                 )
                                             },
                                         )
@@ -499,6 +501,8 @@ private data class Hero(
     val remaining: String? = null,
     val plotKind: Char? = null,
     val plotId: Long? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
 )
 
 /**
@@ -508,12 +512,12 @@ private data class Hero(
 @Composable
 private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
     var plot by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(hero?.plotKind, hero?.plotId) {
+    LaunchedEffect(hero?.plotKind, hero?.plotId, hero?.episode) {
         plot = null
         val k = hero?.plotKind ?: return@LaunchedEffect
         val id = hero.plotId ?: return@LaunchedEffect
         delay(250)   // scrolling quickly through a row: only look it up where you stop
-        plot = vm.heroPlot(k, id)
+        plot = vm.heroPlot(k, id, hero.season, hero.episode)
     }
     // compact, so two rows still fit below it
     Column(
