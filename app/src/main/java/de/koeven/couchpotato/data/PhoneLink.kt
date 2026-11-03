@@ -123,10 +123,12 @@ button{margin-top:18px;width:100%;min-height:52px;border:0;border-radius:999px;b
 </style></head><body><main>
 <h1>Couchpotato</h1><p>Eingabe für „$esc“ auf dem Fernseher</p>
 <label for="t">Text oder Link einfügen</label>$field
-<label for="p">Code vom Fernseher</label><input id="p" inputmode="numeric" maxlength="4" autocomplete="off">
+<div id="pin"><label for="p">Code vom Fernseher</label><input id="p" inputmode="numeric" maxlength="4" autocomplete="off"></div>
 <button id="b" type="button">An den Fernseher senden</button><div id="s" role="status"></div>
 </main><script>
-var q=new URLSearchParams(location.search).get('p');if(q)document.getElementById('p').value=q;
+var q=new URLSearchParams(location.search).get('p');
+// opened via the QR code: it brings the code along, so the field isn't needed
+if(q){document.getElementById('p').value=q;document.getElementById('pin').style.display='none';}
 document.getElementById('b').onclick=function(){
 var s=document.getElementById('s');s.textContent='Sende …';
 fetch('/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
