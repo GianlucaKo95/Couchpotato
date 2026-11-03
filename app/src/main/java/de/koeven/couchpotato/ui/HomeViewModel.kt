@@ -530,7 +530,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val collator = java.text.Collator.getInstance(java.util.Locale.GERMAN).apply { strength = java.text.Collator.PRIMARY }
             sortedWith { a, b -> collator.compare(a.name, b.name) }
         }
-        2 -> sortedWith(compareByDescending<SearchEntry> { it.rating }.thenByDescending { it.added })
+        // TMDB where it's already on the stick (titles opened before), else the provider's rating
+        2 -> sortedWith(compareByDescending<SearchEntry> { tmdb.cachedRating(it.kind, it.id) ?: it.rating }.thenByDescending { it.added })
         else -> sortedByDescending { it.added }
     }
 

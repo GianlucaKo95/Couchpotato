@@ -66,6 +66,43 @@ class Tmdb(context: Context) {
      * @param kind SearchEntry.KIND_MOVIE / KIND_SERIES
      * @param providerId id at the IPTV provider (cache key)
      */
+    // ---------------- ratings already on the stick (for sorting the Mediathek) ----------------
+
+    private var ratings: MutableMap<String, Float>? = null
+
+    /** TMDB rating of a title whose details were fetched before – no request. */
+    fun cachedRating(kind: Char, providerId: Long): Float? = ratingIndex()["${kind}_$providerId"]
+
+    @Synchronized
+    private fun ratingIndex(): MutableMap<String, Float> {
+        ratings?.let { return it }
+        val idx = File(dir, "ratings.tsv")
+        val map = HashMap<String, Float>()
+        if (idx.exists()) {
+            idx.forEachLine { l -> l.split('\t').takeIf { it.size == 2 }?.let { (k, v) -> v.toFloatOrNull()?.let { map[k] = it } } }
+        } else {
+            // first time: collect from the details already cached
+            dir.listFiles { f -> f.isFile && f.name.matches(Regex("""[a-z]_\d+\.json""")) }?.forEach { f ->
+                runCatching { JSONObject(f.readText()) }.getOrNull()?.takeIf { !it.optBoolean("notFound") }?.let { o ->
+                    val r = o.optDouble("vote_average", 0.0).toFloat()
+                    if (r > 0f && o.optInt("vote_count") >= 5) map[f.name.removeSuffix(".json")] = r
+                }
+            }
+            runCatching { dir.mkdirs(); idx.writeText(map.entries.joinToString("") { "${it.key}\t${it.value}\n" }) }
+        }
+        return map.also { ratings = it }
+    }
+
+    @Synchronized
+    private fun rememberRating(kind: Char, providerId: Long, d: TitleDetails) {
+        if (d.rating <= 0f || d.votes < 5) return
+        val key = "${kind}_$providerId"
+        val map = ratingIndex()
+        if (map[key] == d.rating) return
+        map[key] = d.rating
+        runCatching { File(dir, "ratings.tsv").appendText("$key\t${d.rating}\n") }
+    }
+
     suspend fun details(kind: Char, providerId: Long, name: String, year: String?, tmdbId: Long?): TitleDetails? =
         withContext(Dispatchers.IO) {
             if (!enabled) return@withContext null
@@ -78,7 +115,7 @@ class Tmdb(context: Context) {
                         // try again after a week (maybe TMDB knows it by then)
                         if (System.currentTimeMillis() - f.lastModified() < 7 * DAY) return@withContext null
                     } else {
-                        return@withContext parse(cached, tv)
+                        return@withContext parse(cached, tv)?.also { rememberRating(kind, providerId, it) }
                     }
                 }
             }
@@ -93,7 +130,7 @@ class Tmdb(context: Context) {
             val json = get("$path?language=de-DE&append_to_response=$append&include_video_language=de,en")
             dir.mkdirs()
             f.writeText(json.toString())
-            parse(json, tv)
+            parse(json, tv)?.also { rememberRating(kind, providerId, it) }
         }
 
     // ---------------- streaming services (data: JustWatch via TMDB) ----------------
