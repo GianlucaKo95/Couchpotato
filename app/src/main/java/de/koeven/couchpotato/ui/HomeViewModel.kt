@@ -698,6 +698,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(loading = false, error = e.message ?: "unerwarteter Fehler") }
             setIndexStatus("Lokale Daten konnten nicht geladen werden: ${e.message ?: "unerwarteter Fehler"}")
             return
+        } catch (e: OutOfMemoryError) {
+            // a huge local catalogue must not take the launcher down at start: run without it
+            indexEntries = null
+            System.gc()
+            _state.update { it.copy(loading = false, error = "Zu wenig Speicher für den Katalog") }
+            setIndexStatus("Katalog zu groß für den Speicher – bitte Kategorien ausblenden.")
+            return
         }
         val cfg = settings.config()
         if (!cfg.isValid) {
