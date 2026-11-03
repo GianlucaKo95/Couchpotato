@@ -104,6 +104,17 @@ class SettingsStore(context: Context) {
 
     fun setRowOrder(ids: List<String>) = p.edit().putString("rowOrder", JSONArray(ids).toString()).apply()
 
+    /** Own order of the categories in the Mediathek (ids), per kind; empty = the provider's order. */
+    fun categoryOrder(kind: Char): List<String> = runCatching {
+        val arr = JSONArray(p.getString("catOrder_$kind", null) ?: "[]")
+        (0 until arr.length()).map { arr.getString(it) }
+    }.getOrDefault(emptyList())
+
+    fun setCategoryOrder(kind: Char, ids: List<String>?) {
+        if (ids == null) p.edit().remove("catOrder_$kind").apply()
+        else p.edit().putString("catOrder_$kind", JSONArray(ids).toString()).apply()
+    }
+
     /** Hidden provider categories as "m:<id>" (Filme), "s:<id>" (Serien), "l:<id>" (Live-TV). */
     fun hiddenCategories(): Set<String> = p.getStringSet("hiddenCats", null)?.toSet() ?: emptySet()
 
