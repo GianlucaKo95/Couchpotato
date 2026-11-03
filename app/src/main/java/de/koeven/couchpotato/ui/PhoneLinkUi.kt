@@ -30,11 +30,16 @@ import de.koeven.couchpotato.data.PhoneLink
  * The little web server only runs while this panel is on screen.
  */
 @Composable
-fun PhoneLinkPanel(title: String, password: Boolean = false, compact: Boolean = false, onText: (String) -> Unit) {
-    val session = remember { PhoneLink.start(title, password) }
+fun PhoneLinkPanel(title: String, password: Boolean = false, compact: Boolean = false, onText: (String) -> Unit) =
+    PhoneLinkPanel(listOf(PhoneLink.Field("t", title, password)), compact) { onText(it["t"].orEmpty()) }
+
+/** Several fields on the phone at once (e.g. server, user name, password). */
+@Composable
+fun PhoneLinkPanel(fields: List<PhoneLink.Field>, compact: Boolean = false, onValues: (Map<String, String>) -> Unit) {
+    val session = remember { PhoneLink.start(fields) }
     DisposableEffect(Unit) { onDispose { PhoneLink.stop() } }
     val got by PhoneLink.received.collectAsState()
-    LaunchedEffect(got?.at) { got?.let { onText(it.text); PhoneLink.received.value = null } }
+    LaunchedEffect(got?.at) { got?.let { onValues(it.values); PhoneLink.received.value = null } }
 
     if (session == null) {
         Text("Kein WLAN gefunden – der Fernseher muss im selben Netz sein wie das Handy.", color = CpColors.Error)

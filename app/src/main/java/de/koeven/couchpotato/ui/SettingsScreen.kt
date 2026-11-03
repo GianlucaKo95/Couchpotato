@@ -29,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -196,6 +197,7 @@ private fun LoginSection(vm: HomeViewModel, setStatus: (String?) -> Unit) {
     var asLink by remember { mutableStateOf(vm.loginAsLink) }
     var link by remember { mutableStateOf(initial.toM3uLink()) }
     var result by remember { mutableStateOf<String?>(null) }
+    var phone by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     SectionTitle(
@@ -236,6 +238,39 @@ private fun LoginSection(vm: HomeViewModel, setStatus: (String?) -> Unit) {
             keyboardType = KeyboardType.Password,
             onValueChange = { pass = it },
         )
+    }
+    // the whole login from the phone with one QR code – live into the fields above
+    SettingRow(
+        title = "Mit dem Handy eingeben",
+        description = if (asLink) "M3U-Link auf dem Handy einfügen" else "Server, Benutzername und Passwort auf dem Handy eintippen",
+        value = if (phone) "QR-Code ausblenden" else "QR-Code zeigen",
+    ) { phone = !phone }
+    if (phone) {
+        key(asLink) {
+            if (asLink) {
+                PhoneLinkPanel(listOf(de.koeven.couchpotato.data.PhoneLink.Field("link", "M3U-Link"))) { v ->
+                    link = v["link"].orEmpty().replace(Regex("[\r\n\t]+"), "").trim()
+                }
+            } else {
+                PhoneLinkPanel(
+                    listOf(
+                        de.koeven.couchpotato.data.PhoneLink.Field("url", "Server"),
+                        de.koeven.couchpotato.data.PhoneLink.Field("user", "Benutzername"),
+                        de.koeven.couchpotato.data.PhoneLink.Field("pass", "Passwort", password = true),
+                    )
+                ) { v ->
+                    fun clean(s: String?) = s.orEmpty().replace(Regex("[\r\n\t]+"), "").trim()
+                    val server = clean(v["url"])
+                    // a whole M3U link pasted into "Server": split it into the three fields
+                    val parsed = XtreamConfig.fromLink(server)
+                    if (parsed != null && clean(v["user"]).isEmpty() && clean(v["pass"]).isEmpty()) {
+                        url = XtreamConfig.normalizeBase(parsed.baseUrl); user = parsed.user; pass = parsed.pass
+                    } else {
+                        url = server; user = clean(v["user"]); pass = clean(v["pass"])
+                    }
+                }
+            }
+        }
     }
     Spacer(Modifier.height(4.dp))
     PrimaryPill("Speichern & testen") {

@@ -21,26 +21,32 @@ import java.security.SecureRandom
  */
 object PhoneLink {
     data class Session(val url: String, val pin: String, val qr: Bitmap)
-    data class Received(val text: String, val at: Long = System.nanoTime())
+    /** One input on the phone page. A single field becomes a big text box without a heading. */
+    data class Field(val id: String, val label: String, val password: Boolean = false)
+
+    /** Everything typed on the phone, by field id. [text] = the single field. */
+    data class Received(val values: Map<String, String>, val at: Long = System.nanoTime()) {
+        val text: String get() = values["t"].orEmpty()
+    }
 
     val received = MutableStateFlow<Received?>(null)
 
     @Volatile private var server: ServerSocket? = null
     @Volatile private var pin = ""
-    @Volatile private var password = false
-    @Volatile private var title = ""
+    @Volatile private var fields: List<Field> = emptyList()
     private var wrong = 0
     private var stopAt = 0L
 
     /** Starts the page (or restarts it with a new code). Null when the TV has no network. */
-    fun start(fieldTitle: String, isPassword: Boolean): Session? {
+    fun start(fieldTitle: String, isPassword: Boolean): Session? = start(listOf(Field("t", fieldTitle, isPassword)))
+
+    fun start(pageFields: List<Field>): Session? {
         stop()
         val ip = localIp() ?: return null
         val socket = (8765..8775).firstNotNullOfOrNull { port -> runCatching { ServerSocket(port) }.getOrNull() } ?: return null
         server = socket
         pin = (SecureRandom().nextInt(9000) + 1000).toString()
-        password = isPassword
-        title = fieldTitle
+        fields = pageFields
         wrong = 0
         stopAt = System.currentTimeMillis() + 10 * 60_000L
         received.value = null
@@ -97,7 +103,7 @@ object PhoneLink {
                 return respond(c, 403, "text/plain; charset=utf-8", "Code falsch – er steht auf dem Fernseher.")
             }
             // live: every keystroke on the phone, so an empty field (all deleted) is fine too
-            received.value = Received(form["text"].orEmpty())
+            received.value = Received(fields.associate { f -> f.id to form["f_${f.id}"].orEmpty() })
             return respond(c, 200, "text/plain; charset=utf-8", "ok")
         }
         if (method == "GET") return respond(c, 200, "text/html; charset=utf-8", page())
@@ -115,9 +121,16 @@ object PhoneLink {
     }
 
     private fun page(): String {
-        val esc = title.replace("&", "&amp;").replace("<", "&lt;")
-        val field = if (password) """<input id="t" type="password" autocomplete="off" aria-label="$esc">"""
-            else """<textarea id="t" rows="4" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="$esc"></textarea>"""
+        fun esc(t: String) = t.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;")
+        val single = fields.size == 1
+        val field = fields.joinToString("\n") { f ->
+            val name = esc(f.label)
+            when {
+                f.password -> """<input class="f" data-id="${f.id}" type="password" autocomplete="off" aria-label="$name"${if (single) "" else " placeholder=\"$name\""}>"""
+                single -> """<textarea class="f" data-id="${f.id}" rows="4" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="$name"></textarea>"""
+                else -> """<input class="f" data-id="${f.id}" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="$name" placeholder="$name">"""
+            }
+        }
         return """<!doctype html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Couchpotato</title>
@@ -126,7 +139,8 @@ body{margin:0;background:#165A61;color:#F4F1EC;font:17px/1.4 system-ui,sans-seri
 main{max-width:520px;margin:0 auto;padding:28px 18px}
 h1{font-size:24px;margin:0 0 4px}p{margin:0 0 18px;color:#C3D6D7}
 label{display:block;font-weight:600;margin:14px 0 6px}
-textarea,input{box-sizing:border-box;width:100%;border:0;border-radius:12px;padding:14px;font:inherit;background:#F4F1EC;color:#1B1408}
+textarea,input{box-sizing:border-box;width:100%;border:0;border-radius:12px;padding:14px;font:inherit;background:#F4F1EC;color:#1B1408;margin-bottom:12px}
+input::placeholder{color:#6B7475}
 button{margin-top:18px;width:100%;min-height:52px;border:0;border-radius:999px;background:#E8B86D;color:#1B1408;font:inherit;font-weight:700}
 #s,#ls{margin-top:14px;font-weight:600;min-height:1.4em}
 </style></head><body><main>
@@ -138,7 +152,8 @@ button{margin-top:18px;width:100%;min-height:52px;border:0;border-radius:999px;b
 $field
 <div id="s" role="status"></div></section>
 </main><script>
-function show(){document.getElementById('login').style.display='none';document.getElementById('form').style.display='block';document.getElementById('t').focus();}
+var fs=document.querySelectorAll('.f');
+function show(){document.getElementById('login').style.display='none';document.getElementById('form').style.display='block';fs[0].focus();}
 var q=new URLSearchParams(location.search).get('p');
 // opened via the QR code: it brings the code along – straight to the field
 if(q){document.getElementById('p').value=q;show();}
@@ -153,15 +168,15 @@ function push(){
 if(busy){again=true;return;}busy=true;
 var s=document.getElementById('s');
 fetch('/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
-body:new URLSearchParams({text:document.getElementById('t').value,pin:document.getElementById('p').value})})
+body:(function(){var b=new URLSearchParams({pin:document.getElementById('p').value});fs.forEach(function(f){b.append('f_'+f.dataset.id,f.value);});return b;})()})
 .then(function(r){return r.text().then(function(t){s.textContent=r.ok?'':t;});})
 .catch(function(){s.textContent='Fernseher nicht erreichbar – gleiches WLAN?';})
 .then(function(){busy=false;if(again){again=false;push();}});}
-var t=document.getElementById('t');
+fs.forEach(function(t){
 t.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(push,200);});
 // pasting: the whole field goes out at once, right away
 t.addEventListener('paste',function(){clearTimeout(timer);setTimeout(push,30);});
-t.addEventListener('change',function(){clearTimeout(timer);push();});
+t.addEventListener('change',function(){clearTimeout(timer);push();});});
 </script></body></html>"""
     }
 
