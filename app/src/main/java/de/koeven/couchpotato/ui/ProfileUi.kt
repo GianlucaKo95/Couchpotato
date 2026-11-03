@@ -128,7 +128,7 @@ fun ProfilePicker(
                         Spacer(Modifier.height(12.dp))
                         Text(p.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         if (p.kid) {
-                            Text("Kinder · bis FSK ${p.maxFsk}", style = MaterialTheme.typography.labelSmall, color = CpColors.Accent)
+                            Text("Kinder · bis FSK ${p.maxFsk}", style = MaterialTheme.typography.labelMedium, color = CpColors.Accent)
                         }
                     }
                 }

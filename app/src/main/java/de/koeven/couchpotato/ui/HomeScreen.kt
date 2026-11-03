@@ -186,9 +186,9 @@ fun HomeScreen(
                                             image = e.item.image,
                                             fraction = if (e.upNext) 0f else e.fraction,
                                             badge = when {
-                                                item.newEpisodes -> "Neue Folgen · IPTV"
-                                                e.upNext -> "Nächste Folge · IPTV"
-                                                else -> "IPTV"
+                                                item.newEpisodes -> "Neue Folgen"
+                                                e.upNext -> "Nächste Folge"
+                                                else -> null
                                             },
                                             onClick = { scope.launch { Playback.start(context, vm.playlistFor(e)) } },
                                             onLongClick = onLong,
@@ -228,7 +228,7 @@ fun HomeScreen(
                                             subtitle = "Neue Folgen verfügbar",
                                             image = item.series.image,
                                             fraction = 0f,
-                                            badge = "Neue Folgen · IPTV",
+                                            badge = "Neue Folgen",
                                             onClick = { onOpenSeries(SeriesItem(item.series.id, item.series.name, item.series.image, item.series.added, item.series.categoryId)) },
                                             onLongClick = onLong,
                                             modifier = focusMod,
@@ -389,7 +389,7 @@ fun HomeScreen(
                 MenuAction("Verschieben") { moving = Moving(HomeRows.APPS, m.app.packageName) },
                 MenuAction("Ausblenden") {
                     vm.hideApp(m.app.packageName)
-                    Toast.makeText(context, "${m.app.label} ausgeblendet (Einstellungen → zurücksetzen)", Toast.LENGTH_SHORT).show()
+                    Notice.show("${m.app.label} ausgeblendet (Einstellungen → zurücksetzen)")
                 },
             ),
             onDismiss = { menu = null },

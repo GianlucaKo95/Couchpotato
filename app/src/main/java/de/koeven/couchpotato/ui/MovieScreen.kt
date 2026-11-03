@@ -215,7 +215,7 @@ fun MovieScreen(
                                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     )
                                 }.isSuccess
-                                if (!ok) Toast.makeText(context, "Keine App für YouTube-Trailer installiert", Toast.LENGTH_SHORT).show()
+                                if (!ok) Notice.show("Keine App für YouTube-Trailer installiert")
                             }
                         }
                     }
@@ -301,7 +301,7 @@ fun FskBadge(fsk: String) {
 fun TmdbNote() {
     Text(
         "Beschreibung, Besetzung, FSK und Bewertung: TMDB (themoviedb.org)",
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.labelMedium,
         color = CpColors.TextMuted,
         modifier = Modifier.padding(start = ScreenPadding, top = 16.dp),
     )

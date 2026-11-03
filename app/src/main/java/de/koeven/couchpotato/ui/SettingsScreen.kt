@@ -1,5 +1,8 @@
 package de.koeven.couchpotato.ui
 
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -606,7 +609,7 @@ private fun AboutSection(state: HomeState) {
         )
         Text(
             report.lineSequence().take(14).joinToString("\n"),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = CpColors.TextMuted,
         )
         SettingRow(title = "Absturzbericht löschen", value = "Löschen") {
@@ -635,7 +638,7 @@ private fun SectionTitle(title: String, subtitle: String) {
 
 @Composable
 private fun Hint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = CpColors.TextMuted)
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted)
 }
 
 @Composable
@@ -645,7 +648,7 @@ private fun StatCard(label: String, value: String, sub: String, modifier: Modifi
             .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = CpColors.TextMuted)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted)
         Text(
             value,
             style = if (small) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleLarge,
@@ -654,17 +657,33 @@ private fun StatCard(label: String, value: String, sub: String, modifier: Modifi
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 2.dp),
         )
-        Text(sub, style = MaterialTheme.typography.labelSmall, color = CpColors.TextMuted, maxLines = 1)
+        Text(sub, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted, maxLines = 1)
     }
 }
 
 /** A whole-width row: title (+ description) on the left, current value as a pill on the right. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun SettingRow(title: String, value: String, description: String? = null, onClick: () -> Unit) {
+private fun SettingRow(
+    title: String,
+    value: String,
+    description: String? = null,
+    onStep: ((Int) -> Unit)? = null,     // ◀ ▶ change the value directly (like a TV menu)
+    onClick: () -> Unit,
+) {
     val supporting: (@Composable () -> Unit)? = if (description != null) {
-        { Text(description, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        { Text(description, style = MaterialTheme.typography.bodyMedium) }
     } else null
+    val stepKeys = if (onStep == null) Modifier else Modifier.onPreviewKeyEvent { e ->
+        val d = when (e.key) {
+            androidx.compose.ui.input.key.Key.DirectionLeft -> -1
+            androidx.compose.ui.input.key.Key.DirectionRight -> 1
+            else -> 0
+        }
+        if (d == 0) return@onPreviewKeyEvent false
+        if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) onStep(d)
+        true
+    }
     ListItem(
         selected = false,
         onClick = onClick,
@@ -680,7 +699,7 @@ private fun SettingRow(title: String, value: String, description: String? = null
         supportingContent = supporting,
         trailingContent = {
             Text(
-                value,
+                if (onStep != null) "◀  $value  ▶" else value,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = CpColors.OnAccent,
@@ -690,7 +709,7 @@ private fun SettingRow(title: String, value: String, description: String? = null
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             )
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(stepKeys),
     )
 }
 
@@ -756,7 +775,7 @@ private fun TextFieldButton(
         scale = ListItemDefaults.scale(focusedScale = 1.01f),
         overlineContent = { Text(label) },
         headlineContent = { Text(shown, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        trailingContent = { Text("bearbeiten", style = MaterialTheme.typography.labelSmall) },
+        trailingContent = { Text("bearbeiten", style = MaterialTheme.typography.bodyMedium) },
         modifier = Modifier.fillMaxWidth(),
     )
 
@@ -854,6 +873,10 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                         title = "Freigegeben bis",
                         description = "Titel mit höherer oder unbekannter FSK sind gesperrt (mit PIN freigebbar)",
                         value = "FSK ${p.maxFsk}",
+                        onStep = { d ->
+                            val steps = de.koeven.couchpotato.data.Profile.FSK_STEPS
+                            steps.getOrNull(steps.indexOf(p.maxFsk) + d)?.let { vm.updateProfile(p.copy(maxFsk = it)) }
+                        },
                     ) {
                         val steps = de.koeven.couchpotato.data.Profile.FSK_STEPS
                         val next = steps[(steps.indexOf(p.maxFsk) + 1) % steps.size]
@@ -863,6 +886,10 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                         title = "Bildschirmzeit pro Tag",
                         description = "Zählt Filme, Serien und Apps wie Netflix – ${vm.screenTimeInfo(p)}. Danach nur mit Eltern-PIN weiter.",
                         value = if (p.dailyMinutes <= 0) "unbegrenzt" else "${p.dailyMinutes} Min.",
+                        onStep = { d ->
+                            val steps = listOf(0, 30, 45, 60, 90, 120, 180)
+                            steps.getOrNull(steps.indexOf(p.dailyMinutes).coerceAtLeast(0) + d)?.let { vm.updateProfile(p.copy(dailyMinutes = it)) }
+                        },
                     ) {
                         val steps = listOf(0, 30, 45, 60, 90, 120, 180)
                         vm.updateProfile(p.copy(dailyMinutes = steps[(steps.indexOf(p.dailyMinutes) + 1).mod(steps.size)]))
@@ -871,6 +898,10 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                         title = "Schlafenszeit",
                         description = "Ab dieser Uhrzeit bis 6 Uhr ist das Kinderprofil gesperrt",
                         value = if (p.bedtime < 0) "aus" else "${de.koeven.couchpotato.data.ScreenTime.clock(p.bedtime)} Uhr",
+                        onStep = { d ->
+                            val steps = listOf(-1) + (17 * 60..21 * 60 step 30).toList()
+                            steps.getOrNull(steps.indexOf(p.bedtime).coerceAtLeast(0) + d)?.let { vm.updateProfile(p.copy(bedtime = it)) }
+                        },
                     ) {
                         val steps = listOf(-1) + (17 * 60..21 * 60 step 30).toList()
                         vm.updateProfile(p.copy(bedtime = steps[(steps.indexOf(p.bedtime) + 1).mod(steps.size)]))

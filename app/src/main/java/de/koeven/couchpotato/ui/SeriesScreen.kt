@@ -380,7 +380,7 @@ private fun EpisodeCard(
                 }
                 Text(
                     "E${episode.number}",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = CpColors.Text,
                     modifier = Modifier
@@ -392,7 +392,7 @@ private fun EpisodeCard(
                 if (watched) {
                     Text(
                         "✓ gesehen",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = CpColors.Text,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -428,7 +428,7 @@ private fun EpisodeCard(
         }
         Text(
             meta,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = if (progress?.upNext == true) CpColors.Accent else CpColors.TextMuted,
             maxLines = 1,
         )
