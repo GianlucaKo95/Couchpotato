@@ -337,7 +337,7 @@ fun HomeScreen(
                                     onLongClick = { menu = HomeMenu.App(app) },
                                     modifier = Modifier
                                         .then(if (i == 0 && firstRow == HomeRows.APPS) Modifier.focusRequester(firstFocus) else Modifier)
-                                        .heroOn { Hero("App", app.label, "OK = öffnen · OK lang = verschieben oder ausblenden") }
+                                        .heroOn { Hero("App", app.label, "OK = öffnen") }
                                         .movable(HomeRows.APPS, app.packageName) { delta ->
                                             val j = vm.moveApp(app.packageName, delta)
                                             scope.launch { appsRowState.keepVisible(j) }
@@ -515,41 +515,45 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
         delay(250)   // scrolling quickly through a row: only look it up where you stop
         plot = vm.heroPlot(k, id)
     }
+    // compact, so two rows still fit below it
     Column(
         Modifier
             .fillMaxWidth()
-            .height(150.dp)
-            .padding(start = ScreenPadding, end = ScreenPadding * 4, top = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .height(104.dp)
+            .padding(start = ScreenPadding, end = ScreenPadding * 3, top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         if (hero == null) return@Column
-        Text(
-            hero.kicker.uppercase(),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = CpColors.Accent,
-            maxLines = 1,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                hero.kicker.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = CpColors.Accent,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            // the long press does a lot here – say so, quietly
+            Text("OK lang: Optionen", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted, maxLines = 1)
+        }
         Text(
             hero.title,
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.ExtraBold,
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
-        hero.sub?.let {
-            Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            hero.sub?.let {
+                Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            }
+            if (hero.fraction > 0f) ProgressBar(hero.fraction, Modifier.width(140.dp))
+            hero.remaining?.let { Text(it, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1) }
         }
         plot?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted, maxLines = 2,
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-        }
-        if (hero.fraction > 0f || hero.remaining != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (hero.fraction > 0f) ProgressBar(hero.fraction, Modifier.width(200.dp))
-                hero.remaining?.let { Text(it, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold) }
-            }
         }
     }
 }

@@ -66,15 +66,16 @@ import androidx.compose.material3.MaterialTheme as M3Theme
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.darkColorScheme as m3DarkColorScheme
 
-private enum class Section(val label: String) {
-    Login("IPTV-Zugang"),
-    Profiles("Profile & Kinder"),
-    Catalog("Katalog & Anfragen"),
-    Home("Startbildschirm"),
-    Live("Live-TV"),
-    Continue("Weiterschauen"),
-    CloudSync("Synchronisierung"),
-    About("Über Couchpotato"),
+/** Grouped by what you want to do, not by technology; rarely needed things under "Erweitert". */
+private enum class Section(val label: String, val group: String) {
+    Profiles("Profile & Kinder", "Familie"),
+    CloudSync("Haushalt & Geräte", "Familie"),
+    Home("Startbildschirm", "Fernsehen"),
+    Continue("Weiterschauen", "Fernsehen"),
+    Live("Live-TV", "Fernsehen"),
+    Login("IPTV-Zugang", "Verbindung"),
+    Catalog("Katalog & Anfragen", "Erweitert"),
+    About("Über Couchpotato", "Erweitert"),
 }
 
 /** Einstellungen (design B): sections on the left, the chosen section on the right. */
@@ -86,7 +87,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
         mutableStateOf(
             when {
                 vm.settingsSection.also { vm.settingsSection = null } == "profiles" -> Section.Profiles
-                state.configured -> Section.Catalog
+                state.configured -> Section.Home
                 else -> Section.Login
             }
         )
@@ -136,6 +137,16 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                     )
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         items(Section.values().toList()) { s ->
+                            // group heading above the first section of each group
+                            if (s.ordinal == 0 || Section.values()[s.ordinal - 1].group != s.group) {
+                                Text(
+                                    s.group.uppercase(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CpColors.Accent,
+                                    modifier = Modifier.padding(start = 12.dp, top = if (s.ordinal == 0) 0.dp else 12.dp, bottom = 2.dp),
+                                )
+                            }
                             NavRow(
                                 label = s.label,
                                 selected = s == section,
