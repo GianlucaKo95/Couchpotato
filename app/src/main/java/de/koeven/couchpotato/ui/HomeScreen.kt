@@ -1,5 +1,7 @@
 package de.koeven.couchpotato.ui
 
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.Box
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -85,6 +87,10 @@ fun HomeScreen(
     var menu by remember { mutableStateOf<HomeMenu?>(null) }
     var moving by remember { mutableStateOf<Moving?>(null) }
 
+    // Start 2.0: the info area at the top shows whatever tile has the focus
+    var hero by remember { mutableStateOf<Hero?>(null) }
+    fun Modifier.heroOn(h: () -> Hero): Modifier = onFocusChanged { if (it.isFocused) hero = h() }
+
     // The first visible row (in the user's order) gets the initial focus.
     val firstRow = state.rowOrder.firstOrNull { id ->
         when (id) {
@@ -140,21 +146,20 @@ fun HomeScreen(
         runCatching { firstFocus.requestFocus() }
     }
 
+    Column(Modifier.fillMaxSize()) {
+    TopBar(
+        active = NavTab.Start,
+        showContentTabs = state.configured,
+        status = if (state.loading) "aktualisiere …" else null,
+        onStart = { scope.launch { listState.animateScrollToItem(0) } },
+    )
+    HeroArea(vm, hero)
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 0.dp, bottom = 48.dp),
+        modifier = Modifier.fillMaxWidth().weight(1f),
+        contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),   // groups sit close together, like Fire OS
     ) {
-        item {
-            TopBar(
-                active = NavTab.Start,
-                showContentTabs = state.configured,
-                status = if (state.loading) "aktualisiere …" else null,
-                onStart = { scope.launch { listState.animateScrollToItem(0) } },
-            )
-        }
-        item { Spacer(Modifier.height(18.dp)) }   // space between tab bar and the first row
 
         if (!state.configured) {
             item {
@@ -181,6 +186,7 @@ fun HomeScreen(
                                     is ContinueItem.Iptv -> {
                                         val e = item.entry
                                         ContinueCard(
+                                            showCaption = false,
                                             title = e.item.title,
                                             subtitle = e.item.subtitle,
                                             image = e.item.image,
@@ -192,12 +198,29 @@ fun HomeScreen(
                                             },
                                             onClick = { scope.launch { Playback.start(context, vm.playlistFor(e)) } },
                                             onLongClick = onLong,
-                                            modifier = focusMod,
+                                            modifier = focusMod.heroOn {
+                                                val episode = e.item.kind == de.koeven.couchpotato.data.PlayItem.KIND_EPISODE
+                                                val left = if (e.durationMs > 0 && !e.upNext) ((e.durationMs - e.positionMs) / 60_000).coerceAtLeast(1) else null
+                                                Hero(
+                                                    kicker = when {
+                                                        item.newEpisodes -> "Neue Folgen"
+                                                        e.upNext -> "Nächste Folge"
+                                                        else -> "Weiterschauen · " + if (episode) "Serie" else "Film"
+                                                    },
+                                                    title = e.item.title,
+                                                    sub = e.item.subtitle?.let { s -> Regex("""^S0?(\d+) E0?(\d+)""").replace(s, "Staffel $1 · Folge $2") },
+                                                    fraction = if (e.upNext) 0f else e.fraction,
+                                                    remaining = left?.let { m -> "noch $m Min." },
+                                                    plotKind = if (episode) SearchEntry.KIND_SERIES else SearchEntry.KIND_MOVIE,
+                                                    plotId = if (episode) e.item.seriesId else e.item.streamId,
+                                                )
+                                            },
                                         )
                                     }
                                     is ContinueItem.External -> {
                                         val p = item.program
                                         ContinueCard(
+                                            showCaption = false,
                                             title = p.title,
                                             subtitle = p.subtitle,
                                             image = p.image,
@@ -205,12 +228,15 @@ fun HomeScreen(
                                             badge = item.appLabel,
                                             onClick = { vm.openExternal(item) },
                                             onLongClick = onLong,
-                                            modifier = focusMod,
+                                            modifier = focusMod.heroOn {
+                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.title, p.subtitle, p.fraction)
+                                            },
                                         )
                                     }
                                     is ContinueItem.Media -> {
                                         val p = item.play
                                         ContinueCard(
+                                            showCaption = false,
                                             title = p.subtitle ?: p.title,
                                             subtitle = if (p.subtitle != null) p.title else null,
                                             image = p.image,
@@ -219,11 +245,14 @@ fun HomeScreen(
                                             badge = item.appLabel,
                                             onClick = { vm.openMedia(item) },
                                             onLongClick = onLong,
-                                            modifier = focusMod,
+                                            modifier = focusMod.heroOn {
+                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.subtitle ?: p.title, if (p.subtitle != null) p.title else null, p.fraction)
+                                            },
                                         )
                                     }
                                     is ContinueItem.NewEpisodes -> {
                                         ContinueCard(
+                                            showCaption = false,
                                             title = item.series.name,
                                             subtitle = "Neue Folgen verfügbar",
                                             image = item.series.image,
@@ -231,7 +260,10 @@ fun HomeScreen(
                                             badge = "Neue Folgen",
                                             onClick = { onOpenSeries(SeriesItem(item.series.id, item.series.name, item.series.image, item.series.added, item.series.categoryId)) },
                                             onLongClick = onLong,
-                                            modifier = focusMod,
+                                            modifier = focusMod.heroOn {
+                                                Hero("Neue Folgen", item.series.name, "Seit deinem letzten Mal sind neue Folgen dazugekommen",
+                                                    plotKind = SearchEntry.KIND_SERIES, plotId = item.series.id)
+                                            },
                                         )
                                     }
                                     is ContinueItem.AppTile -> {
@@ -269,6 +301,7 @@ fun HomeScreen(
                                     onLongClick = { menu = HomeMenu.Channel(ch) },
                                     modifier = Modifier
                                         .then(if (i == 0 && firstRow == HomeRows.LIVE) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .heroOn { Hero("Live-TV · jetzt", ch.name, state.nowPlaying[ch.id]) }
                                         .movable(HomeRows.LIVE, ch.id.toString()) { delta ->
                                             val j = vm.moveFavorite(ch.id, delta)
                                             scope.launch { liveRowState.keepVisible(j) }
@@ -276,12 +309,15 @@ fun HomeScreen(
                                 )
                             }
                             item(key = "manage-live") {
-                                TileCard(
-                                    label = if (state.favorites.isEmpty()) "Sender\nauswählen" else "Sender\nverwalten",
-                                    onClick = onOpenLive,
-                                    width = ChannelWidth,
-                                    modifier = if (state.favorites.isEmpty() && firstRow == HomeRows.LIVE) Modifier.focusRequester(firstFocus) else Modifier,
-                                )
+                                // management, not a channel: a small button at the end of the row
+                                Box(Modifier.height(ChannelWidth * 9 / 16), contentAlignment = Alignment.Center) {
+                                    SecondaryPill(
+                                        if (state.favorites.isEmpty()) "Sender auswählen" else "Sender verwalten",
+                                        modifier = (if (state.favorites.isEmpty() && firstRow == HomeRows.LIVE) Modifier.focusRequester(firstFocus) else Modifier)
+                                            .heroOn { Hero("Live-TV", "Sender verwalten", "Lieblingssender auswählen und sortieren") },
+                                        onClick = onOpenLive,
+                                    )
+                                }
                             }
                         }
                     }
@@ -301,6 +337,7 @@ fun HomeScreen(
                                     onLongClick = { menu = HomeMenu.App(app) },
                                     modifier = Modifier
                                         .then(if (i == 0 && firstRow == HomeRows.APPS) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .heroOn { Hero("App", app.label, "OK = öffnen · OK lang = verschieben oder ausblenden") }
                                         .movable(HomeRows.APPS, app.packageName) { delta ->
                                             val j = vm.moveApp(app.packageName, delta)
                                             scope.launch { appsRowState.keepVisible(j) }
@@ -322,7 +359,8 @@ fun HomeScreen(
                                     title = movie.name,
                                     image = movie.image,
                                     onClick = { onOpenMovie(movie.id, movie.name) },
-                                    modifier = if (i == 0 && firstRow == HomeRows.MOVIES) Modifier.focusRequester(firstFocus) else Modifier,
+                                    modifier = (if (i == 0 && firstRow == HomeRows.MOVIES) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .heroOn { Hero("Neu · Film", movie.name, plotKind = SearchEntry.KIND_MOVIE, plotId = movie.id) },
                                 )
                             }
                         }
@@ -337,7 +375,8 @@ fun HomeScreen(
                                     title = series.name,
                                     image = series.image,
                                     onClick = { onOpenSeries(series) },
-                                    modifier = if (i == 0 && firstRow == HomeRows.SERIES) Modifier.focusRequester(firstFocus) else Modifier,
+                                    modifier = (if (i == 0 && firstRow == HomeRows.SERIES) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .heroOn { Hero("Neu · Serie", series.name, plotKind = SearchEntry.KIND_SERIES, plotId = series.id) },
                                 )
                             }
                         }
@@ -361,7 +400,15 @@ fun HomeScreen(
                                             onOpenMovie(e.id, e.name)
                                         }
                                     },
-                                    modifier = if (i == 0 && firstRow == HomeRows.RECOMMENDED) Modifier.focusRequester(firstFocus) else Modifier,
+                                    modifier = (if (i == 0 && firstRow == HomeRows.RECOMMENDED) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .heroOn {
+                                            Hero(
+                                                "Für dich · " + if (e.kind == SearchEntry.KIND_SERIES) "Serie" else "Film",
+                                                e.name,
+                                                listOfNotNull(e.year, e.genre, e.rating.takeIf { it > 0f }?.let { r -> "★ %.1f".format(r) }).joinToString(" · ").ifBlank { null },
+                                                plotKind = e.kind, plotId = e.id,
+                                            )
+                                        },
                                 )
                             }
                         }
@@ -380,6 +427,7 @@ fun HomeScreen(
                 )
             }
         }
+    }
     }
 
     when (val m = menu) {
@@ -438,5 +486,70 @@ private suspend fun LazyListState.keepVisible(index: Int) {
     when {
         index <= first -> animateScrollToItem((index - 1).coerceAtLeast(0))
         index >= last -> animateScrollToItem((index - visible.size + 2).coerceAtLeast(0))
+    }
+}
+
+
+/** What the info area shows. */
+private data class Hero(
+    val kicker: String,
+    val title: String,
+    val sub: String? = null,
+    val fraction: Float = 0f,
+    val remaining: String? = null,
+    val plotKind: Char? = null,
+    val plotId: Long? = null,
+)
+
+/**
+ * Start 2.0: big, readable info about the focused tile – like Netflix or Google TV. The plot comes
+ * only from what is already on the stick (TMDB cache / series info), never from a new request.
+ */
+@Composable
+private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
+    var plot by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(hero?.plotKind, hero?.plotId) {
+        plot = null
+        val k = hero?.plotKind ?: return@LaunchedEffect
+        val id = hero.plotId ?: return@LaunchedEffect
+        delay(250)   // scrolling quickly through a row: only look it up where you stop
+        plot = vm.heroPlot(k, id)
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .height(150.dp)
+            .padding(start = ScreenPadding, end = ScreenPadding * 4, top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (hero == null) return@Column
+        Text(
+            hero.kicker.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = CpColors.Accent,
+            maxLines = 1,
+        )
+        Text(
+            hero.title,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+        hero.sub?.let {
+            Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        plot?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted, maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        if (hero.fraction > 0f || hero.remaining != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (hero.fraction > 0f) ProgressBar(hero.fraction, Modifier.width(200.dp))
+                hero.remaining?.let { Text(it, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold) }
+            }
+        }
     }
 }

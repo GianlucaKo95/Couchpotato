@@ -103,6 +103,15 @@ class Tmdb(context: Context) {
         runCatching { File(dir, "ratings.tsv").appendText("$key\t${d.rating}\n") }
     }
 
+    /** Details already on the stick – never a request (for the info area on the home screen). */
+    fun cachedDetails(kind: Char, providerId: Long): TitleDetails? {
+        val f = File(dir, "${kind}_$providerId.json")
+        if (!f.exists()) return null
+        val o = runCatching { JSONObject(f.readText()) }.getOrNull() ?: return null
+        if (o.optBoolean("notFound")) return null
+        return runCatching { parse(o, kind == SearchEntry.KIND_SERIES) }.getOrNull()
+    }
+
     suspend fun details(kind: Char, providerId: Long, name: String, year: String?, tmdbId: Long?): TitleDetails? =
         withContext(Dispatchers.IO) {
             if (!enabled) return@withContext null

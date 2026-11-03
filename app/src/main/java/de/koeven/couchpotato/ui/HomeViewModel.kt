@@ -348,7 +348,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val external = watchNextCache.merge(WatchNextSource.load(getApplication())) { pkg -> settings.lastLaunched(pkg) }
                 .filter { it.packageName != getApplication<Application>().packageName }
                 .map { ContinueItem.External(it, it.packageName?.let { pkg -> labels[pkg] }) }
-            (if (kid) iptv + newOnly else iptv + newOnly + external + media + tiles)
+            // only real content – the apps have their own row ("Meine Apps")
+            (if (kid) iptv + newOnly else iptv + newOnly + external + media)
                 .filterNot { it.key in hiddenCw }
                 .distinctBy { it.key }
                 .sortedByDescending { it.sortTime }
@@ -1300,6 +1301,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun progressFor(key: String): ProgressEntry? = progress.get(key)
+
+    /** Short plot for the info area: TMDB if already on the stick, else the provider's series text. No request. */
+    suspend fun heroPlot(kind: Char, id: Long): String? = withContext(Dispatchers.IO) {
+        tmdb.cachedDetails(kind, id)?.plot?.takeIf { it.isNotBlank() }
+            ?: if (kind == SearchEntry.KIND_SERIES) seriesCache[id]?.plot?.takeIf { it.isNotBlank() } else null
+    }
 
     fun watchedEpisodes(seriesId: Long): Set<Long> = WatchedStore(app).forSeries(seriesId)
 

@@ -286,6 +286,7 @@ fun ContinueCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
     bitmap: ImageBitmap? = null,
+    showCaption: Boolean = true,      // home screen: the info area above shows the details
 ) {
     var focused by remember { mutableStateOf(false) }
     val glow = if (image == null && bitmap != null) Modifier.glowFrom(title, bitmap) else Modifier.glowFrom(image)
@@ -342,7 +343,7 @@ fun ContinueCard(
                 }
             }
         }
-        CaptionText(
+        if (showCaption) CaptionText(
             text = listOfNotNull(title, subtitle).joinToString(" · "),
             focused = focused,
             fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
