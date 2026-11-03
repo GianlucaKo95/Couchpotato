@@ -214,7 +214,10 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                         loaded.episodes.isEmpty() -> Text("Keine Folgen gefunden.", color = CpColors.TextMuted)
                         else -> Column {
                         if (state.profile.kid && gate is HomeViewModel.Gate.Blocked) {
-                            KidLockedBubble("Diese Serie ist noch nichts für dich. Frag Mama oder Papa!")
+                            KidLockedBubble(
+                                "Ohoh, diese Serie ist noch nichts für dich. Frag Mama oder Papa!",
+                                spoken = "Oh oh! Diese Serie ist noch nichts für dich. Frag doch mal Mama oder Papa!",
+                            )
                             Spacer(Modifier.height(12.dp))
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

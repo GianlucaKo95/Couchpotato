@@ -175,7 +175,10 @@ fun MovieScreen(
                     }
                     Spacer(Modifier.height(18.dp))
                     if (state.profile.kid && gate is HomeViewModel.Gate.Blocked) {
-                        KidLockedBubble("Dieser Film ist noch nichts für dich. Frag Mama oder Papa!")
+                        KidLockedBubble(
+                            "Ohoh, dieser Film ist noch nichts für dich. Frag Mama oder Papa!",
+                            spoken = "Oh oh! Dieser Film ist noch nichts für dich. Frag doch mal Mama oder Papa!",
+                        )
                         Spacer(Modifier.height(12.dp))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
