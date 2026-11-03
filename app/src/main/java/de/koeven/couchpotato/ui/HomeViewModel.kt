@@ -483,10 +483,34 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun allCategories(kind: Char): List<LiveCategory> {
         val entries = catalog()
-        categoriesByKind[kind]?.takeIf { it.isNotEmpty() }?.let { return it.distinctBy { c -> c.id } }
-        // category names missing (that request failed): use the ids from the titles
-        return entries.asSequence().filter { it.kind == kind }.mapNotNull { it.categoryId }.distinct()
-            .map { LiveCategory(it, "Kategorie $it") }.toList()
+        val list = categoriesByKind[kind]?.takeIf { it.isNotEmpty() }?.distinctBy { c -> c.id }
+            // category names missing (that request failed): use the ids from the titles
+            ?: entries.asSequence().filter { it.kind == kind }.mapNotNull { it.categoryId }.distinct()
+                .map { LiveCategory(it, "Kategorie $it") }.toList()
+        return sortedByOwnOrder(kind, list)
+    }
+
+    /** Own order first; categories the provider added later keep their place among the others. */
+    private fun sortedByOwnOrder(kind: Char, list: List<LiveCategory>): List<LiveCategory> {
+        val order = settings.categoryOrder(kind)
+        if (order.isEmpty()) return list
+        val pos = order.withIndex().associate { (i, id) -> id to i }
+        val known = list.filter { it.id in pos }.sortedBy { pos[it.id] }
+        // new categories: right after the category that comes before them at the provider
+        val out = known.toMutableList()
+        list.forEachIndexed { i, c ->
+            if (c.id in pos) return@forEachIndexed
+            val before = list.subList(0, i).lastOrNull { it.id in pos || it in out }
+            out.add(if (before == null) 0 else out.indexOf(before) + 1, c)
+        }
+        return out
+    }
+
+    fun hasOwnCategoryOrder(kind: Char) = settings.categoryOrder(kind).isNotEmpty()
+
+    fun setCategoryOrder(kind: Char, ids: List<String>?) {
+        settings.setCategoryOrder(kind, ids)
+        if (kind == SearchEntry.KIND_LIVE) viewModelScope.launch { refreshLocal() }
     }
 
     /** Number of titles per category (for the Mediathek list) – local, no request. */

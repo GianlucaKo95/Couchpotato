@@ -1,5 +1,11 @@
 package de.koeven.couchpotato.ui
 
+import androidx.compose.foundation.border
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -93,6 +99,9 @@ fun BrowseScreen(
     var menu by remember { mutableStateOf<BrowseMenu?>(null) }
     var editing by remember { mutableStateOf(false) }
     var jumpToContent by remember { mutableStateOf(false) }   // OK on a category: focus goes to its titles
+    var movingId by remember { mutableStateOf<String?>(null) }   // category being moved with ▲ ▼
+    val catListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val selectedFocus = remember { FocusRequester() }
 
@@ -109,6 +118,27 @@ fun BrowseScreen(
     }
 
     DisposableEffect(Unit) { onDispose { vm.applyCategoryChanges() } }
+
+    /** Moves a category one place up/down among the visible ones and saves the order. */
+    fun moveCategory(id: String, delta: Int) {
+        val full = categories ?: return
+        val vis = visibleCats.map { it.id }
+        val vi = vis.indexOf(id)
+        val targetId = vis.getOrNull(vi + delta) ?: return
+        val list = full.toMutableList()
+        val item = list.removeAt(list.indexOfFirst { it.id == id })
+        val to = list.indexOfFirst { it.id == targetId }
+        list.add(if (delta > 0) to + 1 else to, item)
+        categories = list
+        vm.setCategoryOrder(kind, list.map { it.id })
+        scope.launch {
+            val idx = vi + delta
+            val visible = catListState.layoutInfo.visibleItemsInfo
+            if (visible.isNotEmpty() && (idx <= visible.first().index || idx >= visible.last().index)) {
+                catListState.animateScrollToItem((idx - 3).coerceAtLeast(0))
+            }
+        }
+    }
     fun finishEditing() {
         editing = false
         vm.applyCategoryChanges()
@@ -227,7 +257,16 @@ fun BrowseScreen(
                 }
                 Spacer(Modifier.height(10.dp))
 
+                if (movingId != null) {
+                    Text(
+                        "▲ ▼ verschieben · OK oder Zurück = fertig",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CpColors.Accent,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
                 LazyColumn(
+                    state = catListState,
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                     contentPadding = PaddingValues(bottom = 40.dp),
                 ) {
@@ -255,7 +294,34 @@ fun BrowseScreen(
                             onLongClick = { if (!editing && !kidMode) menu = BrowseMenu.Category(cat, hidden) },
                             modifier = Modifier
                                 .onFocusChanged { if (it.isFocused) focusedId = cat.id }
-                                .then(if (wantsFocus) Modifier.focusRequester(selectedFocus) else Modifier),
+                                .then(if (wantsFocus) Modifier.focusRequester(selectedFocus) else Modifier)
+                                .then(
+                                    if (movingId != cat.id) Modifier
+                                    else Modifier
+                                        .border(3.dp, CpColors.Accent, RoundedCornerShape(10.dp))
+                                        .onPreviewKeyEvent { e ->
+                                            val finish = setOf(
+                                                androidx.compose.ui.input.key.Key.DirectionCenter, androidx.compose.ui.input.key.Key.Enter,
+                                                androidx.compose.ui.input.key.Key.NumPadEnter, androidx.compose.ui.input.key.Key.Back,
+                                                androidx.compose.ui.input.key.Key.Escape,
+                                            )
+                                            when (e.key) {
+                                                androidx.compose.ui.input.key.Key.DirectionUp, androidx.compose.ui.input.key.Key.DirectionDown -> {
+                                                    if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) {
+                                                        moveCategory(cat.id, if (e.key == androidx.compose.ui.input.key.Key.DirectionUp) -1 else 1)
+                                                    }
+                                                    true
+                                                }
+                                                androidx.compose.ui.input.key.Key.DirectionLeft, androidx.compose.ui.input.key.Key.DirectionRight -> true
+                                                in finish -> {
+                                                    // finish on release, so the row doesn't also see the click
+                                                    if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) movingId = null
+                                                    true
+                                                }
+                                                else -> false
+                                            }
+                                        }
+                                ),
                         )
                     }
                     if (!editing && !kidMode && categories != null && (hiddenCount > 0 || showHidden)) {
@@ -380,8 +446,14 @@ fun BrowseScreen(
                         ).show()
                     }
                 },
+                MenuAction("Verschieben") { movingId = m.category.id },
                 MenuAction("Kategorien bearbeiten") { editing = true },
-            ),
+            ) + if (vm.hasOwnCategoryOrder(kind)) listOf(
+                MenuAction("Reihenfolge des Anbieters wiederherstellen") {
+                    vm.setCategoryOrder(kind, null)
+                    scope.launch { categories = vm.allCategories(kind) }
+                },
+            ) else emptyList(),
             onDismiss = { menu = null },
         )
         is BrowseMenu.Channel -> ContextMenu(
