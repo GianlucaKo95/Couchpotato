@@ -830,18 +830,23 @@ private fun TextFieldButton(
             onDismissRequest = { editing = false },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         ) {
-          // at the top of the screen: the Fire TV keyboard takes the lower half
+          // a low strip at the very top: the on-screen keyboard (Fire TV, Android TV / HY300) takes the rest
           androidx.compose.foundation.layout.Box(
-              Modifier.fillMaxSize().padding(top = 28.dp),
+              Modifier.fillMaxSize().padding(top = 12.dp),
               contentAlignment = androidx.compose.ui.Alignment.TopCenter,
           ) {
-            Column(
+           Row(
                 Modifier
-                    .width(if (phone) 860.dp else 600.dp)
+                    .width(if (phone) 900.dp else 600.dp)
                     .background(androidx.compose.ui.graphics.Color(0xFF0B3236), RoundedCornerShape(18.dp))
                     .border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                    .padding(horizontal = 22.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+           ) {
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 OutlinedTextField(
@@ -861,12 +866,14 @@ private fun TextFieldButton(
                     SecondaryPill(if (phone) "QR-Code ausblenden" else "Mit dem Handy eingeben") { phone = !phone }
                     SecondaryPill("Abbrechen") { editing = false }
                 }
-                if (phone) {
-                    // live from the phone into the field; "Übernehmen" on the TV confirms
-                    // copied links often carry a line break or spaces at the end – one line in the field
-                    PhoneLinkPanel(label, password, compact = true) { text -> draft = text.replace(Regex("[\r\n\t]+"), "").trim() }
-                }
             }
+            if (phone) {
+                // beside the field (not below), so the keyboard can't cover it
+                // live from the phone into the field; "Übernehmen" on the TV confirms
+                // copied links often carry a line break or spaces at the end – one line in the field
+                PhoneLinkPanel(label, password, compact = true, vertical = true) { text -> draft = text.replace(Regex("[\r\n\t]+"), "").trim() }
+            }
+           }
           }
         }
     }

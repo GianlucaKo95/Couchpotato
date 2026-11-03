@@ -30,12 +30,12 @@ import de.koeven.couchpotato.data.PhoneLink
  * The little web server only runs while this panel is on screen.
  */
 @Composable
-fun PhoneLinkPanel(title: String, password: Boolean = false, compact: Boolean = false, onText: (String) -> Unit) =
-    PhoneLinkPanel(listOf(PhoneLink.Field("t", title, password)), compact) { onText(it["t"].orEmpty()) }
+fun PhoneLinkPanel(title: String, password: Boolean = false, compact: Boolean = false, vertical: Boolean = false, onText: (String) -> Unit) =
+    PhoneLinkPanel(listOf(PhoneLink.Field("t", title, password)), compact, vertical) { onText(it["t"].orEmpty()) }
 
 /** Several fields on the phone at once (e.g. server, user name, password). */
 @Composable
-fun PhoneLinkPanel(fields: List<PhoneLink.Field>, compact: Boolean = false, onValues: (Map<String, String>) -> Unit) {
+fun PhoneLinkPanel(fields: List<PhoneLink.Field>, compact: Boolean = false, vertical: Boolean = false, onValues: (Map<String, String>) -> Unit) {
     val session = remember { PhoneLink.start(fields) }
     DisposableEffect(Unit) { onDispose { PhoneLink.stop() } }
     val got by PhoneLink.received.collectAsState()
@@ -43,6 +43,20 @@ fun PhoneLinkPanel(fields: List<PhoneLink.Field>, compact: Boolean = false, onVa
 
     if (session == null) {
         Text("Kein WLAN gefunden – der Fernseher muss im selben Netz sein wie das Handy.", color = CpColors.Error)
+        return
+    }
+    if (vertical) {
+        // narrow column next to an input field: QR code with the code below it
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Image(
+                session.qr.asImageBitmap(),
+                contentDescription = "QR-Code für die Handy-Eingabe",
+                filterQuality = FilterQuality.None,
+                modifier = Modifier.size(112.dp).background(Color.White, RoundedCornerShape(10.dp)).padding(5.dp),
+            )
+            Text("Mit dem Handy scannen", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+            Text("Code ${session.pin}", style = MaterialTheme.typography.labelMedium, color = CpColors.Accent, fontWeight = FontWeight.Bold)
+        }
         return
     }
     Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
