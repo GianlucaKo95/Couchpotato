@@ -1,5 +1,7 @@
 package de.koeven.couchpotato.ui
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Box
@@ -147,6 +149,9 @@ fun HomeScreen(
         runCatching { firstFocus.requestFocus() }
     }
 
+    Box(Modifier.fillMaxSize()) {
+    // big picture of the focused title in the right part of the screen (behind everything)
+    HeroBackdrop(vm, hero, Modifier.align(Alignment.TopEnd))
     Column(Modifier.fillMaxSize()) {
     TopBar(
         active = NavTab.Start,
@@ -212,6 +217,7 @@ fun HomeScreen(
                                                     sub = e.item.subtitle?.let { s -> Regex("""^S0?(\d+) E0?(\d+)""").replace(s, "Staffel $1 · Folge $2") },
                                                     fraction = if (e.upNext) 0f else e.fraction,
                                                     remaining = left?.let { m -> "noch $m Min." },
+                                                    image = e.item.image,
                                                     plotKind = if (episode) SearchEntry.KIND_SERIES else SearchEntry.KIND_MOVIE,
                                                     plotId = if (episode) e.item.seriesId else e.item.streamId,
                                                     season = e.item.subtitle?.let { s -> Regex("""^S(\d+) E""").find(s)?.groupValues?.get(1)?.toIntOrNull() },
@@ -232,7 +238,7 @@ fun HomeScreen(
                                             onClick = { vm.openExternal(item) },
                                             onLongClick = onLong,
                                             modifier = focusMod.heroOn {
-                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.title, p.subtitle, p.fraction)
+                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.title, p.subtitle, p.fraction, image = p.image)
                                             },
                                         )
                                     }
@@ -249,7 +255,7 @@ fun HomeScreen(
                                             onClick = { vm.openMedia(item) },
                                             onLongClick = onLong,
                                             modifier = focusMod.heroOn {
-                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.subtitle ?: p.title, if (p.subtitle != null) p.title else null, p.fraction)
+                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.subtitle ?: p.title, if (p.subtitle != null) p.title else null, p.fraction, image = p.image)
                                             },
                                         )
                                     }
@@ -432,6 +438,7 @@ fun HomeScreen(
         }
     }
     }
+    }
 
     when (val m = menu) {
         is HomeMenu.App -> ContextMenu(
@@ -504,7 +511,43 @@ private data class Hero(
     val plotId: Long? = null,
     val season: Int? = null,
     val episode: Int? = null,
+    val image: String? = null,      // wide picture (episode still) – films/series use TMDB's backdrop
 )
+
+/**
+ * The big picture on the right: TMDB's wide backdrop if it's on the stick, else the episode's
+ * picture the tile already loaded. It fades into the petrol to the left, bottom and top so the
+ * text stays readable – on bright pictures and on a projector too.
+ */
+@Composable
+private fun HeroBackdrop(vm: HomeViewModel, hero: Hero?, modifier: Modifier = Modifier) {
+    var url by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(hero?.plotKind, hero?.plotId, hero?.image) {
+        val h = hero
+        if (h == null) { url = null; return@LaunchedEffect }
+        delay(250)   // only where you stop, not while flying through a row
+        val tmdb = if (h.plotKind != null && h.plotId != null) vm.heroBackdrop(h.plotKind, h.plotId) else null
+        url = tmdb ?: h.image
+    }
+    androidx.compose.animation.Crossfade(targetState = url, label = "heroBackdrop", modifier = modifier
+        .fillMaxWidth(0.44f)
+        .fillMaxHeight(0.56f)) { u ->
+        if (u == null) return@Crossfade
+        Box(Modifier.fillMaxSize()) {
+            coil.compose.AsyncImage(
+                model = u,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            val bg = CpColors.Background
+            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.horizontalGradient(
+                0f to bg, 0.14f to bg.copy(alpha = 0.6f), 0.34f to bg.copy(alpha = 0f))))
+            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to bg.copy(alpha = 0.6f), 0.22f to bg.copy(alpha = 0f), 0.68f to bg.copy(alpha = 0f), 1f to bg)))
+        }
+    }
+}
 
 /**
  * Start 2.0: big, readable info about the focused tile – like Netflix or Google TV. The plot comes
@@ -560,7 +603,7 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
             // two short lines instead of one endless one – easier to read from the sofa
             Text(it, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted, maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 640.dp))
+                modifier = Modifier.widthIn(max = 540.dp))
         }
     }
 }

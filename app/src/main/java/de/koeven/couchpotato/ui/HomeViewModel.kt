@@ -1312,6 +1312,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             ?: if (kind == SearchEntry.KIND_SERIES) seriesCache[id]?.plot?.takeIf { it.isNotBlank() } else null
     }
 
+    /** Wide TMDB picture for the info area, if already on the stick. No request. */
+    suspend fun heroBackdrop(kind: Char, id: Long): String? = withContext(Dispatchers.IO) {
+        tmdb.cachedDetails(kind, id)?.backdrop?.replace("/w1280/", "/w780/")   // plenty for a third of a TV
+    }
+
     private val heroPrefetched = HashSet<String>()
 
     /**
