@@ -104,6 +104,11 @@ class SettingsStore(context: Context) {
 
     fun setRowOrder(ids: List<String>) = p.edit().putString("rowOrder", JSONArray(ids).toString()).apply()
 
+    /** Mediathek order: 0 = newest first, 1 = A–Z, 2 = best rating. */
+    var browseSort: Int
+        get() = p.getInt("browseSort", 0)
+        set(value) = p.edit().putInt("browseSort", value).apply()
+
     /** Own order of the categories in the Mediathek (ids), per kind; empty = the provider's order. */
     fun categoryOrder(kind: Char): List<String> = runCatching {
         val arr = JSONArray(p.getString("catOrder_$kind", null) ?: "[]")

@@ -520,16 +520,30 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             .groupingBy { it }.eachCount()
     }
 
+    var browseSort: Int
+        get() = settings.browseSort
+        set(value) { settings.browseSort = value }
+
+    /** Newest first / A–Z (German collation: Ä next to A) / best rating (unrated last). */
+    private fun List<SearchEntry>.sortedForBrowse(): List<SearchEntry> = when (settings.browseSort) {
+        1 -> {
+            val collator = java.text.Collator.getInstance(java.util.Locale.GERMAN).apply { strength = java.text.Collator.PRIMARY }
+            sortedWith { a, b -> collator.compare(a.name, b.name) }
+        }
+        2 -> sortedWith(compareByDescending<SearchEntry> { it.rating }.thenByDescending { it.added })
+        else -> sortedByDescending { it.added }
+    }
+
     suspend fun moviesIn(categoryId: String): List<VodItem> = withContext(Dispatchers.Default) {
         catalog().filter { it.kind == SearchEntry.KIND_MOVIE && it.categoryId == categoryId }
-            .sortedByDescending { it.added }
+            .sortedForBrowse()
             .map { VodItem(it.id, it.name, it.image, it.added, it.ext, it.categoryId) }
             .distinctBy { it.id }
     }
 
     suspend fun seriesIn(categoryId: String): List<SeriesItem> = withContext(Dispatchers.Default) {
         catalog().filter { it.kind == SearchEntry.KIND_SERIES && it.categoryId == categoryId }
-            .sortedByDescending { it.added }
+            .sortedForBrowse()
             .map { SeriesItem(it.id, it.name, it.image, it.added, it.categoryId) }
             .distinctBy { it.id }
     }

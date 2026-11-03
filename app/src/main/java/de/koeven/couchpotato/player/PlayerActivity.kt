@@ -423,6 +423,8 @@ class PlayerActivity : Activity() {
     private lateinit var upNext: LinearLayout
     private lateinit var upNextTitle: TextView
     private lateinit var upNextSub: TextView
+    private lateinit var upNextImage: android.widget.ImageView
+    private val images by lazy { coil.ImageLoader.Builder(this).crossfade(false).build() }
     private lateinit var upNextPlay: Button
     private lateinit var upNextCredits: Button
     private var upNextShownFor = -1          // media index the panel was shown (or dismissed) for
@@ -475,15 +477,32 @@ class PlayerActivity : Activity() {
             addView(upNextPlay)
             addView(upNextCredits, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) })
         }
-        upNext = LinearLayout(this).apply {
+        // picture of the next episode on the left, like Netflix
+        upNextImage = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+            clipToOutline = true
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: android.graphics.Outline) {
+                    outline.setRoundRect(0, 0, view.width, view.height, dp(12).toFloat())
+                }
+            }
+            setBackgroundColor(0x1FFFFFFF)
+        }
+        val texts = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(26), dp(20), dp(26), dp(22))
-            background = panelBackground()
-            visibility = View.GONE
             addView(upNextTitle); addView(upNextSub); addView(row)
         }
+        upNext = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), dp(20), dp(26), dp(20))
+            background = panelBackground()
+            visibility = View.GONE
+            addView(upNextImage, LinearLayout.LayoutParams(dp(224), dp(126)).apply { marginEnd = dp(20) })
+            addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
         (playerView.parent as FrameLayout).addView(upNext, FrameLayout.LayoutParams(
-            dp(520), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END,
+            dp(760), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END,
         ).apply { setMargins(0, 0, dp(48), dp(56)) })
     }
 
@@ -541,6 +560,11 @@ class PlayerActivity : Activity() {
         stillWatching = autoInARow >= STILL_WATCHING_AFTER
         upNextTitle.text = if (stillWatching) "Schaust du noch?" else "Nächste Folge"
         upNextSub.text = next.subtitle ?: next.title
+        upNextImage.setImageDrawable(null)
+        upNextImage.visibility = if (next.image == null) View.GONE else View.VISIBLE
+        next.image?.let { url ->
+            images.enqueue(coil.request.ImageRequest.Builder(this).data(url).size(448, 252).target(upNextImage).build())
+        }
         upNextPlay.text = if (stillWatching) "Weiterschauen" else "Nächste Folge in ${UP_NEXT_COUNTDOWN_MS / 1000} s"
         upNextCredits.text = if (stillWatching) "Beenden" else "Abspann ansehen"
         // "Schaust du noch?": stop at the end of this episode instead of rolling on all night

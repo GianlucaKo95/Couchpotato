@@ -100,6 +100,7 @@ fun BrowseScreen(
     var editing by remember { mutableStateOf(false) }
     var jumpToContent by remember { mutableStateOf(false) }   // OK on a category: focus goes to its titles
     var movingId by remember { mutableStateOf<String?>(null) }   // category being moved with ▲ ▼
+    var sortMode by remember { mutableStateOf(vm.browseSort) }
     val catListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val scope = rememberCoroutineScope()
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
@@ -167,7 +168,7 @@ fun BrowseScreen(
         selectedId = id
     }
 
-    LaunchedEffect(kind, selectedId) {
+    LaunchedEffect(kind, selectedId, sortMode) {
         val id = selectedId ?: return@LaunchedEffect
         vm.browseCategoryId = id
         content = BrowseContent.Loading
@@ -362,11 +363,22 @@ fun BrowseScreen(
                     )
                     if (total != null) {
                         Text(
-                            "  ·  $total $unit" + if (kind != SearchEntry.KIND_LIVE) " · neueste zuerst" else "",
+                            "  ·  $total $unit",
                             style = MaterialTheme.typography.bodyMedium,
                             color = CpColors.TextMuted,
                             modifier = Modifier.padding(bottom = 3.dp),
                         )
+                    }
+                    if (kind != SearchEntry.KIND_LIVE) {
+                        Spacer(Modifier.weight(1f))
+                        // OK switches the order: newest → A–Z → best rating
+                        TabPill(
+                            "Sortiert: " + when (sortMode) { 1 -> "A–Z"; 2 -> "Bewertung"; else -> "Neueste" },
+                            selected = false,
+                        ) {
+                            sortMode = (sortMode + 1) % 3
+                            vm.browseSort = sortMode
+                        }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
