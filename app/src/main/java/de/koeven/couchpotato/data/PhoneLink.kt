@@ -96,9 +96,8 @@ object PhoneLink {
                 if (wrong >= 5) stop()
                 return respond(c, 403, "text/plain; charset=utf-8", "Code falsch – er steht auf dem Fernseher.")
             }
-            val text = form["text"].orEmpty().trim()
-            if (text.isEmpty()) return respond(c, 400, "text/plain; charset=utf-8", "Bitte etwas eingeben.")
-            received.value = Received(text)
+            // live: every keystroke on the phone, so an empty field (all deleted) is fine too
+            received.value = Received(form["text"].orEmpty())
             return respond(c, 200, "text/plain; charset=utf-8", "ok")
         }
         if (method == "GET") return respond(c, 200, "text/html; charset=utf-8", page())
@@ -137,7 +136,7 @@ button{margin-top:18px;width:100%;min-height:52px;border:0;border-radius:999px;b
 <button id="l" type="button">Anmelden</button><div id="ls" role="status"></div></section>
 <section id="form" style="display:none"><p>Eingabe für „$esc“ auf dem Fernseher</p>
 <label for="t">Text oder Link einfügen</label>$field
-<button id="b" type="button">An den Fernseher senden</button><div id="s" role="status"></div></section>
+<div id="s" role="status">Was du hier tippst, steht sofort auf dem Fernseher.</div></section>
 </main><script>
 function show(){document.getElementById('login').style.display='none';document.getElementById('form').style.display='block';document.getElementById('t').focus();}
 var q=new URLSearchParams(location.search).get('p');
@@ -148,12 +147,17 @@ var ls=document.getElementById('ls');ls.textContent='Prüfe …';
 fetch('/check',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({pin:document.getElementById('p').value})})
 .then(function(r){return r.text().then(function(t){if(r.ok){ls.textContent='';show();}else ls.textContent=t;});})
 .catch(function(){ls.textContent='Fernseher nicht erreichbar – gleiches WLAN?';});};
-document.getElementById('b').onclick=function(){
-var s=document.getElementById('s');s.textContent='Sende …';
+// live: send shortly after each keystroke (one request at a time, the newest text wins)
+var timer=null,busy=false,again=false;
+function push(){
+if(busy){again=true;return;}busy=true;
+var s=document.getElementById('s');
 fetch('/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
 body:new URLSearchParams({text:document.getElementById('t').value,pin:document.getElementById('p').value})})
-.then(function(r){return r.text().then(function(t){s.textContent=r.ok?'✓ Ist auf dem Fernseher angekommen':t;});})
-.catch(function(){s.textContent='Fernseher nicht erreichbar – gleiches WLAN?';});};
+.then(function(r){return r.text().then(function(t){s.textContent=r.ok?'✓ Live mit dem Fernseher verbunden – dort mit „Übernehmen“ bestätigen':t;});})
+.catch(function(){s.textContent='Fernseher nicht erreichbar – gleiches WLAN?';})
+.then(function(){busy=false;if(again){again=false;push();}});}
+document.getElementById('t').addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(push,200);});
 </script></body></html>"""
     }
 

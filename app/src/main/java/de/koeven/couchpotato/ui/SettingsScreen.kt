@@ -827,8 +827,8 @@ private fun TextFieldButton(
                     SecondaryPill("Abbrechen") { editing = false }
                 }
                 if (phone) {
-                    // whatever arrives from the phone is taken over right away
-                    PhoneLinkPanel(label, password, compact = true) { text -> draft = text; accept() }
+                    // live from the phone into the field; "Übernehmen" on the TV confirms
+                    PhoneLinkPanel(label, password, compact = true) { text -> draft = text }
                 }
             }
           }

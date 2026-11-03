@@ -215,7 +215,8 @@ fun SearchScreen(
                         Key(if (phoneOpen) "Handy-Eingabe beenden" else "Mit dem Handy tippen", keyWidth * 7 + KeyGap * 6, muted = true) { phoneOpen = !phoneOpen }
                     }
                     if (phoneOpen) {
-                        PhoneLinkPanel("Suche") { text -> vm.setQuery(text); phoneOpen = false }
+                        // live: the search runs while you type on the phone
+                        PhoneLinkPanel("Suche") { text -> vm.setQuery(text) }
                     }
                     if (voiceAvailable) Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         Key("🎤 Sprechen", keyWidth * 7 + KeyGap * 6) { runCatching { voice.launch(voiceIntent) } }

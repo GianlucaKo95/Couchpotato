@@ -51,7 +51,7 @@ fun PhoneLinkPanel(title: String, password: Boolean = false, compact: Boolean = 
                 .padding(6.dp),
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Bequemer mit dem Handy: Code mit der Kamera scannen", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text("Bequemer mit dem Handy: Code scannen und live mittippen", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Text("oder im Handy-Browser öffnen:  ${session.url}", style = MaterialTheme.typography.bodyMedium, color = CpColors.Accent)
             Text("Code: ${session.pin}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (!compact) Text("Handy und Fernseher müssen im selben WLAN sein.", style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted)
