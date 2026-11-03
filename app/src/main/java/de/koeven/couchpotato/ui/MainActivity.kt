@@ -44,6 +44,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             CouchpotatoTheme {
                 CouchpotatoApp(vm, homeTick.intValue)
+                NoticeHost()
             }
         }
     }
@@ -73,7 +74,7 @@ class MainActivity : ComponentActivity() {
         // TMDB key/token: adb shell am start -n de.koeven.couchpotato/.ui.MainActivity --es tmdb 'TOKEN'
         intent.getStringExtra("tmdb")?.let { t ->
             vm.setTmdbToken(t)
-            Toast.makeText(this, if (t.isBlank()) "TMDB-Schlüssel entfernt" else "TMDB-Schlüssel gespeichert", Toast.LENGTH_SHORT).show()
+            Notice.show(if (t.isBlank()) "TMDB-Schlüssel entfernt" else "TMDB-Schlüssel gespeichert")
             intent.removeExtra("tmdb")
             if (intent.getStringExtra("m3u") == null && intent.getStringExtra("xtream_url") == null) return true
         }
@@ -87,9 +88,9 @@ class MainActivity : ComponentActivity() {
             ?: return false
         if (vm.applyLogin(cfg)) {
             vm.refreshCatalog(force = true)
-            Toast.makeText(this, "IPTV-Zugang gespeichert", Toast.LENGTH_SHORT).show()
+            Notice.show("IPTV-Zugang gespeichert")
         } else {
-            Toast.makeText(this, "IPTV-Zugang unverändert", Toast.LENGTH_SHORT).show()
+            Notice.show("IPTV-Zugang unverändert")
         }
         return true
     }

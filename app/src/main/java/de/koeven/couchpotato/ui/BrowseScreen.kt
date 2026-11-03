@@ -250,7 +250,7 @@ fun BrowseScreen(
                     }
                     Text(
                         "OK schaltet eine Kategorie an oder aus · ${cats.count { !isHidden(it) }} von ${cats.size} sichtbar",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = CpColors.Accent,
                         modifier = Modifier.padding(top = 8.dp),
                     )
@@ -260,7 +260,7 @@ fun BrowseScreen(
                 if (movingId != null) {
                     Text(
                         "▲ ▼ verschieben · OK oder Zurück = fertig",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = CpColors.Accent,
                         modifier = Modifier.padding(bottom = 6.dp),
                     )
@@ -439,11 +439,7 @@ fun BrowseScreen(
                 } else {
                     MenuAction("Kategorie ausblenden") {
                         vm.setCategoryHidden(kind, m.category.id, hidden = true)
-                        Toast.makeText(
-                            context,
-                            "„${m.category.name}“ ausgeblendet – über „Ausgeblendete anzeigen“ wieder einblenden",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        Notice.show("„${m.category.name}“ ausgeblendet – über „Ausgeblendete anzeigen“ wieder einblenden", long = true)
                     }
                 },
                 MenuAction("Verschieben") { movingId = m.category.id },

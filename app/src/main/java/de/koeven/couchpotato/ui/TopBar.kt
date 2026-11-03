@@ -80,7 +80,7 @@ fun TopBar(
             TabPill("Serien", active == NavTab.Series) { nav?.browse?.invoke(SearchEntry.KIND_SERIES) }
         }
         status?.let {
-            Text("  $it", style = MaterialTheme.typography.labelSmall, color = CpColors.TextMuted)
+            Text("  $it", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted)
         }
         Spacer(Modifier.weight(1f))
         ProfileButton { nav?.profiles?.invoke() }

@@ -661,7 +661,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private fun openInExternalApp(context: Context, channel: LiveChannel): Boolean {
         val pkg = _state.value.apps.firstOrNull { it.label.contains("isipro", ignoreCase = true) }?.packageName
         if (pkg == null) {
-            Toast.makeText(context, "IsiPro nicht gefunden – spiele in Couchpotato", Toast.LENGTH_SHORT).show()
+            Notice.show("IsiPro nicht gefunden – spiele in Couchpotato")
             return false
         }
         val url = XtreamClient.streamUrl(settings.config(), PlayItem.live(channel))
@@ -672,7 +672,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
         return runCatching { context.startActivity(intent) }.isSuccess.also { ok ->
             if (ok) settings.markLaunched(pkg)
-            else Toast.makeText(context, "IsiPro nimmt keine Sender-Links an – spiele in Couchpotato", Toast.LENGTH_LONG).show()
+            else Notice.show("IsiPro nimmt keine Sender-Links an – spiele in Couchpotato", long = true)
         }
     }
 
@@ -907,7 +907,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val p = app.getSharedPreferences("updater", android.content.Context.MODE_PRIVATE)
             if (p.getInt("told", 0) == r.build) return@launch
             p.edit().putInt("told", r.build).apply()
-            Toast.makeText(app, "Update auf Build ${r.build} verfügbar – Einstellungen → Über Couchpotato", Toast.LENGTH_LONG).show()
+            Notice.show("Update auf Build ${r.build} verfügbar – Einstellungen → Über Couchpotato", long = true)
         }
     }
 
@@ -1229,13 +1229,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val handedOver = app.acceptsQuery && AppsRepository.searchInApp(context, app.app.packageName, query)
         if (!handedOver) {
             if (!app.acceptsQuery) AppsRepository.launch(context, app.app.packageName)
-            Toast.makeText(context, "${app.app.label} nimmt keinen Suchbegriff an – bitte dort suchen", Toast.LENGTH_SHORT).show()
+            Notice.show("${app.app.label} nimmt keinen Suchbegriff an – bitte dort suchen")
         }
     }
 
     fun openGlobalSearch(context: Context, query: String) {
         if (!AppsRepository.openGlobalSearch(context, query)) {
-            Toast.makeText(context, "Fire-TV-Suche lässt sich hier nicht öffnen", Toast.LENGTH_SHORT).show()
+            Notice.show("Fire-TV-Suche lässt sich hier nicht öffnen")
         }
     }
 
