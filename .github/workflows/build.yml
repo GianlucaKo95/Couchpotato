@@ -36,11 +36,13 @@ jobs:
       - name: Build
         env:
           TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
+          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
           CP_KEYSTORE_PASSWORD: ${{ secrets.CP_KEYSTORE_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -o pipefail
+          if [ -z "$UPDATE_TOKEN" ]; then echo "::warning::UPDATE_TOKEN secret not set - in-app updates off"; else echo "::notice::Update token present"; fi
           if [ -z "$TMDB_TOKEN" ]; then echo "::warning::TMDB_TOKEN secret not set - TMDB details off"; else echo "::notice::TMDB token present"; fi
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then echo "::warning::SUPABASE secrets not set - device sync off"; else echo "::notice::Supabase sync configured"; fi
           ./gradlew assembleRelease --no-daemon 2>&1 | tee build.log
