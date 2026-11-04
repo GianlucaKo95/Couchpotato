@@ -64,7 +64,55 @@ class FloatingPlayer : Service() {
             corner = prefs?.getInt("corner", 0) ?: 0, size = (prefs?.getInt("size", 1) ?: 1).coerceIn(0, SIZES.lastIndex))
         play(item)
         show()
+        WindowRemote.start(this)
+        showQr()
         return START_NOT_STICKY
+    }
+
+    // ---------- QR code for the phone remote, next to the window for 20 seconds ----------
+
+    private var qrView: android.view.View? = null
+    private val hideQr = Runnable { removeQr() }
+
+    private fun showQr() {
+        removeQr()
+        val bmp = WindowRemote.qr() ?: return
+        val d = resources.displayMetrics.density
+        val v = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding((10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 14 * d; setColor(PlayerStyle.PANEL) }
+            addView(android.widget.ImageView(this@FloatingPlayer).apply { setImageBitmap(bmp) },
+                android.widget.LinearLayout.LayoutParams((150 * d).toInt(), (150 * d).toInt()))
+            addView(android.widget.TextView(this@FloatingPlayer).apply {
+                text = "Mit dem Handy steuern"; setTextColor(PlayerStyle.TEXT); textSize = 13f
+                setPadding(0, (6 * d).toInt(), 0, 0)
+            })
+        }
+        val win = params()
+        val p = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, win.type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply { gravity = win.gravity; x = win.x + win.width + (16 * d).toInt(); y = win.y }
+        if (runCatching { wm.addView(v, p) }.isSuccess) {
+            qrView = v
+            v.postDelayed(hideQr, 20_000)
+        }
+    }
+
+    private fun removeQr() {
+        qrView?.let { it.removeCallbacks(hideQr); runCatching { wm.removeView(it) } }
+        qrView = null
+    }
+
+    private fun playItems(list: List<de.koeven.couchpotato.data.PlayItem>, i: Int) {
+        if (list.isEmpty()) return
+        items = list
+        index = i.coerceIn(0, list.lastIndex)
+        _state.value = _state.value.copy(title = list[index].title)
+        play(list[index])
     }
 
     /** Next/previous channel in the window – the old stream is replaced, still one connection. */
@@ -161,6 +209,8 @@ class FloatingPlayer : Service() {
     }
 
     override fun onDestroy() {
+        removeQr()
+        WindowRemote.stop()
         view?.let { runCatching { wm.removeView(it) } }
         view = null
         player?.release()
@@ -188,6 +238,8 @@ class FloatingPlayer : Service() {
         fun stop(context: Context) { context.stopService(Intent(context, FloatingPlayer::class.java)) }
 
         fun next() = instance?.zap(1)
+        fun playList(list: List<de.koeven.couchpotato.data.PlayItem>, index: Int) = instance?.playItems(list, index)
+        fun showPhoneQr() = instance?.showQr()
         fun previous() = instance?.zap(-1)
         fun fullscreen() = instance?.fullscreen()
 
