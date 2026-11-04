@@ -52,100 +52,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** One tile in "Weiterschauen": either IPTV (own player) or another app's Watch Next entry. */
-sealed interface ContinueItem {
-    val key: String
-    val sortTime: Long
-
-    data class Iptv(val entry: ProgressEntry, val newEpisodes: Boolean = false, val sort: Long = 0L) : ContinueItem {
-        override val key: String get() = entry.item.key
-        override val sortTime: Long get() = maxOf(entry.updatedAt, sort)
-    }
-
-    data class External(val program: WatchNextSource.Program, val appLabel: String?) : ContinueItem {
-        override val key: String get() = program.key
-        override val sortTime: Long get() = program.lastEngagement
-    }
-
-    /** Something another app reported while playing (ARD Mediathek, Disney+ …). */
-    data class Media(val play: MediaPlay, val appLabel: String?) : ContinueItem {
-        override val key: String get() = play.key
-        override val sortTime: Long get() = play.updatedAt
-    }
-
-    /** A series you watched got new episodes since (provider's "last modified" is newer). */
-    data class NewEpisodes(val series: SearchEntry, val watchedAt: Long) : ContinueItem {
-        override val key: String get() = "new:${series.id}:${series.added}"
-        override val sortTime: Long get() = series.added * 1000
-    }
-
-    /** Streaming app whose progress we can't read (Netflix …): a tile that opens the app. */
-    data class AppTile(val app: AppEntry, val lastUsed: Long) : ContinueItem {
-        override val key: String get() = "app:${app.packageName}"
-        override val sortTime: Long get() = lastUsed
-    }
-}
-
-/** TMDB/JustWatch service name (normalised start) → words to find the installed app by its label. */
-private val PROVIDER_KEYS = linkedMapOf(
-    "amazon prime" to listOf("prime video", "amazon prime"),
-    "amazon video" to listOf("prime video"),
-    "disney plus" to listOf("disney"),
-    "apple tv" to listOf("apple tv"),
-    "paramount" to listOf("paramount"),
-    "ard" to listOf("ard"),
-    "zdf" to listOf("zdf"),
-    "rtl" to listOf("rtl"),
-    "joyn" to listOf("joyn"),
-    "wow" to listOf("wow"),
-    "sky" to listOf("sky", "wow"),
-    "magenta" to listOf("magenta"),
-    "youtube" to listOf("youtube"),
-    "netflix" to listOf("netflix"),
-)
-
-/** Streaming apps shown as a tile in "Weiterschauen" (if installed). */
-private val STREAMING_APPS = listOf("com.netflix.ninja", "com.disney.disneyplus")
-
-data class HomeState(
-    val screenLock: String? = null,      // kids: screen time used up / bedtime
-    val screenLockNight: Boolean = false, // "Gute Nacht" version (bedtime, or limit used up from 19:00)
-    val continueWatching: List<ContinueItem> = emptyList(),
-    val apps: List<AppEntry> = emptyList(),
-    val movies: List<VodItem> = emptyList(),
-    val series: List<SeriesItem> = emptyList(),
-    val configured: Boolean = false,
-    val loading: Boolean = false,
-    val error: String? = null,
-    val tick: Int = 0,          // bumps whenever local data (progress) was re-read
-    val externalStatus: String = "",
-    val favorites: List<LiveChannel> = emptyList(),
-    val nowPlaying: Map<Long, String> = emptyMap(),
-    val liveInExternalApp: Boolean = false,
-    val indexStatus: String = "",
-    val searchApps: List<SearchApp> = emptyList(),
-    val rowOrder: List<String> = HomeRows.ALL,
-    val hiddenCategories: Set<String> = emptySet(),
-    val appsCustomOrder: Boolean = false,
-    val syncInfo: String = "",
-    val imageInfo: String = "",
-    val loadProviderImages: Boolean = true,
-    val recommended: List<SearchEntry> = emptyList(),
-    val recommendedPersonal: Boolean = false,
-    val loadMovieDetails: Boolean = true,
-    val tmdbOn: Boolean = false,
-    val profile: Profile = Profile(Profile.MAIN, "Ich", 0, kid = false),
-    val profiles: List<Profile> = emptyList(),
-    val needsProfilePick: Boolean = false,
-    val hasPin: Boolean = false,
-    val kidCategories: Set<String> = emptySet(),
-    val kidApps: Set<String> = emptySet(),
-    val allApps: List<AppEntry> = emptyList(),
-)
-
-/** An installed app in the "search in other apps" row; [acceptsQuery] = search term is handed over. */
-data class SearchApp(val app: AppEntry, val acceptsQuery: Boolean)
-
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val settings = SettingsStore(app)
@@ -153,12 +59,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private var cache = CatalogCache(app)
     private val cloudSync = CloudSync(app)
     private val watchNextCache = WatchNextCache(app)
-    private val seriesCache = HashMap<Long, SeriesInfo>()
     private var history = WatchHistory(app)
     private val app = app
     val tmdb = Tmdb(app)
-    private val seriesDir = java.io.File(app.filesDir, "seriesinfo")
-    private val movieDir = java.io.File(app.filesDir, "vodinfo")
+    /** Series episodes and film details from the provider (on the stick, throttled requests). */
+    private val titles = de.koeven.couchpotato.data.TitleInfoRepository(app, settings) { indexEntries }
     private var epgJob: Job? = null
     private var categoriesByKind: Map<Char, List<LiveCategory>> = emptyMap()
 
@@ -340,11 +245,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val media = MediaPlays.all(getApplication())
                 .filter { it.packageName != getApplication<Application>().packageName }
                 .map { ContinueItem.Media(it, labels[it.packageName]) }
-            val reporting = media.map { it.play.packageName }.toSet()
-            // app tile only for apps that report nothing themselves
-            val tiles = STREAMING_APPS.filter { it !in reporting }
-                .mapNotNull { pkg -> apps.firstOrNull { it.packageName == pkg } }
-                .map { ContinueItem.AppTile(it, settings.lastLaunched(it.packageName)) }
             val external = watchNextCache.merge(WatchNextSource.load(getApplication())) { pkg -> settings.lastLaunched(pkg) }
                 .filter { it.packageName != getApplication<Application>().packageName }
                 .map { ContinueItem.External(it, it.packageName?.let { pkg -> labels[pkg] }) }
@@ -413,9 +313,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(configured = after.isValid) }
         if (before == after) return false
         XtreamClient.clearBlock()
-        seriesCache.clear()
-        seriesDir.deleteRecursively()     // other provider: other ids
-        movieDir.deleteRecursively()
+        titles.clear()     // other provider: other ids
         // TMDB details are filed under the provider's ids (m_123 / s_45): those belong to the old provider
         java.io.File(app.filesDir, "tmdb").listFiles { f -> f.name.startsWith("m_") || f.name.startsWith("s_") }?.forEach { it.delete() }
         history.clear()
@@ -1063,24 +961,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         return withContext(Dispatchers.Default) { Recommender.similar(entries, of, hidden) }
     }
 
-    /**
-     * Film details: from the stick if fetched before; otherwise ONE request (through the brake),
-     * then kept for good. Returns null if switched off or the provider can't be asked right now.
-     */
-    suspend fun movieInfo(id: Long): Result<MovieInfo>? = withContext(Dispatchers.IO) {
-        val f = java.io.File(movieDir, "$id.json")
-        if (f.exists()) {
-            runCatching { MovieInfo.fromInfo(org.json.JSONObject(f.readText()).getJSONObject("info")) }
-                .getOrNull()?.let { return@withContext Result.success(it) }
-        }
-        if (!settings.loadMovieDetails) return@withContext null
-        runCatching {
-            val text = XtreamClient(settings.config()).vodInfoRaw(id)
-            movieDir.mkdirs()
-            f.writeText(text)
-            MovieInfo.fromInfo(org.json.JSONObject(text).getJSONObject("info"))
-        }
-    }
+    /** Film details from the provider – see [TitleInfoRepository.movieInfo]. */
+    suspend fun movieInfo(id: Long): Result<MovieInfo>? = titles.movieInfo(id)
 
     /**
      * Info screen data: TMDB first (separate service – costs the IPTV provider nothing),
@@ -1098,113 +980,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         return movieInfo(id)?.map { TitleDetails.fromProvider(it) }
     }
 
-    // ---------------- Suche über Streamingdienste ----------------
+    // ---------------- Suche über Streamingdienste / Themen (see Discovery) ----------------
 
-    /** A TMDB hit together with the installed apps that stream it. */
-    data class StreamResult(val hit: Tmdb.StreamHit, val apps: List<AppEntry>)
+    private val discovery = Discovery(app, tmdb, apps = { _state.value.apps }, catalogue = { indexEntries }, hidden = { effectiveHidden() })
 
-    /** Installed app for a streaming service name from TMDB/JustWatch ("Disney Plus" → Disney+ app). */
-    fun appFor(provider: String): AppEntry? {
-        val p = SearchIndex.normalize(provider.replace("+", " plus"))
-        val keys = PROVIDER_KEYS.entries.firstOrNull { (k, _) -> p.startsWith(k) }?.value
-            ?: listOf(p.substringBefore(' '))
-        return _state.value.apps.firstOrNull { a ->
-            val label = SearchIndex.normalize(a.label.replace("+", " plus"))
-            keys.any { k -> " $label".contains(" $k") }   // at a word start: "ard" must not hit "Leonardo"
-        }
-    }
-
-    fun appsFor(providers: List<String>): List<AppEntry> = providers.mapNotNull { appFor(it) }.distinctBy { it.packageName }
-
-    /** Cross-app search (not in kids profiles: no FSK there). Only hits you can watch with an installed app. */
-    suspend fun streamingSearch(query: String): List<StreamResult> {
-        if (Profiles.active(app).kid || !tmdb.enabled || query.trim().length < 3) return emptyList()
-        return runCatching { tmdb.searchStreaming(query) }.getOrDefault(emptyList())
-            .map { StreamResult(it, appsFor(it.providers)) }
-            .filter { it.apps.isNotEmpty() }
-    }
-
-    // ---------------- Themensuche ----------------
-
-    data class ThemeResult(val label: String, val iptv: List<SearchEntry>, val streaming: List<StreamResult>)
-
-    private var matchIndexOf: List<SearchEntry>? = null
-    private var byTmdb: Map<String, SearchEntry> = emptyMap()
-    private var byName: Map<String, List<SearchEntry>> = emptyMap()
-
-    /** Lookup tables to find TMDB titles in the IPTV catalogue (by TMDB id, else by cleaned name). */
-    private fun ensureMatchIndex(entries: List<SearchEntry>) {
-        if (matchIndexOf === entries) return
-        val t = HashMap<String, SearchEntry>()
-        val n = HashMap<String, MutableList<SearchEntry>>()
-        for (e in entries) {
-            if (e.kind == SearchEntry.KIND_LIVE) continue
-            e.tmdbId?.let { t["${e.kind}:$it"] = e }
-            val clean = SearchIndex.normalize(Tmdb.cleanName(e.name).first)
-            if (clean.isNotEmpty()) n.getOrPut("${e.kind}:$clean") { mutableListOf() } += e
-        }
-        byTmdb = t
-        byName = n
-        matchIndexOf = entries
-    }
-
-    private fun findInCatalog(h: Tmdb.ThemeHit): SearchEntry? {
-        val kind = if (h.tv) SearchEntry.KIND_SERIES else SearchEntry.KIND_MOVIE
-        byTmdb["$kind:${h.tmdbId}"]?.let { return it }
-        val hy = h.year?.toIntOrNull()
-        for (name in listOfNotNull(h.title, h.originalTitle)) {
-            val list = byName["$kind:${SearchIndex.normalize(Tmdb.cleanName(name).first)}"] ?: continue
-            val hit = list.firstOrNull { e ->
-                val ey = (e.year ?: Tmdb.cleanName(e.name).second)?.toIntOrNull()
-                hy == null || ey == null || kotlin.math.abs(ey - hy) <= 1
-            }
-            if (hit != null) return hit
-        }
-        return null
-    }
-
-    /**
-     * "Weihnachtsfilm", "Film mit Fußball": popular titles on that theme from TMDB, split into what is
-     * in the IPTV catalogue (matched on the stick) and what runs at installed streaming services.
-     */
-    suspend fun themeSearch(query: String): ThemeResult? {
-        if (!tmdb.enabled) return null
-        val theme = Themes.match(query)
-        val free = if (theme == null) {
-            Themes.freeWords(query).takeIf { it.length >= 3 && it != SearchIndex.normalize(query) }   // only "Film über X"
-        } else null
-        if (theme == null && free == null) return null
-        val hits = runCatching { tmdb.themeTitles(theme, free) }.getOrDefault(emptyList())
-        if (hits.isEmpty()) return null
-        val entries = indexEntries.orEmpty()
-        val hidden = effectiveHidden()
-        val kid = Profiles.active(app).kid
-        return withContext(Dispatchers.Default) {
-            ensureMatchIndex(entries)
-            val matched = HashSet<String>()
-            val iptv = hits.mapNotNull { h ->
-                findInCatalog(h)?.takeIf { it.categoryKey !in hidden }?.also { matched += "${h.tv}${h.tmdbId}" }
-            }.distinctBy { "${it.kind}${it.id}" }.take(40)
-            val streaming = if (kid) emptyList() else coroutineScope {
-                hits.filterNot { "${it.tv}${it.tmdbId}" in matched }.take(24).map { h ->
-                    async {
-                        val provs = runCatching { tmdb.providers(h.tv, h.tmdbId) }.getOrDefault(emptyList())
-                        val apps = appsFor(provs)
-                        if (apps.isEmpty()) null
-                        else StreamResult(Tmdb.StreamHit(h.tmdbId, h.tv, h.title, h.year, h.poster, provs), apps)
-                    }
-                }.awaitAll().filterNotNull()
-            }
-            ThemeResult(theme?.label ?: free!!.replaceFirstChar { it.uppercase() }, iptv, streaming)
-        }
-    }
-
-    /** Where a title from the info screen also streams (installed apps only). */
-    suspend fun alsoOn(details: TitleDetails?): List<AppEntry> {
-        val id = details?.tmdbId ?: return emptyList()
-        if (Profiles.active(app).kid || !tmdb.enabled) return emptyList()
-        return appsFor(runCatching { tmdb.providers(details.tv, id) }.getOrDefault(emptyList()))
-    }
+    fun appFor(provider: String): AppEntry? = discovery.appFor(provider)
+    fun appsFor(providers: List<String>): List<AppEntry> = discovery.appsFor(providers)
+    suspend fun streamingSearch(query: String): List<Discovery.StreamResult> = discovery.streamingSearch(query)
+    suspend fun themeSearch(query: String): Discovery.ThemeResult? = discovery.themeSearch(query)
+    suspend fun alsoOn(details: TitleDetails?): List<AppEntry> = discovery.alsoOn(details)
 
     /** Opens the streaming app and searches the title there (or just opens it). */
     fun openInStreamingApp(context: Context, appEntry: AppEntry, title: String) {
@@ -1309,7 +1093,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // an episode: its own plot if TMDB knows it, else the series'
         val ep = if (season != null && episode != null) details?.tmdbId?.let { tmdb.episodePlot(it, season, episode, fetch = false) } else null
         ep ?: details?.plot?.takeIf { it.isNotBlank() }
-            ?: if (kind == SearchEntry.KIND_SERIES) seriesCache[id]?.plot?.takeIf { it.isNotBlank() } else null
+            ?: if (kind == SearchEntry.KIND_SERIES) titles.cachedSeries(id)?.plot?.takeIf { it.isNotBlank() } else null
     }
 
     /** Wide TMDB picture for the info area, if already on the stick. No request. */
@@ -1385,37 +1169,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun progressForSeries(seriesId: Long): ProgressEntry? = progress.forSeries(seriesId)
 
-    suspend fun loadSeries(seriesId: Long, fallbackName: String): SeriesInfo =
-        seriesCache[seriesId] ?: loadSeriesCached(seriesId, fallbackName).also { seriesCache[seriesId] = it }
-
-    /**
-     * Series info from the stick if younger than a day (new episodes!), otherwise ONE request.
-     * If the provider can't be asked right now, the older copy is used.
-     */
-    private suspend fun loadSeriesCached(seriesId: Long, fallbackName: String): SeriesInfo = withContext(Dispatchers.IO) {
-        val client = XtreamClient(settings.config())
-        val f = java.io.File(seriesDir, "$seriesId.json")
-        val stale = if (f.exists()) runCatching { client.parseSeriesInfo(f.readText(), seriesId, fallbackName) }.getOrNull() else null
-        if (stale != null) {
-            // The catalogue says when a series last changed (new episodes). As long as our copy is newer
-            // than that, it is up to date – no request at all. Without that date: refresh after 3 days.
-            val changedAt = (indexEntries?.firstOrNull { it.kind == SearchEntry.KIND_SERIES && it.id == seriesId }?.added ?: 0L) * 1000
-            val age = System.currentTimeMillis() - f.lastModified()
-            val upToDate = if (changedAt > 0) f.lastModified() >= changedAt && age < SERIES_SAFETY_MS
-            else age < SERIES_MAX_AGE_MS
-            if (upToDate) return@withContext stale
-        }
-        try {
-            val text = client.seriesInfoRaw(seriesId)
-            seriesDir.mkdirs()
-            f.writeText(text)
-            client.parseSeriesInfo(text, seriesId, fallbackName)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            stale ?: throw e
-        }
-    }
+    suspend fun loadSeries(seriesId: Long, fallbackName: String): SeriesInfo = titles.loadSeries(seriesId, fallbackName)
 
     /** For series: the stored episode plus the following ones, so playback continues automatically. */
     suspend fun playlistFor(entry: ProgressEntry): List<PlayItem> {
@@ -1430,8 +1184,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val ROW_SIZE = 40
-        const val SERIES_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000L  // series info without a change date in the catalogue
-        const val SERIES_SAFETY_MS = 14 * 24 * 60 * 60 * 1000L  // …and with one: still re-check every 2 weeks
         // kept low on purpose: the provider locks the account after too many requests
         const val SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000L       // whole catalogue: once a day
         const val MIN_MANUAL_SYNC_GAP_MS = 10 * 60 * 1000L     // "jetzt abgleichen" not more often

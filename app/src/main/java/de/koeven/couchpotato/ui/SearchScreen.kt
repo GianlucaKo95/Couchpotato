@@ -97,10 +97,10 @@ fun SearchScreen(
     }
 
     // cross-app search via TMDB/JustWatch: only after a short pause in typing (internet round trip)
-    var streams by remember { mutableStateOf<List<HomeViewModel.StreamResult>>(emptyList()) }
-    var streamMenu by remember { mutableStateOf<HomeViewModel.StreamResult?>(null) }
+    var streams by remember { mutableStateOf<List<Discovery.StreamResult>>(emptyList()) }
+    var streamMenu by remember { mutableStateOf<Discovery.StreamResult?>(null) }
     // theme search ("Weihnachtsfilm", "Film mit Fußball") via TMDB keywords
-    var themed by remember { mutableStateOf<HomeViewModel.ThemeResult?>(null) }
+    var themed by remember { mutableStateOf<Discovery.ThemeResult?>(null) }
     LaunchedEffect(query) {
         if (query.trim().length < 4) { themed = null; return@LaunchedEffect }
         delay(800)
