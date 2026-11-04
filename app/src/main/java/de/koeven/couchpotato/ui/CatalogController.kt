@@ -237,12 +237,19 @@ class CatalogController(
         recomputeRecommendations()
     }
 
-    /** "Für dich" – local, recomputed after every playback (the history changes). */
+    /**
+     * "Für dich" and "Meine Liste" – local, recomputed after every playback (the history changes)
+     * and whenever something is put on or taken off the list.
+     */
     suspend fun recomputeRecommendations() {
         val entries = ctx.entries ?: return
         val hidden = ctx.hidden()
-        val r = withContext(Dispatchers.Default) { Recommender.recommend(entries, hidden, ctx.history.all()) }
-        ctx.update { it.copy(recommended = r.items, recommendedPersonal = r.personal) }
+        val list = ctx.watchlist.all()
+        val (r, mine) = withContext(Dispatchers.Default) {
+            Recommender.recommend(entries, hidden, ctx.history.all(), watchlist = list) to
+                de.koeven.couchpotato.data.Watchlist.entries(list, entries, hidden)
+        }
+        ctx.update { it.copy(recommended = r.items, recommendedPersonal = r.personal, myList = mine) }
     }
 
     private fun indexSummary(failed: List<String>): String {

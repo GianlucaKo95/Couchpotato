@@ -179,7 +179,13 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
     val kid = state.profile.kid
     CompositionLocalProvider(LocalNav provides nav, LocalProfile provides state.profile) {
       KidThemeIf(kid) {
-        when (val s = stack.last()) {
+        // soft cross-fade between the screens instead of a hard cut (short, so the remote stays snappy)
+        androidx.compose.animation.Crossfade(
+            targetState = stack.last(),
+            animationSpec = androidx.compose.animation.core.tween(180),
+            label = "screen",
+        ) { s ->
+        when (s) {
             Screen.Home -> if (kid) KidHomeScreen(
                 vm = vm,
                 homeTick = homeTick,
@@ -219,6 +225,7 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
             is Screen.Movie -> key(s.id) {
                 MovieScreen(vm = vm, movieId = s.id, name = s.name, onOpenMovie = { id, name -> go(Screen.Movie(id, name)) })
             }
+        }
         }
       }
     }

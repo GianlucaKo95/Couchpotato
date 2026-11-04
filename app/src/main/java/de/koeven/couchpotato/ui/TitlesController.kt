@@ -9,6 +9,7 @@ import de.koeven.couchpotato.data.SeriesInfo
 import de.koeven.couchpotato.data.TitleDetails
 import de.koeven.couchpotato.data.TitleInfoRepository
 import de.koeven.couchpotato.data.WatchedStore
+import de.koeven.couchpotato.data.Watchlist
 import de.koeven.couchpotato.player.Playback
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -59,6 +60,22 @@ class TitlesController(private val ctx: HomeContext) {
         if (kind != SearchEntry.KIND_MOVIE) return null      // series: the provider data comes with the episodes
         return movieInfo(id)?.map { TitleDetails.fromProvider(it) }
     }
+
+    // ---------------- Meine Liste ----------------
+
+    fun onMyList(kind: Char, id: Long): Boolean = Watchlist.key(kind, id) in ctx.watchlist
+
+    /** Puts the title on "Meine Liste" or takes it off; "Für dich" learns from it right away. */
+    fun toggleMyList(kind: Char, id: Long): Boolean {
+        val on = ctx.watchlist.toggle(Watchlist.key(kind, id))
+        Notice.show(if (on) "Auf „Meine Liste“ gesetzt" else "Von „Meine Liste“ entfernt")
+        ctx.update { it.copy(tick = it.tick + 1) }
+        ctx.scope.launch { onListChanged() }
+        return on
+    }
+
+    /** Set by the view model: recompute "Meine Liste" and "Für dich". */
+    internal var onListChanged: suspend () -> Unit = {}
 
     // ---------------- Info-Bereich auf der Startseite ----------------
 

@@ -103,6 +103,7 @@ fun HomeScreen(
             HomeRows.MOVIES -> state.movies.isNotEmpty()
             HomeRows.SERIES -> state.series.isNotEmpty()
             HomeRows.RECOMMENDED -> state.recommended.isNotEmpty()
+            HomeRows.MY_LIST -> state.myList.isNotEmpty()
             else -> false
         }
     }
@@ -368,6 +369,7 @@ fun HomeScreen(
                                     title = movie.name,
                                     image = movie.image,
                                     onClick = { onOpenMovie(movie.id, movie.name) },
+                                    onLongClick = { menu = HomeMenu.Title(SearchEntry.KIND_MOVIE, movie.id, movie.name) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.MOVIES) Modifier.focusRequester(firstFocus) else Modifier)
                                         .heroOn { Hero("Neu · Film", movie.name, plotKind = SearchEntry.KIND_MOVIE, plotId = movie.id) },
                                 )
@@ -384,8 +386,39 @@ fun HomeScreen(
                                     title = series.name,
                                     image = series.image,
                                     onClick = { onOpenSeries(series) },
+                                    onLongClick = { menu = HomeMenu.Title(SearchEntry.KIND_SERIES, series.id, series.name) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.SERIES) Modifier.focusRequester(firstFocus) else Modifier)
                                         .heroOn { Hero("Neu · Serie", series.name, plotKind = SearchEntry.KIND_SERIES, plotId = series.id) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HomeRows.MY_LIST -> if (state.myList.isNotEmpty()) {
+                    item(key = HomeRows.MY_LIST) {
+                        Shelf(HomeRows.label(HomeRows.MY_LIST)) {
+                            itemsIndexed(state.myList, key = { _, e -> "${e.kind}${e.id}" }) { i, e ->
+                                PosterCard(
+                                    title = e.name,
+                                    image = e.image,
+                                    onClick = {
+                                        if (e.kind == SearchEntry.KIND_SERIES) {
+                                            onOpenSeries(SeriesItem(e.id, e.name, e.image, e.added, e.categoryId))
+                                        } else {
+                                            onOpenMovie(e.id, e.name)
+                                        }
+                                    },
+                                    onLongClick = { menu = HomeMenu.Title(e.kind, e.id, e.name) },
+                                    modifier = (if (i == 0 && firstRow == HomeRows.MY_LIST) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .heroOn {
+                                            Hero(
+                                                "Meine Liste · " + if (e.kind == SearchEntry.KIND_SERIES) "Serie" else "Film",
+                                                e.name,
+                                                listOfNotNull(e.year, e.genre, e.rating.takeIf { it > 0f }?.let { r -> "★ %.1f".format(r) }).joinToString(" · ").ifBlank { null },
+                                                plotKind = e.kind, plotId = e.id,
+                                            )
+                                        },
                                 )
                             }
                         }
@@ -409,6 +442,7 @@ fun HomeScreen(
                                             onOpenMovie(e.id, e.name)
                                         }
                                     },
+                                    onLongClick = { menu = HomeMenu.Title(e.kind, e.id, e.name) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.RECOMMENDED) Modifier.focusRequester(firstFocus) else Modifier)
                                         .heroOn {
                                             Hero(
@@ -473,6 +507,11 @@ fun HomeScreen(
             ),
             onDismiss = { menu = null },
         )
+        is HomeMenu.Title -> ContextMenu(
+            title = m.name,
+            actions = listOf(myListMenuAction(vm, m.kind, m.id)),
+            onDismiss = { menu = null },
+        )
         null -> Unit
     }
 }
@@ -485,6 +524,7 @@ private sealed interface HomeMenu {
     data class App(val app: AppEntry) : HomeMenu
     data class Channel(val channel: LiveChannel) : HomeMenu
     data class Continue(val item: ContinueItem) : HomeMenu
+    data class Title(val kind: Char, val id: Long, val name: String) : HomeMenu
 }
 
 /** Scrolls the row so the moved card stays on screen. */

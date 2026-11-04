@@ -57,7 +57,7 @@ class ProfilesController(
                 needsProfilePick = false,
                 hiddenCategories = ctx.hidden(),
                 favorites = ctx.settings.favorites(),
-                movies = emptyList(), series = emptyList(), recommended = emptyList(),
+                movies = emptyList(), series = emptyList(), recommended = emptyList(), myList = emptyList(),
             )
         }
         search.reset()

@@ -74,6 +74,16 @@ internal fun cardBorder() = CardDefaults.border(
 @Composable
 internal fun cardScale() = CardDefaults.scale(focusedScale = 1.06f)
 
+/**
+ * The focused tile lifts off the background: a soft dark shadow under it. Drawn only for the
+ * one focused card, so it costs the stick nothing while scrolling through a row.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun cardGlow() = CardDefaults.glow(
+    focusedGlow = androidx.tv.material3.Glow(elevationColor = Color.Black.copy(alpha = 0.6f), elevation = 14.dp),
+)
+
 /** Tells the background glow which picture is focused. */
 @Composable
 fun Modifier.glowFrom(image: String?): Modifier {
@@ -198,11 +208,13 @@ fun PosterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     width: Dp = PosterWidth,
+    onLongClick: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     Column(Modifier.width(width)) {
         Card(
             onClick = onClick,
+            onLongClick = onLongClick,
             modifier = modifier
                 .width(width)
                 .aspectRatio(2f / 3f)
@@ -211,6 +223,7 @@ fun PosterCard(
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
             scale = cardScale(),
+            glow = cardGlow(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh)) {
                 if (image == null) {
@@ -262,6 +275,7 @@ fun LandscapePosterCard(
         shape = CardDefaults.shape(CardShape),
         border = cardBorder(),
         scale = cardScale(),
+            glow = cardGlow(),
     ) {
         Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh)) {
             if (image != null) {
@@ -332,6 +346,7 @@ fun ContinueCard(
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
             scale = cardScale(),
+            glow = cardGlow(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh)) {
                 if (image != null) {
@@ -433,6 +448,7 @@ fun AppCard(
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
             scale = cardScale(),
+            glow = cardGlow(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh), contentAlignment = Alignment.Center) {
                 when {
@@ -495,6 +511,7 @@ fun ChannelCard(
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
             scale = cardScale(),
+            glow = cardGlow(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh), contentAlignment = Alignment.Center) {
                 if (logo != null) {
@@ -526,6 +543,7 @@ fun TileCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, 
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
             scale = cardScale(),
+            glow = cardGlow(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.Surface), contentAlignment = Alignment.Center) {
                 Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)

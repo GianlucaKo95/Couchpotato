@@ -49,6 +49,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         XtreamClient.init(app)
         ctx.refreshLocal = { refreshLocal() }
         search.ensureIndex = { catalog.ensureIndex(force = false) }
+        titles.onListChanged = { catalog.recomputeRecommendations() }
         live.restoreEpg()
         profiles.init()
         val hidden = ctx.hidden()

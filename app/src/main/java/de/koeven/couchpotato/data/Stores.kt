@@ -12,7 +12,8 @@ object HomeRows {
     const val MOVIES = "movies"
     const val SERIES = "series"
     const val RECOMMENDED = "recommended"
-    val ALL = listOf(CONTINUE, LIVE, APPS, RECOMMENDED, MOVIES, SERIES)
+    const val MY_LIST = "mylist"
+    val ALL = listOf(CONTINUE, MY_LIST, LIVE, APPS, RECOMMENDED, MOVIES, SERIES)
 
     fun label(id: String) = when (id) {
         CONTINUE -> "Weiterschauen"
@@ -21,6 +22,7 @@ object HomeRows {
         MOVIES -> "Neue Filme"
         SERIES -> "Neue Serien"
         RECOMMENDED -> "Für dich"
+        MY_LIST -> "Meine Liste"
         else -> id
     }
 }
@@ -98,6 +100,10 @@ class SettingsStore(context: Context) {
         if (HomeRows.RECOMMENDED !in order) {
             val at = order.indexOf(HomeRows.MOVIES).takeIf { it >= 0 } ?: order.size
             order.add(at, HomeRows.RECOMMENDED)
+        }
+        // "Meine Liste" arrived later: right after "Weiterschauen"
+        if (HomeRows.MY_LIST !in order) {
+            order.add(order.indexOf(HomeRows.CONTINUE) + 1, HomeRows.MY_LIST)
         }
         order + HomeRows.ALL.filterNot { it in order }   // rows added in later versions go to the end
     }.getOrDefault(HomeRows.ALL)

@@ -209,6 +209,7 @@ fun MovieScreen(
                                 Playback.start(context, listOf(item))
                             }
                         }
+                        MyListAction(vm, de.koeven.couchpotato.data.SearchEntry.KIND_MOVIE, movieId)
                         info?.trailer?.takeIf { gate == ProfilesController.Gate.Allowed }?.let { yt ->
                             SideAction("Trailer") {
                                 val ok = runCatching {

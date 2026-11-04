@@ -69,6 +69,7 @@ data class HomeState(
     val imageInfo: String = "",
     val loadProviderImages: Boolean = true,
     val recommended: List<SearchEntry> = emptyList(),
+    val myList: List<SearchEntry> = emptyList(),
     val recommendedPersonal: Boolean = false,
     val loadMovieDetails: Boolean = true,
     val tmdbOn: Boolean = false,

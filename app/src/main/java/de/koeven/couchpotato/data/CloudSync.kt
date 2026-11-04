@@ -216,6 +216,7 @@ class CloudSync(context: Context) {
             names += "progress${p.suffix}"
             names += "history${p.suffix}"
             names += "watched${p.suffix}"
+            names += Watchlist.FILE + p.suffix
         }
         val all = JSONObject()
         for (name in names) {

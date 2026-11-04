@@ -254,6 +254,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                                     Playback.start(context, Playback.episodePlaylist(loaded, first.id))
                                 }
                             }
+                            MyListAction(vm, de.koeven.couchpotato.data.SearchEntry.KIND_SERIES, seriesId)
                         }
                         }
                     }
@@ -375,6 +376,7 @@ private fun EpisodeCard(
             shape = CardDefaults.shape(CardShape),
             border = cardBorder(),
             scale = cardScale(),
+            glow = cardGlow(),
         ) {
             Box(Modifier.fillMaxSize().background(CpColors.SurfaceHigh)) {
                 if (image != null) {

@@ -36,8 +36,8 @@ class WatchHistory(context: Context) {
 
 /**
  * "Für dich": recommendations computed on the stick from the catalogue – no request.
- * At first mostly by the provider's rating (and how new a title is); the more you watch,
- * the more your favourite categories and genres count.
+ * At first mostly by the provider's rating (and how new a title is); the more you watch –
+ * and put on "Meine Liste" – the more your favourite categories and genres count.
  */
 object Recommender {
 
@@ -48,32 +48,45 @@ object Recommender {
         hidden: Set<String>,
         history: Map<String, Long>,
         limit: Int = 30,
+        watchlist: Map<String, Long> = emptyMap(),
+        now: Long = System.currentTimeMillis(),
     ): Result {
         val byKey = entries.asSequence()
             .filter { it.kind != SearchEntry.KIND_LIVE }
             .associateBy { "${it.kind}:${it.id}" }
         val watched = history.keys.mapNotNull { byKey[it] }
 
+        // on "Meine Liste" but not watched yet: you said you are interested
+        val listed = watchlist.keys.filter { it !in history }.mapNotNull { byKey[it] }
+
         // what you like: categories and genres of what you watched (recent counts more)
-        val now = System.currentTimeMillis()
+        // and of what you put on your list (a bit less than really watching it)
         val catLove = HashMap<String, Double>()
         val genreLove = HashMap<String, Double>()
+        fun love(e: SearchEntry, weight: Double) {
+            catLove.merge(e.categoryKey, weight, Double::plus)
+            genres(e.genre).forEach { genreLove.merge(it, weight, Double::plus) }
+        }
         for (w in watched) {
             val ageDays = (now - (history["${w.kind}:${w.id}"] ?: now)) / 86_400_000.0
-            val weight = exp(-ageDays / 120.0)
-            catLove.merge(w.categoryKey, weight, Double::plus)
-            genres(w.genre).forEach { genreLove.merge(it, weight, Double::plus) }
+            love(w, exp(-ageDays.coerceAtLeast(0.0) / 120.0))
+        }
+        for (l in listed) {
+            val ageDays = (now - (watchlist["${l.kind}:${l.id}"] ?: now)) / 86_400_000.0
+            love(l, LIST_WEIGHT * exp(-ageDays.coerceAtLeast(0.0) / 180.0))
         }
         val maxCat = catLove.values.maxOrNull() ?: 0.0
         val maxGenre = genreLove.values.maxOrNull() ?: 0.0
-        // 0 = only ratings, up to 0.65 after ~12 watched titles
-        val personal = min(watched.size / 12.0, 1.0) * 0.65
+        // 0 = only ratings, up to 0.65 after ~12 watched titles (a listed title counts half)
+        val signals = watched.size + listed.size * 0.5
+        val personal = min(signals / 12.0, 1.0) * 0.65
 
         val nowSec = now / 1000
         val candidates = entries.filter {
             it.kind != SearchEntry.KIND_LIVE &&
                 it.categoryKey !in hidden &&
-                "${it.kind}:${it.id}" !in history
+                "${it.kind}:${it.id}" !in history &&
+                "${it.kind}:${it.id}" !in watchlist      // already on your list: it has its own row
         }.distinctBy { "${it.kind}:${it.id}" }
         val anyRatings = candidates.any { it.rating > 0f }
 
@@ -126,6 +139,9 @@ object Recommender {
             .map { it.first }
             .toList()
     }
+
+    /** A title on "Meine Liste" counts this much compared to one you really watched. */
+    const val LIST_WEIGHT = 0.7
 
     private val SPLIT = Regex("""\s*[,/&|]\s*""")
 

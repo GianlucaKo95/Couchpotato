@@ -10,6 +10,7 @@ import de.koeven.couchpotato.data.SearchIndex
 import de.koeven.couchpotato.data.SettingsStore
 import de.koeven.couchpotato.data.Tmdb
 import de.koeven.couchpotato.data.WatchHistory
+import de.koeven.couchpotato.data.Watchlist
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -28,6 +29,7 @@ class HomeContext(val app: Application, val scope: CoroutineScope) {
     var progress = ProgressStore(app); private set
     var history = WatchHistory(app); private set
     var cache = CatalogCache(app); private set
+    var watchlist = Watchlist(app); private set
 
     val state = MutableStateFlow(HomeState(configured = settings.config().isValid))
     fun update(f: (HomeState) -> HomeState) = state.update(f)
@@ -44,6 +46,7 @@ class HomeContext(val app: Application, val scope: CoroutineScope) {
         progress = ProgressStore(app)
         history = WatchHistory(app)
         cache = CatalogCache(app)
+        watchlist = Watchlist(app)
         categoryKeysOf = null
     }
 
