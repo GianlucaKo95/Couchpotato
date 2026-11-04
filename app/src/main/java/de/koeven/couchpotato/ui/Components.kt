@@ -346,7 +346,7 @@ fun ContinueCard(
                     ProgressBar(
                         fraction,
                         onPicture = true,
-                        Modifier
+                        modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(horizontal = 8.dp, vertical = 7.dp),
                     )
