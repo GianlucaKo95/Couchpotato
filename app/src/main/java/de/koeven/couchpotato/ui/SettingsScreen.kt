@@ -79,7 +79,7 @@ private enum class Section(val label: String, val group: String) {
 }
 
 /** Einstellungen (design B): sections on the left, the chosen section on the right. */
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
     val state by vm.state.collectAsState()
