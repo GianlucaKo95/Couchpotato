@@ -62,20 +62,24 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
      * All API requests of the app go through here: one at a time, at least [MIN_GAP_MS] apart,
      * and none at all while the provider has us blocked.
      */
-    internal fun <T> gated(block: () -> T): T = synchronized(GATE) {
-        val now = clock()
-        if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
-        while (requestLog.isNotEmpty() && requestLog.first() !in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS)) requestLog.removeFirst()
-        val limit = if (background) BACKGROUND_PER_HOUR else MAX_PER_HOUR
-        if (requestLog.size >= limit) throw RequestBudgetException(background)
-        val wait = lastRequestAt + MIN_GAP_MS - now
+    internal fun <T> gated(block: () -> T): T = synchronized(RUN) {
+        val wait = synchronized(GATE) {
+            val now = clock()
+            if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
+            while (requestLog.isNotEmpty() && requestLog.first() !in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS)) requestLog.removeFirst()
+            val limit = if (background) BACKGROUND_PER_HOUR else MAX_PER_HOUR
+            if (requestLog.size >= limit) throw RequestBudgetException(background)
+            lastRequestAt + MIN_GAP_MS - now
+        }
         if (wait > 0) sleep(wait)
         try {
             block()
         } finally {
-            lastRequestAt = clock()
-            requestLog.addLast(lastRequestAt)
-            persist()
+            synchronized(GATE) {
+                lastRequestAt = clock()
+                requestLog.addLast(lastRequestAt)
+                persist()
+            }
         }
     }
 
@@ -302,6 +306,12 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
     companion object {
         const val USER_AGENT = "Couchpotato/0.1"
 
+        /**
+         * Two locks: [RUN] = one request at a time (held for the whole download – the catalogue takes
+         * minutes), [GATE] = the counters, held only for a moment. The screen reads the counters
+         * ("Anfragen in der letzten Stunde") and must never wait for a download.
+         */
+        private val RUN = Any()
         private val GATE = Any()
         /** Time and waiting – replaceable only so the tests don't have to wait for real. */
         @Volatile internal var clock: () -> Long = { System.currentTimeMillis() }
@@ -391,19 +401,23 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         }
 
         /** Runs a picture download from the provider's server through the same brake. */
-        fun <T> gateImage(block: () -> T): T = synchronized(GATE) {
-            val now = clock()
-            if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
-            while (imageLog.isNotEmpty() && imageLog.first() !in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS)) imageLog.removeFirst()
-            if (imageLog.size >= IMAGES_PER_HOUR) throw RequestBudgetException(true)
-            val wait = lastRequestAt + IMAGE_GAP_MS - now
+        fun <T> gateImage(block: () -> T): T = synchronized(RUN) {
+            val wait = synchronized(GATE) {
+                val now = clock()
+                if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
+                while (imageLog.isNotEmpty() && imageLog.first() !in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS)) imageLog.removeFirst()
+                if (imageLog.size >= IMAGES_PER_HOUR) throw RequestBudgetException(true)
+                lastRequestAt + IMAGE_GAP_MS - now
+            }
             if (wait > 0) sleep(wait)
             try {
                 block()
             } finally {
-                lastRequestAt = clock()
-                imageLog.addLast(lastRequestAt)
-                persist()
+                synchronized(GATE) {
+                    lastRequestAt = clock()
+                    imageLog.addLast(lastRequestAt)
+                    persist()
+                }
             }
         }
 

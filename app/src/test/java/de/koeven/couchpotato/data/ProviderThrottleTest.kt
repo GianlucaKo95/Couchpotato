@@ -106,3 +106,24 @@ class ProviderThrottleTest {
         }
     }
 }
+
+class ThrottleDuringDownloadTest {
+    @org.junit.After fun tearDown() = XtreamClient.resetForTests()
+
+    @Test(timeout = 5_000) fun `the screen can read the counters while a long download runs`() {
+        XtreamClient.resetForTests()
+        val started = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val download = Thread {
+            XtreamClient(XtreamConfig("http://provider.example", "u", "p")).gated { started.countDown(); release.await() }
+        }
+        download.start()
+        started.await()
+        // before the fix this blocked until the download was done (→ app not responding)
+        XtreamClient.requestsLastHour()
+        XtreamClient.imagesLastHour()
+        release.countDown()
+        download.join()
+        assertEquals(1, XtreamClient.requestsLastHour())
+    }
+}
