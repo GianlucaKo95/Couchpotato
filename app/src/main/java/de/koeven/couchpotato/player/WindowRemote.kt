@@ -104,7 +104,7 @@ internal object WindowRemote {
     private fun state(): JSONObject {
         val s = FloatingPlayer.state.value
         return JSONObject().put("active", s.active).put("title", s.title).put("muted", s.muted)
-            .put("percent", s.percent).put("canGrow", s.canGrow).put("canShrink", s.canShrink)
+            .put("percent", s.percent).put("canGrow", s.canGrow).put("canShrink", s.canShrink).put("minimized", s.minimized)
     }
 
     private fun entries(): List<SearchEntry> = catalogue ?: runCatching {
@@ -150,6 +150,8 @@ internal object WindowRemote {
                 "corner" -> FloatingPlayer.nextCorner()
                 "full" -> FloatingPlayer.fullscreen()
                 "close" -> FloatingPlayer.stop(app)
+                "min" -> FloatingPlayer.minimize()
+                "restore" -> FloatingPlayer.restore()
                 "play" -> play?.invoke()
             }
         }
@@ -198,10 +200,14 @@ select{width:100%;margin:16px 0 10px;padding:13px;border-radius:12px;border:0;fo
 <div id="ctl">
 <div class="g"><button class="a w2" onclick="cmd('prev')">◀ Sender</button><button class="a w2" onclick="cmd('next')">Sender ▶</button></div>
 <div class="g"><button id="mute" class="w2" onclick="cmd('mute')">Ton</button><button id="sm" onclick="cmd('smaller')">−</button><button id="bg" onclick="cmd('bigger')">+</button></div>
-<div class="g"><button class="w2" onclick="cmd('corner')">Ecke</button><button onclick="cmd('full')">Vollbild</button><button onclick="cmd('close')">✕</button></div>
+<div class="g"><button class="w2" onclick="cmd('corner')">Ecke</button><button class="w2" onclick="cmd('full')">Vollbild</button></div>
+<div class="g"><button id="min" class="w2" onclick="cmd(minimized?'restore':'min')">Minimieren</button><button class="w2" onclick="cmd('close')">✕ Schließen</button></div>
 <select id="cat" onchange="load(this.value)"></select><div id="list"></div>
 </div></main><script>
-function show(s){
+var minimized=false;
+function show(s){minimized=!!s.minimized;
+document.getElementById('min').textContent=minimized?'⬆ Einblenden':'⬇ Minimieren';
+document.getElementById('min').className=minimized?'w2 a':'w2';
 document.getElementById('off').style.display=s.active?'none':'block';
 document.getElementById('ctl').style.display=s.active?'block':'none';
 document.getElementById('t').textContent=s.active?s.title:'';

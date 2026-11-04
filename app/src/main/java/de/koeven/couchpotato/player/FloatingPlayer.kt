@@ -32,7 +32,7 @@ import kotlinx.coroutines.flow.StateFlow
  */
 class FloatingPlayer : Service() {
 
-    data class State(val active: Boolean = false, val title: String = "", val muted: Boolean = true, val corner: Int = 0, val size: Int = 1) {
+    data class State(val active: Boolean = false, val title: String = "", val muted: Boolean = true, val corner: Int = 0, val size: Int = 1, val minimized: Boolean = false) {
         val percent: Int get() = SIZES[size]
         val canGrow: Boolean get() = size < SIZES.lastIndex
         val canShrink: Boolean get() = size > 0
@@ -148,6 +148,7 @@ class FloatingPlayer : Service() {
         val settings = de.koeven.couchpotato.data.SettingsStore(this)
         settings.addRecentLive(de.koeven.couchpotato.data.LiveChannel(item.streamId, item.title, item.image, null))
         val url = XtreamClient.streamUrl(settings.config(), item)
+        if (_state.value.minimized) return      // hidden: the channel starts when the window comes back
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(XtreamClient.USER_AGENT)
             .setAllowCrossProtocolRedirects(true)
@@ -208,6 +209,23 @@ class FloatingPlayer : Service() {
         }
     }
 
+    /**
+     * Minimised: the window disappears and the stream stops (no connection, no work for the
+     * stick) – the phone remote keeps running and brings it back with the same channel.
+     */
+    private fun setMinimized(on: Boolean) {
+        if (_state.value.minimized == on) return
+        _state.value = _state.value.copy(minimized = on)
+        if (on) {
+            removeQr()
+            view?.visibility = android.view.View.GONE
+            player?.stop()
+        } else {
+            view?.visibility = android.view.View.VISIBLE
+            items.getOrNull(index)?.let { play(it) }
+        }
+    }
+
     override fun onDestroy() {
         removeQr()
         WindowRemote.stop()
@@ -240,6 +258,8 @@ class FloatingPlayer : Service() {
         fun next() = instance?.zap(1)
         fun playList(list: List<de.koeven.couchpotato.data.PlayItem>, index: Int) = instance?.playItems(list, index)
         fun showPhoneQr() = instance?.showQr()
+        fun minimize() = instance?.setMinimized(true)
+        fun restore() = instance?.setMinimized(false)
         fun previous() = instance?.zap(-1)
         fun fullscreen() = instance?.fullscreen()
 

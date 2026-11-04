@@ -203,6 +203,9 @@ fun HomeScreen(
             SecondaryPill("−", enabled = floating.canShrink) { fp.resize(-1) }
             Text("${floating.percent} %", style = MaterialTheme.typography.labelLarge, color = CpColors.TextMuted)
             SecondaryPill("+", enabled = floating.canGrow) { fp.resize(+1) }
+            SecondaryPill(if (floating.minimized) "Einblenden" else "Minimieren") {
+                if (floating.minimized) fp.restore() else fp.minimize()
+            }
             SecondaryPill("Handy") { fp.showPhoneQr() }
             SecondaryPill("Schließen") { fp.stop(context) }
         }
