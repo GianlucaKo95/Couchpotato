@@ -33,9 +33,6 @@ object WatchNextSource {
 
     private val CONTENT_URI: Uri = Uri.parse("content://android.media.tv/watch_next_program")
 
-    @Volatile
-        private set
-
     fun load(context: Context): List<Program> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return emptyList()
