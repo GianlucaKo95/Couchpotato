@@ -201,11 +201,11 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
 
 @Composable
 private fun LoginSection(vm: HomeViewModel, setStatus: (String?) -> Unit) {
-    val initial = remember { vm.config() }
+    val initial = remember { vm.catalog.config() }
     var url by remember { mutableStateOf(initial.baseUrl) }
     var user by remember { mutableStateOf(initial.user) }
     var pass by remember { mutableStateOf(initial.pass) }
-    var asLink by remember { mutableStateOf(vm.loginAsLink) }
+    var asLink by remember { mutableStateOf(vm.catalog.loginAsLink) }
     var link by remember { mutableStateOf(initial.toM3uLink()) }
     var result by remember { mutableStateOf<String?>(null) }
     var phone by remember { mutableStateOf(false) }
@@ -220,7 +220,7 @@ private fun LoginSection(vm: HomeViewModel, setStatus: (String?) -> Unit) {
         value = if (asLink) "Kompletter Link" else "Zugangsdaten",
     ) {
         asLink = !asLink
-        vm.loginAsLink = asLink
+        vm.catalog.loginAsLink = asLink
         if (asLink && link.isBlank()) link = XtreamConfig(url, user, pass).toM3uLink()
         result = null
     }
@@ -303,7 +303,7 @@ private fun LoginSection(vm: HomeViewModel, setStatus: (String?) -> Unit) {
                 pass = cfg.pass
                 result = "Prüfe Verbindung …"
                 scope.launch {
-                    val r = vm.saveAndTest(cfg)
+                    val r = vm.catalog.saveAndTest(cfg)
                     result = if (asLink && !r.startsWith("Fehler")) "$r\nErkannt: Server $url · Benutzer $user" else r
                 }
             }
@@ -317,7 +317,7 @@ private fun LoginSection(vm: HomeViewModel, setStatus: (String?) -> Unit) {
 @Composable
 private fun CatalogSection(vm: HomeViewModel, state: HomeState, setStatus: (String?) -> Unit) {
     // re-read the counters whenever the screen state changes (they live in the request brake)
-    val last = remember(state.syncInfo) { vm.lastSyncAt() }
+    val last = remember(state.syncInfo) { vm.catalog.lastSyncAt() }
     val requests = remember(state.syncInfo) { XtreamClient.requestsLastHour() }
     val images = remember(state.syncInfo) { XtreamClient.imagesLastHour() }
 
@@ -365,12 +365,12 @@ private fun CatalogSection(vm: HomeViewModel, state: HomeState, setStatus: (Stri
         title = "Katalog jetzt abgleichen",
         description = "Höchstens alle 10 Minuten · bei einer Sperre pausiert die App 15 Minuten",
         value = "Abgleichen",
-    ) { setStatus(vm.syncNow()) }
+    ) { setStatus(vm.catalog.syncNow()) }
     SettingRow(
         title = "Bilder vom Anbieter-Server",
         description = "Einzeln, mit Pause, max. ${XtreamClient.IMAGES_PER_HOUR} pro Stunde · jedes Bild nur einmal",
         value = if (state.loadProviderImages) "laden (gebremst)" else "nicht laden",
-    ) { vm.setLoadProviderImages(!state.loadProviderImages) }
+    ) { vm.catalog.setLoadProviderImages(!state.loadProviderImages) }
     SettingRow(
         title = "Film-Details (Beschreibung, Besetzung)",
         description = "1 Anfrage beim ersten Öffnen eines Films, danach dauerhaft auf dem Stick",
@@ -395,13 +395,13 @@ private fun HomeSection(vm: HomeViewModel, state: HomeState, setStatus: (String?
     SettingRow(
         title = "Apps sortieren",
         value = if (state.appsCustomOrder) "eigene Reihenfolge" else "zuletzt genutzt zuerst",
-    ) { vm.setAppsCustomOrder(!state.appsCustomOrder) }
+    ) { vm.apps.setCustomOrder(!state.appsCustomOrder) }
     SettingRow(
         title = "Ausgeblendete Apps",
         description = "Alle versteckten Apps wieder anzeigen",
         value = "Zurücksetzen",
     ) {
-        vm.resetHiddenApps()
+        vm.apps.resetHidden()
         setStatus("Alle Apps sind wieder sichtbar.")
     }
     Text(
@@ -419,8 +419,8 @@ private fun HomeSection(vm: HomeViewModel, state: HomeState, setStatus: (String?
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("${i + 1}.  ${HomeRows.label(id)}", modifier = Modifier.weight(1f))
-            if (i > 0) TabPill("▲ hoch", false) { vm.moveRow(id, -1) }
-            if (i < state.rowOrder.lastIndex) TabPill("▼ runter", false) { vm.moveRow(id, 1) }
+            if (i > 0) TabPill("▲ hoch", false) { vm.apps.moveRow(id, -1) }
+            if (i < state.rowOrder.lastIndex) TabPill("▼ runter", false) { vm.apps.moveRow(id, 1) }
         }
     }
 }
@@ -436,7 +436,7 @@ private fun LiveSection(vm: HomeViewModel, state: HomeState) {
     SettingRow(
         title = "Sender öffnen mit",
         value = if (state.liveInExternalApp) "IsiPro" else "Couchpotato-Player",
-    ) { vm.setLiveInExternalApp(!state.liveInExternalApp) }
+    ) { vm.live.setLiveInExternalApp(!state.liveInExternalApp) }
     SettingRow(
         title = "Favoriten",
         description = "${state.favorites.size} Sender · „Jetzt läuft“ für die ersten 8, alle 30 Minuten",
@@ -476,11 +476,11 @@ private fun ContinueSection(vm: HomeViewModel, state: HomeState) {
 private fun CloudSyncSection(vm: HomeViewModel) {
     val scope = rememberCoroutineScope()
     var joinCode by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf(vm.householdCode()) }
-    var linked by remember { mutableStateOf(vm.cloudLinked) }
-    var isMain by remember { mutableStateOf(vm.cloudIsMain) }
-    var shareIptv by remember { mutableStateOf(vm.shareIptvWithHousehold) }
-    var status by remember { mutableStateOf(vm.cloudSyncStatus()) }
+    var code by remember { mutableStateOf(vm.household.code()) }
+    var linked by remember { mutableStateOf(vm.household.linked) }
+    var isMain by remember { mutableStateOf(vm.household.isMain) }
+    var shareIptv by remember { mutableStateOf(vm.household.shareIptv) }
+    var status by remember { mutableStateOf(vm.household.status()) }
     var busy by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
     var confirmRenew by remember { mutableStateOf(false) }
@@ -490,8 +490,8 @@ private fun CloudSyncSection(vm: HomeViewModel) {
             busy = true
             status = "Einen Moment …"
             status = try { block() } catch (e: Exception) { "Fehler: ${e.message ?: "unerwarteter Fehler"}" }
-            code = vm.householdCode(); linked = vm.cloudLinked; isMain = vm.cloudIsMain
-            shareIptv = vm.shareIptvWithHousehold
+            code = vm.household.code(); linked = vm.household.linked; isMain = vm.household.isMain
+            shareIptv = vm.household.shareIptv
             busy = false
         }
     }
@@ -522,18 +522,18 @@ private fun CloudSyncSection(vm: HomeViewModel) {
                     else "Aus: Zugangsdaten bleiben nur auf diesem Fire TV",
                 value = if (shareIptv) "an" else "aus",
             ) {
-                vm.shareIptvWithHousehold = !shareIptv
-                shareIptv = vm.shareIptvWithHousehold
-                act { vm.syncCloudNow() + if (shareIptv) " IPTV-Zugang wird geteilt." else " IPTV-Zugang wird nicht mehr geteilt." }
+                vm.household.shareIptv = !shareIptv
+                shareIptv = vm.household.shareIptv
+                act { vm.household.syncNow() + if (shareIptv) " IPTV-Zugang wird geteilt." else " IPTV-Zugang wird nicht mehr geteilt." }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PrimaryPill("Jetzt synchronisieren", enabled = !busy) { act { vm.syncCloudNow() } }
+            PrimaryPill("Jetzt synchronisieren", enabled = !busy) { act { vm.household.syncNow() } }
             if (isMain) {
                 SecondaryPill(if (confirmRenew) "Wirklich? Alle müssen neu eingeben" else "Neuen Code erzeugen", enabled = !busy) {
                     if (!confirmRenew) { confirmRenew = true; return@SecondaryPill }
                     confirmRenew = false
-                    act { "Neuer Code: ${vm.renewHouseholdCode()} – der alte gilt nicht mehr." }
+                    act { "Neuer Code: ${vm.household.renewCode()} – der alte gilt nicht mehr." }
                 }
             }
             SecondaryPill(
@@ -547,7 +547,7 @@ private fun CloudSyncSection(vm: HomeViewModel) {
             ) {
                 if (!confirmLeave) { confirmLeave = true; return@SecondaryPill }
                 confirmLeave = false
-                act { vm.leaveHousehold() }
+                act { vm.household.leave() }
             }
         }
         Hint(
@@ -558,7 +558,7 @@ private fun CloudSyncSection(vm: HomeViewModel) {
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PrimaryPill("Haushalt auf diesem Fire TV anlegen", enabled = !busy) {
-                act { "Haushalt angelegt. Code ${vm.createHousehold()} auf den anderen Fire TVs eingeben." }
+                act { "Haushalt angelegt. Code ${vm.household.create()} auf den anderen Fire TVs eingeben." }
             }
         }
         Hint("Schon einen Haushalt? Dann hier den Code vom Hauptgerät eingeben – das Hauptgerät muss dafür nicht an sein.")
@@ -569,7 +569,7 @@ private fun CloudSyncSection(vm: HomeViewModel) {
             onValueChange = { joinCode = it.filter { c -> c.isLetterOrDigit() }.take(10).uppercase() },
         )
         PrimaryPill("Beitreten", enabled = !busy && joinCode.length == 10) {
-            act { vm.joinHousehold(joinCode).also { joinCode = "" } }
+            act { vm.household.join(joinCode).also { joinCode = "" } }
         }
     }
 }
@@ -902,7 +902,7 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
 
     if (showSetPin) {
         SetPinDialog(onDismiss = { showSetPin = false }) { pin ->
-            vm.setPin(pin)
+            vm.profiles.setPin(pin)
             showSetPin = false
         }
     }
@@ -929,11 +929,11 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                 TextFieldButton(
                     label = "Name",
                     value = p.name,
-                    onValueChange = { vm.updateProfile(p.copy(name = it.ifBlank { p.name })) },
+                    onValueChange = { vm.profiles.update(p.copy(name = it.ifBlank { p.name })) },
                 )
                 if (p.id != de.koeven.couchpotato.data.Profile.MAIN) {
                     SettingRow(title = "Kinderprofil", value = if (p.kid) "ja" else "nein") {
-                        vm.updateProfile(p.copy(kid = !p.kid))
+                        vm.profiles.update(p.copy(kid = !p.kid))
                         if (!p.kid && !state.hasPin) showSetPin = true
                     }
                 }
@@ -944,24 +944,24 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                         value = "FSK ${p.maxFsk}",
                         onStep = { d ->
                             val steps = de.koeven.couchpotato.data.Profile.FSK_STEPS
-                            steps.getOrNull(steps.indexOf(p.maxFsk) + d)?.let { vm.updateProfile(p.copy(maxFsk = it)) }
+                            steps.getOrNull(steps.indexOf(p.maxFsk) + d)?.let { vm.profiles.update(p.copy(maxFsk = it)) }
                         },
                     ) {
                         val steps = de.koeven.couchpotato.data.Profile.FSK_STEPS
                         val next = steps[(steps.indexOf(p.maxFsk) + 1) % steps.size]
-                        vm.updateProfile(p.copy(maxFsk = next))
+                        vm.profiles.update(p.copy(maxFsk = next))
                     }
                     SettingRow(
                         title = "Bildschirmzeit pro Tag",
-                        description = "Zählt Filme, Serien und Apps wie Netflix – ${vm.screenTimeInfo(p)}. Danach nur mit Eltern-PIN weiter.",
+                        description = "Zählt Filme, Serien und Apps wie Netflix – ${vm.profiles.screenTimeInfo(p)}. Danach nur mit Eltern-PIN weiter.",
                         value = if (p.dailyMinutes <= 0) "unbegrenzt" else "${p.dailyMinutes} Min.",
                         onStep = { d ->
                             val steps = listOf(0, 30, 45, 60, 90, 120, 180)
-                            steps.getOrNull(steps.indexOf(p.dailyMinutes).coerceAtLeast(0) + d)?.let { vm.updateProfile(p.copy(dailyMinutes = it)) }
+                            steps.getOrNull(steps.indexOf(p.dailyMinutes).coerceAtLeast(0) + d)?.let { vm.profiles.update(p.copy(dailyMinutes = it)) }
                         },
                     ) {
                         val steps = listOf(0, 30, 45, 60, 90, 120, 180)
-                        vm.updateProfile(p.copy(dailyMinutes = steps[(steps.indexOf(p.dailyMinutes) + 1).mod(steps.size)]))
+                        vm.profiles.update(p.copy(dailyMinutes = steps[(steps.indexOf(p.dailyMinutes) + 1).mod(steps.size)]))
                     }
                     SettingRow(
                         title = "Schlafenszeit",
@@ -969,19 +969,19 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                         value = if (p.bedtime < 0) "aus" else "${de.koeven.couchpotato.data.ScreenTime.clock(p.bedtime)} Uhr",
                         onStep = { d ->
                             val steps = listOf(-1) + (17 * 60..21 * 60 step 30).toList()
-                            steps.getOrNull(steps.indexOf(p.bedtime).coerceAtLeast(0) + d)?.let { vm.updateProfile(p.copy(bedtime = it)) }
+                            steps.getOrNull(steps.indexOf(p.bedtime).coerceAtLeast(0) + d)?.let { vm.profiles.update(p.copy(bedtime = it)) }
                         },
                     ) {
                         val steps = listOf(-1) + (17 * 60..21 * 60 step 30).toList()
-                        vm.updateProfile(p.copy(bedtime = steps[(steps.indexOf(p.bedtime) + 1).mod(steps.size)]))
+                        vm.profiles.update(p.copy(bedtime = steps[(steps.indexOf(p.bedtime) + 1).mod(steps.size)]))
                     }
                 }
                 SettingRow(title = "Tier", value = animalName(p)) {
-                    vm.updateProfile(p.copy(animal = (p.animalIndex + 1) % de.koeven.couchpotato.data.Profile.ANIMAL_COUNT))
+                    vm.profiles.update(p.copy(animal = (p.animalIndex + 1) % de.koeven.couchpotato.data.Profile.ANIMAL_COUNT))
                 }
-                SettingRow(title = "Farbe", value = "ändern") { vm.updateProfile(p.copy(color = p.color + 1)) }
+                SettingRow(title = "Farbe", value = "ändern") { vm.profiles.update(p.copy(color = p.color + 1)) }
                 SettingRow(title = "Neu würfeln", description = if (p.kid) "Zufälliges Kindertier und Farbe" else "Zufällige Figur und Farbe", value = "🎲 Würfeln") {
-                    vm.updateProfile(
+                    vm.profiles.update(
                         p.copy(
                             // kids: cute animal on a soft colour, grown-ups: cool animal on a dark one
                             animal = (0 until de.koeven.couchpotato.data.Profile.ANIMAL_COUNT).random(),
@@ -991,7 +991,7 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                 }
                 if (p.id != de.koeven.couchpotato.data.Profile.MAIN) {
                     SettingRow(title = "Profil löschen", description = "Sein „Weiterschauen“ und Verlauf werden gelöscht", value = "Löschen") {
-                        vm.removeProfile(p.id)
+                        vm.profiles.remove(p.id)
                         editingId = null
                     }
                 }
@@ -999,10 +999,10 @@ private fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
         }
     }
     SettingRow(title = "Neues Profil", value = "Anlegen") {
-        editingId = vm.addProfile("", kid = false).id
+        editingId = vm.profiles.add("", kid = false).id
     }
     SettingRow(title = "Neues Kinderprofil", value = "Anlegen") {
-        editingId = vm.addProfile("", kid = true).id
+        editingId = vm.profiles.add("", kid = true).id
         if (!state.hasPin) showSetPin = true
     }
 
@@ -1044,14 +1044,14 @@ private fun KidCategories(vm: HomeViewModel, state: HomeState, onBack: () -> Uni
         SearchEntry.KIND_SERIES to "Serien",
         SearchEntry.KIND_LIVE to "Live-TV",
     )) {
-        val cats = vm.categoriesFor(kind)
+        val cats = vm.library.categoriesFor(kind)
         if (cats.isEmpty()) continue
         Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
         cats.forEach { c ->
             val key = "$kind:${c.id}"
             val allowed = key in state.kidCategories
             SettingRow(title = c.name, value = if (allowed) "✓ frei" else "gesperrt") {
-                vm.setKidCategory(key, !allowed)
+                vm.profiles.setKidCategory(key, !allowed)
             }
         }
     }
@@ -1064,7 +1064,7 @@ private fun KidApps(vm: HomeViewModel, state: HomeState, onBack: () -> Unit) {
     state.allApps.forEach { a ->
         val allowed = a.packageName in state.kidApps
         SettingRow(title = a.label, value = if (allowed) "✓ frei" else "gesperrt") {
-            vm.setKidApp(a.packageName, !allowed)
+            vm.profiles.setKidApp(a.packageName, !allowed)
         }
     }
 }

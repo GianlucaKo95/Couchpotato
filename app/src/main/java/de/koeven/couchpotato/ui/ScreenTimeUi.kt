@@ -96,16 +96,16 @@ fun ScreenTimeLock(vm: HomeViewModel, message: String, hasPin: Boolean, night: B
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 18.dp)) {
                     KidActionButton("Eltern: 30 Minuten mehr", primary = true, modifier = Modifier.focusRequester(first)) {
-                        if (hasPin) askPin = true else vm.extendScreenTime(30)
+                        if (hasPin) askPin = true else vm.profiles.extendScreenTime(30)
                     }
-                    KidActionButton("Profil wechseln", primary = false) { vm.showProfilePicker() }
+                    KidActionButton("Profil wechseln", primary = false) { vm.profiles.showPicker() }
                 }
             }
         }
     }
     if (askPin) {
         PinDialog(title = "Eltern-PIN", hint = "30 Minuten mehr für heute", onDismiss = { askPin = false }) { pin ->
-            if (vm.checkPin(pin)) { askPin = false; vm.extendScreenTime(30); true } else false
+            if (vm.profiles.checkPin(pin)) { askPin = false; vm.profiles.extendScreenTime(30); true } else false
         }
     }
 }

@@ -76,24 +76,24 @@ fun SearchScreen(
 ) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
-    val results by vm.search.collectAsState()
-    val query by vm.searchQuery.collectAsState()
+    val results by vm.search.results.collectAsState()
+    val query by vm.search.query.collectAsState()
     var digits by remember { mutableStateOf(false) }
-    var recent by remember { mutableStateOf(vm.recentSearches()) }
+    var recent by remember { mutableStateOf(vm.search.recent()) }
     val firstKey = remember { FocusRequester() }
     val favIds = state.favorites.map { it.id }.toSet()
 
     BackHandler { onClose() }
 
     LaunchedEffect(Unit) {
-        vm.prepareSearch()
+        vm.search.prepare()
         delay(150)
         runCatching { firstKey.requestFocus() }
     }
 
     LaunchedEffect(query) {
         delay(250)
-        vm.runSearch(query)
+        vm.search.run(query)
     }
 
     // cross-app search via TMDB/JustWatch: only after a short pause in typing (internet round trip)
@@ -104,15 +104,15 @@ fun SearchScreen(
     LaunchedEffect(query) {
         if (query.trim().length < 4) { themed = null; return@LaunchedEffect }
         delay(800)
-        themed = vm.themeSearch(query)
+        themed = vm.discovery.themeSearch(query)
     }
     LaunchedEffect(query) {
         if (query.trim().length < 3) { streams = emptyList(); return@LaunchedEffect }
         delay(700)
-        streams = vm.streamingSearch(query)
+        streams = vm.discovery.streamingSearch(query)
     }
 
-    fun type(s: String) = vm.setQuery(query + s)
+    fun type(s: String) = vm.search.setQuery(query + s)
     var phoneOpen by remember { mutableStateOf(false) }
 
     // voice search – only if this Fire TV offers speech recognition to apps (Alexa itself is reserved for Amazon)
@@ -128,11 +128,11 @@ fun SearchScreen(
     val voice = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { res ->
-        res.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { vm.setQuery(it) }
+        res.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { vm.search.setQuery(it) }
     }
     fun saveQuery(q: String = query) {
-        vm.rememberSearch(q)
-        recent = vm.recentSearches()
+        vm.search.remember(q)
+        recent = vm.search.recent()
     }
 
     val q = query.trim()
@@ -208,7 +208,7 @@ fun SearchScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         Key("Leerzeichen", keyWidth * 3 + KeyGap * 2) { if (query.isNotEmpty() && !query.endsWith(" ")) type(" ") }
-                        Key("⌫ Löschen", keyWidth * 2 + KeyGap) { vm.setQuery(query.dropLast(1)) }
+                        Key("⌫ Löschen", keyWidth * 2 + KeyGap) { vm.search.setQuery(query.dropLast(1)) }
                         Key(if (digits) "abc" else "123", keyWidth * 2 + KeyGap) { digits = !digits }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
@@ -216,13 +216,13 @@ fun SearchScreen(
                     }
                     if (phoneOpen) {
                         // live: the search runs while you type on the phone
-                        PhoneLinkPanel("Suche") { text -> vm.setQuery(text.replace(Regex("\\s+"), " ").trimStart()) }
+                        PhoneLinkPanel("Suche") { text -> vm.search.setQuery(text.replace(Regex("\\s+"), " ").trimStart()) }
                     }
                     if (voiceAvailable) Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         Key("🎤 Sprechen", keyWidth * 7 + KeyGap * 6) { runCatching { voice.launch(voiceIntent) } }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
-                        Key("Alles löschen", keyWidth * 4 + KeyGap * 3, muted = true) { vm.setQuery("") }
+                        Key("Alles löschen", keyWidth * 4 + KeyGap * 3, muted = true) { vm.search.setQuery("") }
                         Key("Schließen", keyWidth * 3 + KeyGap * 2, muted = true) { onClose() }
                     }
                 }
@@ -253,7 +253,7 @@ fun SearchScreen(
                     item(key = "suggest") {
                         Section(if (showResults) "Vorschläge" else "Zuletzt gesucht") {
                             items(suggestions, key = { "sg-$it" }) { s ->
-                                TabPill(s, selected = false) { vm.setQuery(s) }
+                                TabPill(s, selected = false) { vm.search.setQuery(s) }
                             }
                         }
                     }
@@ -313,7 +313,7 @@ fun SearchScreen(
                                                 image = r.hit.poster,
                                                 onClick = {
                                                     saveQuery()
-                                                    if (r.apps.size == 1) vm.openInStreamingApp(context, r.apps[0], r.hit.title)
+                                                    if (r.apps.size == 1) vm.search.openInStreamingApp(context, r.apps[0], r.hit.title)
                                                     else streamMenu = r
                                                 },
                                             )
@@ -341,7 +341,7 @@ fun SearchScreen(
                                             image = r.hit.poster,
                                             onClick = {
                                                 saveQuery()
-                                                if (r.apps.size == 1) vm.openInStreamingApp(context, r.apps[0], r.hit.title)
+                                                if (r.apps.size == 1) vm.search.openInStreamingApp(context, r.apps[0], r.hit.title)
                                                 else streamMenu = r
                                             },
                                         )
@@ -374,11 +374,11 @@ fun SearchScreen(
                                         nowPlaying = state.nowPlaying[ch.id],
                                         onClick = {
                                             saveQuery()
-                                            vm.playLive(context, liveChannels, i)
+                                            vm.live.play(context, liveChannels, i)
                                         },
                                         onLongClick = {
                                             val wasFav = ch.id in favIds
-                                            vm.toggleFavorite(ch)
+                                            vm.live.toggleFavorite(ch)
                                             Notice.show(if (wasFav) "${ch.name} aus Favoriten entfernt" else "${ch.name} zu Favoriten hinzugefügt")
                                         },
                                     )
@@ -398,7 +398,7 @@ fun SearchScreen(
                                     label = "Fire TV\nGesamtsuche",
                                     onClick = {
                                         saveQuery()
-                                        vm.openGlobalSearch(context, q)
+                                        vm.search.openGlobal(context, q)
                                     },
                                 )
                             }
@@ -407,9 +407,9 @@ fun SearchScreen(
                                     app = sa.app,
                                     onClick = {
                                         saveQuery()
-                                        vm.searchInApp(context, sa, q)
+                                        vm.search.inApp(context, sa, q)
                                     },
-                                    onLongClick = { vm.searchInApp(context, sa, q) },
+                                    onLongClick = { vm.search.inApp(context, sa, q) },
                                 )
                             }
                         }
@@ -421,7 +421,7 @@ fun SearchScreen(
     streamMenu?.let { r ->
         ContextMenu(
             title = r.hit.title,
-            actions = r.apps.map { a -> MenuAction("In ${a.label} öffnen") { vm.openInStreamingApp(context, a, r.hit.title) } },
+            actions = r.apps.map { a -> MenuAction("In ${a.label} öffnen") { vm.search.openInStreamingApp(context, a, r.hit.title) } },
             onDismiss = { streamMenu = null },
         )
     }

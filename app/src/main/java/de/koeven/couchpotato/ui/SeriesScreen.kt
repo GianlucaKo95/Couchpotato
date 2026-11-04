@@ -71,9 +71,9 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
 
     LaunchedEffect(seriesId) {
         try {
-            val loaded = vm.loadSeries(seriesId, name)
+            val loaded = vm.titles.loadSeries(seriesId, name)
             info = loaded
-            val resume = vm.progressForSeries(seriesId)
+            val resume = vm.titles.progressForSeries(seriesId)
             season = loaded.episodes.firstOrNull { it.id == resume?.item?.streamId }?.season
                 ?: loaded.episodes.firstOrNull()?.season ?: 1
         } catch (e: Exception) {
@@ -84,9 +84,9 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
     // FSK, German text, cast, rating: TMDB (costs the IPTV provider nothing)
     var detailsDone by remember(seriesId) { mutableStateOf(false) }
     var also by remember(seriesId) { mutableStateOf<List<de.koeven.couchpotato.data.AppEntry>>(emptyList()) }
-    LaunchedEffect(details) { also = vm.alsoOn(details) }
+    LaunchedEffect(details) { also = vm.discovery.alsoOn(details) }
     LaunchedEffect(seriesId) {
-        details = runCatching { vm.titleDetails(SearchEntry.KIND_SERIES, seriesId, name)?.getOrNull() }.getOrNull()
+        details = runCatching { vm.titles.details(SearchEntry.KIND_SERIES, seriesId, name)?.getOrNull() }.getOrNull()
         detailsDone = true
     }
 
@@ -94,13 +94,13 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
     var unlockTick by remember { mutableStateOf(0) }
     var askPin by remember { mutableStateOf(false) }
     val gate = remember(details, detailsDone, unlockTick, state.profile) {
-        vm.gate(SearchEntry.KIND_SERIES, seriesId, details?.fsk, detailsDone)
+        vm.profiles.gate(SearchEntry.KIND_SERIES, seriesId, details?.fsk, detailsDone)
     }
     fun guardedPlay(action: () -> Unit) {
         when (gate) {
-            HomeViewModel.Gate.Allowed -> action()
-            is HomeViewModel.Gate.Blocked -> askPin = true
-            HomeViewModel.Gate.Checking -> Unit
+            ProfilesController.Gate.Allowed -> action()
+            is ProfilesController.Gate.Blocked -> askPin = true
+            ProfilesController.Gate.Checking -> Unit
         }
     }
     if (askPin) {
@@ -109,8 +109,8 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
             hint = "„$name“ ist für dieses Kinderprofil gesperrt. Mit der Eltern-PIN wird die Serie dauerhaft freigegeben.",
             onDismiss = { askPin = false },
         ) { pin ->
-            if (vm.checkPin(pin)) {
-                vm.unlockTitle(SearchEntry.KIND_SERIES, seriesId)
+            if (vm.profiles.checkPin(pin)) {
+                vm.profiles.unlockTitle(SearchEntry.KIND_SERIES, seriesId)
                 askPin = false
                 unlockTick++
                 true
@@ -122,7 +122,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
     LaunchedEffect(info?.cover) { info?.cover?.let { backdrop?.focusImage(it) } }
 
     // re-read progress whenever we come back from the player (tick changes on resume)
-    val resume = remember(state.tick, seriesId) { vm.progressForSeries(seriesId) }
+    val resume = remember(state.tick, seriesId) { vm.titles.progressForSeries(seriesId) }
 
     LaunchedEffect(info) {
         if (info != null) {
@@ -133,10 +133,10 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
 
     val loaded = info
     val seasons = remember(loaded) { loaded?.episodes?.map { it.season }?.distinct().orEmpty() }
-    val watchedSet = remember(state.tick, loaded) { vm.watchedEpisodes(seriesId) }
+    val watchedSet = remember(state.tick, loaded) { vm.titles.watchedEpisodes(seriesId) }
     var menuEp by remember { mutableStateOf<Episode?>(null) }
     val progressMap = remember(state.tick, loaded) {
-        loaded?.episodes?.associate { it.id to vm.progressFor("ep:${it.id}") }.orEmpty()
+        loaded?.episodes?.associate { it.id to vm.titles.progressFor("ep:${it.id}") }.orEmpty()
     }
     val resumeEp = loaded?.episodes?.firstOrNull { it.id == resume?.item?.streamId }
     val episodeWidth = ContentWidth
@@ -198,7 +198,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
                             Text("Auch bei", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted)
-                            also.forEach { a -> TabPill(a.label, false) { vm.openInStreamingApp(context, a, loaded?.name ?: name) } }
+                            also.forEach { a -> TabPill(a.label, false) { vm.search.openInStreamingApp(context, a, loaded?.name ?: name) } }
                         }
                     }
                     (details?.cast?.takeIf { it.isNotEmpty() }?.take(5)?.joinToString(", ") ?: loaded?.cast)?.let {
@@ -217,7 +217,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                         loaded == null -> Text("Lade Folgen …", color = CpColors.TextMuted)
                         loaded.episodes.isEmpty() -> Text("Keine Folgen gefunden.", color = CpColors.TextMuted)
                         else -> Column {
-                        if (state.profile.kid && gate is HomeViewModel.Gate.Blocked) {
+                        if (state.profile.kid && gate is ProfilesController.Gate.Blocked) {
                             KidLockedBubble(
                                 "Ohoh, diese Serie ist noch nichts für dich. Frag Mama oder Papa!",
                                 spoken = "Oh oh! Diese Serie ist noch nichts für dich. Frag doch mal Mama oder Papa!",
@@ -236,12 +236,12 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                                 "▶  Abspielen · S${first.season} E${first.number}"
                             }
                             val label = when (val g = gate) {
-                                HomeViewModel.Gate.Allowed -> primary
-                                HomeViewModel.Gate.Checking -> "Prüfe Freigabe …"
-                                is HomeViewModel.Gate.Blocked -> if (kid) "Eltern-PIN eingeben" else "🔒  Gesperrt · ${g.reason}"
+                                ProfilesController.Gate.Allowed -> primary
+                                ProfilesController.Gate.Checking -> "Prüfe Freigabe …"
+                                is ProfilesController.Gate.Blocked -> if (kid) "Eltern-PIN eingeben" else "🔒  Gesperrt · ${g.reason}"
                             }
                             MainAction(
-                                if (kid && gate == HomeViewModel.Gate.Allowed && resume == null) "▶  Los geht’s!" else label,
+                                if (kid && gate == ProfilesController.Gate.Allowed && resume == null) "▶  Los geht’s!" else label,
                                 Modifier.focusRequester(focus),
                             ) {
                                 guardedPlay {
@@ -249,7 +249,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                                     Playback.start(context, Playback.episodePlaylist(loaded, start))
                                 }
                             }
-                            if (resumeEp != null && resumeEp.id != first.id && gate == HomeViewModel.Gate.Allowed) {
+                            if (resumeEp != null && resumeEp.id != first.id && gate == ProfilesController.Gate.Allowed) {
                                 SideAction("Von vorne") {
                                     Playback.start(context, Playback.episodePlaylist(loaded, first.id))
                                 }
@@ -330,14 +330,14 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
         ContextMenu(
             title = "${ep.number}. ${ep.title}",
             actions = listOf(
-                if (seen) MenuAction("Als ungesehen markieren") { vm.markWatched(loaded, listOf(ep.id), false) }
-                else MenuAction("Als gesehen markieren") { vm.markWatched(loaded, listOf(ep.id), true) },
+                if (seen) MenuAction("Als ungesehen markieren") { vm.titles.markWatched(loaded, listOf(ep.id), false) }
+                else MenuAction("Als gesehen markieren") { vm.titles.markWatched(loaded, listOf(ep.id), true) },
                 MenuAction("Bis hier alles als gesehen markieren") {
                     val upTo = loaded.episodes.indexOfFirst { it.id == ep.id }
-                    vm.markWatched(loaded, loaded.episodes.take(upTo + 1).map { it.id }, true)
+                    vm.titles.markWatched(loaded, loaded.episodes.take(upTo + 1).map { it.id }, true)
                 },
-                if (seasonSeen) MenuAction("Staffel ${ep.season} als ungesehen markieren") { vm.markWatched(loaded, seasonIds, false) }
-                else MenuAction("Staffel ${ep.season} als gesehen markieren") { vm.markWatched(loaded, seasonIds, true) },
+                if (seasonSeen) MenuAction("Staffel ${ep.season} als ungesehen markieren") { vm.titles.markWatched(loaded, seasonIds, false) }
+                else MenuAction("Staffel ${ep.season} als gesehen markieren") { vm.titles.markWatched(loaded, seasonIds, true) },
             ),
             onDismiss = { menuEp = null },
         )

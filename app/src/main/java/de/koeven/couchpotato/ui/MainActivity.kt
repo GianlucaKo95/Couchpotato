@@ -86,8 +86,8 @@ class MainActivity : ComponentActivity() {
                 if (url != null && user != null && pass != null) XtreamConfig(url, user, pass) else null
             }
             ?: return false
-        if (vm.applyLogin(cfg)) {
-            vm.refreshCatalog(force = true)
+        if (vm.catalog.applyLogin(cfg)) {
+            vm.catalog.refresh(force = true)
             Notice.show("IPTV-Zugang gespeichert")
         } else {
             Notice.show("IPTV-Zugang unverändert")
@@ -108,22 +108,22 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
     val state by vm.state.collectAsState()
     // something that needs the parents' PIN first (leaving a kids profile, settings in a kids profile)
     var pinAction by remember { mutableStateOf<(() -> Unit)?>(null) }
-    val guarded: (() -> Unit) -> Unit = { action -> if (vm.pinNeeded()) pinAction = action else action() }
+    val guarded: (() -> Unit) -> Unit = { action -> if (vm.profiles.pinNeeded()) pinAction = action else action() }
 
     // The tabs of the top bar switch areas: Start = home, the others = Mediathek on that tab.
     val nav = remember {
         NavActions(
             home = { stack = listOf(Screen.Home) },
             browse = { kind ->
-                vm.browseKind = kind
-                vm.browseCategoryId = null
+                vm.library.browseKind = kind
+                vm.library.browseCategoryId = null
                 stack = listOf(Screen.Home, Screen.Browse(kind))
             },
             search = { if (stack.lastOrNull() != Screen.Search) stack = stack + Screen.Search },
             settings = {
                 guarded { if (stack.lastOrNull() != Screen.Settings) stack = stack + Screen.Settings }
             },
-            profiles = { vm.showProfilePicker() },
+            profiles = { vm.profiles.showPicker() },
         )
     }
 
@@ -132,7 +132,7 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
 
     pinAction?.let { action ->
         PinDialog(title = "Eltern-PIN", onDismiss = { pinAction = null }) { pin ->
-            if (vm.checkPin(pin)) {
+            if (vm.profiles.checkPin(pin)) {
                 pinAction = null
                 action()
                 true
@@ -141,23 +141,23 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
     }
 
     if (state.needsProfilePick) {
-        BackHandler { vm.closeProfilePicker() }
+        BackHandler { vm.profiles.closePicker() }
         ProfilePicker(
             profiles = state.profiles,
             active = state.profile,
             onPick = { p ->
                 if (p.id == state.profile.id) {
-                    vm.closeProfilePicker()
+                    vm.profiles.closePicker()
                 } else {
                     guarded {
-                        vm.switchProfile(p.id)
+                        vm.profiles.switchTo(p.id)
                         stack = listOf(Screen.Home)
                     }
                 }
             },
             onManage = {
                 guarded {
-                    vm.closeProfilePicker()
+                    vm.profiles.closePicker()
                     vm.settingsSection = "profiles"
                     stack = listOf(Screen.Home, Screen.Settings)
                 }
@@ -168,7 +168,7 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
 
     // kids: screen time used up or bedtime – checked every minute while the launcher is open
     LaunchedEffect(state.profile.id) {
-        while (true) { vm.checkScreenTime(); kotlinx.coroutines.delay(60_000) }
+        while (true) { vm.profiles.checkScreenTime(); kotlinx.coroutines.delay(60_000) }
     }
     if (state.profile.kid && state.screenLock != null) {
         BackHandler { }

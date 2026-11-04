@@ -61,15 +61,15 @@ fun MovieScreen(
     val context = LocalContext.current
     val state by vm.state.collectAsState()
     val backdrop = LocalBackdrop.current
-    val entry = remember(movieId) { vm.catalogEntry(SearchEntry.KIND_MOVIE, movieId) }
+    val entry = remember(movieId) { vm.titles.entry(SearchEntry.KIND_MOVIE, movieId) }
     var info by remember(movieId) { mutableStateOf<TitleDetails?>(null) }
     var note by remember(movieId) { mutableStateOf<String?>(null) }
     var similar by remember(movieId) { mutableStateOf<List<SearchEntry>>(emptyList()) }
     val playFocus = remember { FocusRequester() }
 
     LaunchedEffect(movieId) {
-        similar = vm.similarTo(SearchEntry.KIND_MOVIE, movieId)
-        val r = vm.titleDetails(SearchEntry.KIND_MOVIE, movieId, name)
+        similar = vm.titles.similarTo(SearchEntry.KIND_MOVIE, movieId)
+        val r = vm.titles.details(SearchEntry.KIND_MOVIE, movieId, name)
         when {
             r == null -> note = if (vm.tmdb.enabled) "Keine Details zu diesem Film gefunden."
                 else "Details sind ausgeschaltet (Einstellungen → Katalog & Anfragen)."
@@ -91,14 +91,14 @@ fun MovieScreen(
 
     val title = entry?.name ?: name
     var also by remember(movieId) { mutableStateOf<List<de.koeven.couchpotato.data.AppEntry>>(emptyList()) }
-    LaunchedEffect(info) { also = vm.alsoOn(info) }
+    LaunchedEffect(info) { also = vm.discovery.alsoOn(info) }
     var unlockTick by remember { mutableStateOf(0) }
     var askPin by remember { mutableStateOf(false) }
     val gate = remember(info, note, unlockTick, state.profile) {
-        vm.gate(SearchEntry.KIND_MOVIE, movieId, info?.fsk, detailsLoaded = info != null || note != null)
+        vm.profiles.gate(SearchEntry.KIND_MOVIE, movieId, info?.fsk, detailsLoaded = info != null || note != null)
     }
     val key = "vod:$movieId"
-    val progress = remember(state.tick, movieId) { vm.progressFor(key) }
+    val progress = remember(state.tick, movieId) { vm.titles.progressFor(key) }
     val item = remember(entry) {
         PlayItem.movie(VodItem(movieId, title, entry?.image, entry?.added ?: 0, entry?.ext ?: "mp4", entry?.categoryId))
     }
@@ -112,8 +112,8 @@ fun MovieScreen(
             hint = "„$title“ ist für dieses Kinderprofil gesperrt. Mit der Eltern-PIN wird der Film dauerhaft freigegeben.",
             onDismiss = { askPin = false },
         ) { pin ->
-            if (vm.checkPin(pin)) {
-                vm.unlockTitle(SearchEntry.KIND_MOVIE, movieId)
+            if (vm.profiles.checkPin(pin)) {
+                vm.profiles.unlockTitle(SearchEntry.KIND_MOVIE, movieId)
                 askPin = false
                 unlockTick++
                 true
@@ -172,11 +172,11 @@ fun MovieScreen(
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
                             Text("Auch bei", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted)
-                            also.forEach { a -> TabPill(a.label, false) { vm.openInStreamingApp(context, a, title) } }
+                            also.forEach { a -> TabPill(a.label, false) { vm.search.openInStreamingApp(context, a, title) } }
                         }
                     }
                     Spacer(Modifier.height(18.dp))
-                    if (state.profile.kid && gate is HomeViewModel.Gate.Blocked) {
+                    if (state.profile.kid && gate is ProfilesController.Gate.Blocked) {
                         KidLockedBubble(
                             "Ohoh, dieser Film ist noch nichts für dich. Frag Mama oder Papa!",
                             spoken = "Oh oh! Dieser Film ist noch nichts für dich. Frag doch mal Mama oder Papa!",
@@ -190,7 +190,7 @@ fun MovieScreen(
                         }
                         val kid = state.profile.kid
                         when (val g = gate) {
-                            HomeViewModel.Gate.Allowed -> MainAction(
+                            ProfilesController.Gate.Allowed -> MainAction(
                                 when {
                                     progress != null -> "▶  " + (if (kid) "Weiterschauen" else "Fortsetzen") + (remain?.let { " · noch $it Min." } ?: "")
                                     kid -> "▶  Los geht’s!"
@@ -198,18 +198,18 @@ fun MovieScreen(
                                 },
                                 Modifier.focusRequester(playFocus),
                             ) { Playback.start(context, listOf(item)) }
-                            HomeViewModel.Gate.Checking -> MainAction(if (kid) "Moment …" else "Prüfe Freigabe …", Modifier.focusRequester(playFocus)) {}
-                            is HomeViewModel.Gate.Blocked ->
+                            ProfilesController.Gate.Checking -> MainAction(if (kid) "Moment …" else "Prüfe Freigabe …", Modifier.focusRequester(playFocus)) {}
+                            is ProfilesController.Gate.Blocked ->
                                 if (kid) SideAction("Eltern-PIN eingeben", Modifier.focusRequester(playFocus), icon = de.koeven.couchpotato.R.drawable.ic_lock) { askPin = true }
                                 else PrimaryPill("🔒  Gesperrt · ${g.reason}", Modifier.focusRequester(playFocus)) { askPin = true }
                         }
-                        if (progress != null && gate == HomeViewModel.Gate.Allowed) {
+                        if (progress != null && gate == ProfilesController.Gate.Allowed) {
                             SideAction("Von vorne") {
-                                vm.restartFromBeginning(key)
+                                vm.titles.restartFromBeginning(key)
                                 Playback.start(context, listOf(item))
                             }
                         }
-                        info?.trailer?.takeIf { gate == HomeViewModel.Gate.Allowed }?.let { yt ->
+                        info?.trailer?.takeIf { gate == ProfilesController.Gate.Allowed }?.let { yt ->
                             SideAction("Trailer") {
                                 val ok = runCatching {
                                     de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here

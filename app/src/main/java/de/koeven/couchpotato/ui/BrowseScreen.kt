@@ -92,7 +92,7 @@ fun BrowseScreen(
     var categories by remember { mutableStateOf<List<LiveCategory>?>(null) }
     var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var catError by remember { mutableStateOf<String?>(null) }
-    var selectedId by remember { mutableStateOf(vm.browseCategoryId) }
+    var selectedId by remember { mutableStateOf(vm.library.browseCategoryId) }
     var focusedId by remember { mutableStateOf<String?>(null) }
     var content by remember { mutableStateOf<BrowseContent>(BrowseContent.Loading) }
     var showHidden by remember { mutableStateOf(false) }
@@ -100,7 +100,7 @@ fun BrowseScreen(
     var editing by remember { mutableStateOf(false) }
     var jumpToContent by remember { mutableStateOf(false) }   // OK on a category: focus goes to its titles
     var movingId by remember { mutableStateOf<String?>(null) }   // category being moved with ▲ ▼
-    var sortMode by remember { mutableStateOf(vm.browseSort) }
+    var sortMode by remember { mutableStateOf(vm.library.browseSort) }
     val catListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val scope = rememberCoroutineScope()
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
@@ -118,7 +118,7 @@ fun BrowseScreen(
         else -> "Sender"
     }
 
-    DisposableEffect(Unit) { onDispose { vm.applyCategoryChanges() } }
+    DisposableEffect(Unit) { onDispose { vm.library.applyCategoryChanges() } }
 
     /** Moves a category one place up/down among the visible ones and saves the order. */
     fun moveCategory(id: String, delta: Int) {
@@ -131,7 +131,7 @@ fun BrowseScreen(
         val to = list.indexOfFirst { it.id == targetId }
         list.add(if (delta > 0) to + 1 else to, item)
         categories = list
-        vm.setCategoryOrder(kind, list.map { it.id })
+        vm.library.setCategoryOrder(kind, list.map { it.id })
         scope.launch {
             val idx = vi + delta
             val visible = catListState.layoutInfo.visibleItemsInfo
@@ -142,14 +142,14 @@ fun BrowseScreen(
     }
     fun finishEditing() {
         editing = false
-        vm.applyCategoryChanges()
+        vm.library.applyCategoryChanges()
     }
 
     LaunchedEffect(kind) {
-        vm.browseKind = kind
+        vm.library.browseKind = kind
         try {
-            val cats = vm.allCategories(kind)
-            counts = vm.categoryCounts(kind)
+            val cats = vm.library.allCategories(kind)
+            counts = vm.library.categoryCounts(kind)
             categories = cats
             val firstVisible = cats.firstOrNull { "$kind:${it.id}" !in vm.state.value.hiddenCategories }
             if (selectedId == null || cats.none { it.id == selectedId }) selectedId = firstVisible?.id
@@ -170,13 +170,13 @@ fun BrowseScreen(
 
     LaunchedEffect(kind, selectedId, sortMode) {
         val id = selectedId ?: return@LaunchedEffect
-        vm.browseCategoryId = id
+        vm.library.browseCategoryId = id
         content = BrowseContent.Loading
         content = try {
             when (kind) {
-                SearchEntry.KIND_MOVIE -> BrowseContent.Movies(vm.moviesIn(id))
-                SearchEntry.KIND_SERIES -> BrowseContent.Series(vm.seriesIn(id))
-                else -> BrowseContent.Live(vm.liveChannels(id))
+                SearchEntry.KIND_MOVIE -> BrowseContent.Movies(vm.library.moviesIn(id))
+                SearchEntry.KIND_SERIES -> BrowseContent.Series(vm.library.seriesIn(id))
+                else -> BrowseContent.Live(vm.library.liveChannels(id))
             }
         } catch (e: CancellationException) {
             throw e
@@ -243,10 +243,10 @@ fun BrowseScreen(
                     val cats = categories.orEmpty()
                     Row(Modifier.padding(top = 10.dp)) {
                         TabPill("Alle aus", false) {
-                            vm.setCategoriesHidden(kind, cats.map { it.id }, hidden = true, refresh = false)
+                            vm.library.setCategoriesHidden(kind, cats.map { it.id }, hidden = true, refresh = false)
                         }
                         TabPill("Alle an", false) {
-                            vm.setCategoriesHidden(kind, cats.map { it.id }, hidden = false, refresh = false)
+                            vm.library.setCategoriesHidden(kind, cats.map { it.id }, hidden = false, refresh = false)
                         }
                     }
                     Text(
@@ -286,7 +286,7 @@ fun BrowseScreen(
                             selected = isSelected && !editing,
                             dimmed = hidden,
                             onClick = {
-                                if (editing) vm.setCategoriesHidden(kind, listOf(cat.id), !hidden, refresh = false)
+                                if (editing) vm.library.setCategoriesHidden(kind, listOf(cat.id), !hidden, refresh = false)
                                 else {
                                     selectedId = cat.id
                                     jumpToContent = true
@@ -377,7 +377,7 @@ fun BrowseScreen(
                             selected = false,
                         ) {
                             sortMode = (sortMode + 1) % 3
-                            vm.browseSort = sortMode
+                            vm.library.browseSort = sortMode
                         }
                     }
                 }
@@ -430,7 +430,7 @@ fun BrowseScreen(
                                         logo = ch.logo,
                                         nowPlaying = state.nowPlaying[ch.id],
                                         width = liveW,
-                                        onClick = { vm.playLive(context, c.items, i) },
+                                        onClick = { vm.live.play(context, c.items, i) },
                                         onLongClick = { menu = BrowseMenu.Channel(ch) },
                                     )
                                 }
@@ -447,19 +447,19 @@ fun BrowseScreen(
             title = m.category.name,
             actions = listOf(
                 if (m.hidden) {
-                    MenuAction("Wieder einblenden") { vm.setCategoryHidden(kind, m.category.id, hidden = false) }
+                    MenuAction("Wieder einblenden") { vm.library.setCategoryHidden(kind, m.category.id, hidden = false) }
                 } else {
                     MenuAction("Kategorie ausblenden") {
-                        vm.setCategoryHidden(kind, m.category.id, hidden = true)
+                        vm.library.setCategoryHidden(kind, m.category.id, hidden = true)
                         Notice.show("„${m.category.name}“ ausgeblendet – über „Ausgeblendete anzeigen“ wieder einblenden", long = true)
                     }
                 },
                 MenuAction("Verschieben") { movingId = m.category.id },
                 MenuAction("Kategorien bearbeiten") { editing = true },
-            ) + if (vm.hasOwnCategoryOrder(kind)) listOf(
+            ) + if (vm.library.hasOwnCategoryOrder(kind)) listOf(
                 MenuAction("Reihenfolge des Anbieters wiederherstellen") {
-                    vm.setCategoryOrder(kind, null)
-                    scope.launch { categories = vm.allCategories(kind) }
+                    vm.library.setCategoryOrder(kind, null)
+                    scope.launch { categories = vm.library.allCategories(kind) }
                 },
             ) else emptyList(),
             onDismiss = { menu = null },
@@ -468,7 +468,7 @@ fun BrowseScreen(
             title = m.channel.name,
             actions = listOf(
                 MenuAction(if (m.channel.id in favIds) "Aus Favoriten entfernen" else "Zu Favoriten hinzufügen") {
-                    vm.toggleFavorite(m.channel)
+                    vm.live.toggleFavorite(m.channel)
                 },
             ),
             onDismiss = { menu = null },

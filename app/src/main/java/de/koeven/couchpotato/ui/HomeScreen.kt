@@ -136,7 +136,7 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         while (true) {
             delay(5 * 60 * 1000L)
-            vm.refreshEpg(force = false)
+            vm.live.refreshEpg(force = false)
         }
     }
 
@@ -202,7 +202,7 @@ fun HomeScreen(
                                                 e.upNext -> "Nächste Folge"
                                                 else -> null
                                             },
-                                            onClick = { scope.launch { Playback.start(context, vm.playlistFor(e)) } },
+                                            onClick = { scope.launch { Playback.start(context, vm.titles.playlistFor(e)) } },
                                             onLongClick = onLong,
                                             modifier = focusMod.heroOn {
                                                 val episode = e.item.kind == de.koeven.couchpotato.data.PlayItem.KIND_EPISODE
@@ -283,7 +283,7 @@ fun HomeScreen(
                                             bitmap = item.app.banner ?: item.app.icon,
                                             fraction = 0f,
                                             badge = null,
-                                            onClick = { vm.launchApp(item.app.packageName) },
+                                            onClick = { vm.apps.launch(item.app.packageName) },
                                             onLongClick = onLong,
                                             modifier = focusMod,
                                         )
@@ -306,13 +306,13 @@ fun HomeScreen(
                                     name = ch.name,
                                     logo = ch.logo,
                                     nowPlaying = state.nowPlaying[ch.id],
-                                    onClick = { vm.playLive(context, state.favorites, i) },
+                                    onClick = { vm.live.play(context, state.favorites, i) },
                                     onLongClick = { menu = HomeMenu.Channel(ch) },
                                     modifier = Modifier
                                         .then(if (i == 0 && firstRow == HomeRows.LIVE) Modifier.focusRequester(firstFocus) else Modifier)
                                         .heroOn { Hero("Live-TV · jetzt", ch.name, state.nowPlaying[ch.id]) }
                                         .movable(HomeRows.LIVE, ch.id.toString()) { delta ->
-                                            val j = vm.moveFavorite(ch.id, delta)
+                                            val j = vm.live.moveFavorite(ch.id, delta)
                                             scope.launch { liveRowState.keepVisible(j) }
                                         },
                                 )
@@ -342,13 +342,13 @@ fun HomeScreen(
                             itemsIndexed(state.apps, key = { _, a -> a.packageName }) { i, app ->
                                 AppCard(
                                     app = app,
-                                    onClick = { vm.launchApp(app.packageName) },
+                                    onClick = { vm.apps.launch(app.packageName) },
                                     onLongClick = { menu = HomeMenu.App(app) },
                                     modifier = Modifier
                                         .then(if (i == 0 && firstRow == HomeRows.APPS) Modifier.focusRequester(firstFocus) else Modifier)
                                         .heroOn { Hero("App", app.label) }
                                         .movable(HomeRows.APPS, app.packageName) { delta ->
-                                            val j = vm.moveApp(app.packageName, delta)
+                                            val j = vm.apps.move(app.packageName, delta)
                                             scope.launch { appsRowState.keepVisible(j) }
                                         },
                                 )
@@ -446,7 +446,7 @@ fun HomeScreen(
             actions = listOf(
                 MenuAction("Verschieben") { moving = Moving(HomeRows.APPS, m.app.packageName) },
                 MenuAction("Ausblenden") {
-                    vm.hideApp(m.app.packageName)
+                    vm.apps.hide(m.app.packageName)
                     Notice.show("${m.app.label} ausgeblendet (Einstellungen → zurücksetzen)")
                 },
             ),
@@ -456,7 +456,7 @@ fun HomeScreen(
             title = m.channel.name,
             actions = listOf(
                 MenuAction("Verschieben") { moving = Moving(HomeRows.LIVE, m.channel.id.toString()) },
-                MenuAction("Aus Favoriten entfernen") { vm.removeFavorite(m.channel) },
+                MenuAction("Aus Favoriten entfernen") { vm.live.removeFavorite(m.channel) },
             ),
             onDismiss = { menu = null },
         )
@@ -526,7 +526,7 @@ private fun HeroBackdrop(vm: HomeViewModel, hero: Hero?) {
         val h = hero
         if (h == null) { url = null; return@LaunchedEffect }
         delay(250)   // only where you stop, not while flying through a row
-        val tmdb = if (h.plotKind != null && h.plotId != null) vm.heroBackdrop(h.plotKind, h.plotId) else null
+        val tmdb = if (h.plotKind != null && h.plotId != null) vm.titles.heroBackdrop(h.plotKind, h.plotId) else null
         url = tmdb ?: h.image
     }
     WideBackdrop(url)
@@ -544,7 +544,7 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
         val k = hero?.plotKind ?: return@LaunchedEffect
         val id = hero.plotId ?: return@LaunchedEffect
         delay(250)   // scrolling quickly through a row: only look it up where you stop
-        plot = vm.heroPlot(k, id, hero.season, hero.episode)
+        plot = vm.titles.heroPlot(k, id, hero.season, hero.episode)
     }
     // compact, so two rows still fit below it
     Column(

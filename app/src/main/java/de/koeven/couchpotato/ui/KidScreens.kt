@@ -122,7 +122,7 @@ fun KidHomeScreen(
                             image = e.item.image,
                             width = wide,
                             fraction = if (e.upNext) 0f else e.fraction,
-                            onClick = { scope.launch { Playback.start(context, vm.playlistFor(e)) } },
+                            onClick = { scope.launch { Playback.start(context, vm.titles.playlistFor(e)) } },
                             onLongClick = { menuFor = c },
                         )
                     }
@@ -162,7 +162,7 @@ fun KidHomeScreen(
                             image = ch.logo,
                             width = app,
                             fraction = 0f,
-                            onClick = { vm.playLive(context, state.favorites, i) },
+                            onClick = { vm.live.play(context, state.favorites, i) },
                         )
                     }
                 }
@@ -184,7 +184,7 @@ fun KidHomeScreen(
                             bitmap = a.banner ?: a.icon,
                             width = app,
                             fraction = 0f,
-                            onClick = { vm.launchApp(a.packageName) },
+                            onClick = { vm.apps.launch(a.packageName) },
                         )
                     }
                 }
@@ -231,13 +231,13 @@ fun KidBrowseScreen(
     }
 
     LaunchedEffect(kind) {
-        categories = runCatching { vm.visibleCategories(kind) }.getOrDefault(emptyList())
+        categories = runCatching { vm.library.visibleCategories(kind) }.getOrDefault(emptyList())
         delay(150)
         runCatching { first.requestFocus() }
     }
     LaunchedEffect(kind, selected, state.hiddenCategories) {
         titles = null
-        titles = runCatching { vm.visibleTitles(kind, selected) }.getOrDefault(emptyList())
+        titles = runCatching { vm.library.visibleTitles(kind, selected) }.getOrDefault(emptyList())
     }
     LaunchedEffect(jumpDown, titles) {
         if (!jumpDown || titles == null) return@LaunchedEffect
@@ -283,7 +283,7 @@ fun KidBrowseScreen(
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         itemsIndexed(channels, key = { _, c -> c.id }) { i, ch ->
-                            KidWideCard(ch.name, ch.logo, w, 0f, onClick = { vm.playLive(context, channels, i) })
+                            KidWideCard(ch.name, ch.logo, w, 0f, onClick = { vm.live.play(context, channels, i) })
                         }
                     }
                 }
