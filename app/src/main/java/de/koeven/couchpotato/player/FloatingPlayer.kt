@@ -32,7 +32,11 @@ import kotlinx.coroutines.flow.StateFlow
  */
 class FloatingPlayer : Service() {
 
-    data class State(val active: Boolean = false, val title: String = "", val muted: Boolean = true, val corner: Int = 0, val big: Boolean = false)
+    data class State(val active: Boolean = false, val title: String = "", val muted: Boolean = true, val corner: Int = 0, val size: Int = 1) {
+        val percent: Int get() = SIZES[size]
+        val canGrow: Boolean get() = size < SIZES.lastIndex
+        val canShrink: Boolean get() = size > 0
+    }
 
     private var player: ExoPlayer? = null
     private var view: PlayerView? = null
@@ -50,7 +54,10 @@ class FloatingPlayer : Service() {
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "Live-TV"
         goForeground(title)
         play(url)
-        _state.value = State(active = true, title = title)
+        prefs = getSharedPreferences("floating", MODE_PRIVATE)
+        // size and corner as last time
+        _state.value = State(active = true, title = title,
+            corner = prefs?.getInt("corner", 0) ?: 0, size = (prefs?.getInt("size", 1) ?: 1).coerceIn(0, SIZES.lastIndex))
         show()
         return START_NOT_STICKY
     }
@@ -90,7 +97,7 @@ class FloatingPlayer : Service() {
     private fun params(): WindowManager.LayoutParams {
         val s = _state.value
         val screen = resources.displayMetrics
-        val w = screen.widthPixels * (if (s.big) 45 else 30) / 100
+        val w = screen.widthPixels * s.percent / 100
         val margin = (screen.density * 28).toInt()
         val type = if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
@@ -164,11 +171,18 @@ class FloatingPlayer : Service() {
         fun nextCorner() {
             _state.value = _state.value.let { it.copy(corner = (it.corner + 1) % 4) }
             instance?.show()
+            prefs?.edit()?.putInt("corner", _state.value.corner)?.apply()
         }
 
-        fun toggleSize() {
-            _state.value = _state.value.let { it.copy(big = !it.big) }
+        /** Width in % of the screen: 20 … 60. */
+        val SIZES = listOf(20, 30, 40, 50, 60)
+
+        fun resize(delta: Int) {
+            _state.value = _state.value.let { it.copy(size = (it.size + delta).coerceIn(0, SIZES.lastIndex)) }
             instance?.show()
+            prefs?.edit()?.putInt("size", _state.value.size)?.apply()
         }
+
+        private var prefs: android.content.SharedPreferences? = null
     }
 }

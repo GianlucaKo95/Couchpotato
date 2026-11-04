@@ -195,7 +195,9 @@ fun HomeScreen(
             Text("▣  ${floating.title}", style = MaterialTheme.typography.labelLarge, color = CpColors.Accent, maxLines = 1)
             SecondaryPill(if (floating.muted) "Ton an" else "Ton aus") { fp.toggleSound() }
             SecondaryPill("Ecke wechseln") { fp.nextCorner() }
-            SecondaryPill(if (floating.big) "Kleiner" else "Größer") { fp.toggleSize() }
+            SecondaryPill("− Kleiner", enabled = floating.canShrink) { fp.resize(-1) }
+            Text("${floating.percent} %", style = MaterialTheme.typography.labelLarge, color = CpColors.TextMuted)
+            SecondaryPill("+ Größer", enabled = floating.canGrow) { fp.resize(+1) }
             SecondaryPill("Fenster schließen") { fp.stop(context) }
         }
     }
