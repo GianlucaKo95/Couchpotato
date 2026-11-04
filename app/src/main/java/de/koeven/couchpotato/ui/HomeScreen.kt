@@ -151,7 +151,7 @@ fun HomeScreen(
 
     Box(Modifier.fillMaxSize()) {
     // big picture of the focused title in the right part of the screen (behind everything)
-    HeroBackdrop(vm, hero, Modifier.align(Alignment.TopEnd))
+    HeroBackdrop(vm, hero)
     Column(Modifier.fillMaxSize()) {
     TopBar(
         active = NavTab.Start,
@@ -520,7 +520,7 @@ private data class Hero(
  * text stays readable – on bright pictures and on a projector too.
  */
 @Composable
-private fun HeroBackdrop(vm: HomeViewModel, hero: Hero?, modifier: Modifier = Modifier) {
+private fun HeroBackdrop(vm: HomeViewModel, hero: Hero?) {
     var url by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(hero?.plotKind, hero?.plotId, hero?.image) {
         val h = hero
@@ -529,24 +529,7 @@ private fun HeroBackdrop(vm: HomeViewModel, hero: Hero?, modifier: Modifier = Mo
         val tmdb = if (h.plotKind != null && h.plotId != null) vm.heroBackdrop(h.plotKind, h.plotId) else null
         url = tmdb ?: h.image
     }
-    androidx.compose.animation.Crossfade(targetState = url, label = "heroBackdrop", modifier = modifier
-        .fillMaxWidth(0.44f)
-        .fillMaxHeight(0.56f)) { u ->
-        if (u == null) return@Crossfade
-        Box(Modifier.fillMaxSize()) {
-            coil.compose.AsyncImage(
-                model = u,
-                contentDescription = null,
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-            val bg = CpColors.Background
-            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.horizontalGradient(
-                0f to bg, 0.14f to bg.copy(alpha = 0.6f), 0.34f to bg.copy(alpha = 0f))))
-            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
-                0f to bg.copy(alpha = 0.6f), 0.22f to bg.copy(alpha = 0f), 0.68f to bg.copy(alpha = 0f), 1f to bg)))
-        }
-    }
+    WideBackdrop(url)
 }
 
 /**

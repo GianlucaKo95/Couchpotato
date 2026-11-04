@@ -121,6 +121,8 @@ fun MovieScreen(
         }
     }
 
+    // the film's wide TMDB picture on the right, like on the home screen (not in the kids' sky theme)
+    if (!state.profile.kid) WideBackdrop(info?.backdrop?.replace("/w1280/", "/w780/"))
     LazyColumn(Modifier.fillMaxSize()) {
         item { ScreenTop(NavTab.Movies, "Filme") }
         item { Spacer(Modifier.height(24.dp)) }

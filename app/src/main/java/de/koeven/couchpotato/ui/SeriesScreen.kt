@@ -141,6 +141,8 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
     val resumeEp = loaded?.episodes?.firstOrNull { it.id == resume?.item?.streamId }
     val episodeWidth = ContentWidth
 
+    // the series' wide TMDB picture on the right, like on the home screen (not in the kids' sky theme)
+    if (!state.profile.kid) WideBackdrop(details?.backdrop?.replace("/w1280/", "/w780/"))
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 40.dp),

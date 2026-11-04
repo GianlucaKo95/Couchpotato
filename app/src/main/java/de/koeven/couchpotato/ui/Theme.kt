@@ -33,6 +33,15 @@ object CpColors {
     val Error = Color(0xFFFFA197)
 }
 
+/** Inter everywhere – the same crisp look on Fire TV and on the projector (instead of each device's system font). */
+val CpFont = androidx.compose.ui.text.font.FontFamily(
+    androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_400, androidx.compose.ui.text.font.FontWeight.Normal),
+    androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_500, androidx.compose.ui.text.font.FontWeight.Medium),
+    androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_600, androidx.compose.ui.text.font.FontWeight.SemiBold),
+    androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_700, androidx.compose.ui.text.font.FontWeight.Bold),
+    androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_800, androidx.compose.ui.text.font.FontWeight.ExtraBold),
+)
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun CouchpotatoTheme(content: @Composable () -> Unit) {
@@ -52,7 +61,25 @@ fun CouchpotatoTheme(content: @Composable () -> Unit) {
     val scope = rememberCoroutineScope()
     val backdrop = remember { BackdropState(context.applicationContext, scope) }
 
-    MaterialTheme(colorScheme = scheme) {
+    val t = androidx.tv.material3.Typography()
+    val type = t.copy(
+        displayLarge = t.displayLarge.copy(fontFamily = CpFont),
+        displayMedium = t.displayMedium.copy(fontFamily = CpFont),
+        displaySmall = t.displaySmall.copy(fontFamily = CpFont),
+        headlineLarge = t.headlineLarge.copy(fontFamily = CpFont),
+        headlineMedium = t.headlineMedium.copy(fontFamily = CpFont),
+        headlineSmall = t.headlineSmall.copy(fontFamily = CpFont),
+        titleLarge = t.titleLarge.copy(fontFamily = CpFont),
+        titleMedium = t.titleMedium.copy(fontFamily = CpFont),
+        titleSmall = t.titleSmall.copy(fontFamily = CpFont),
+        bodyLarge = t.bodyLarge.copy(fontFamily = CpFont),
+        bodyMedium = t.bodyMedium.copy(fontFamily = CpFont),
+        bodySmall = t.bodySmall.copy(fontFamily = CpFont),
+        labelLarge = t.labelLarge.copy(fontFamily = CpFont),
+        labelMedium = t.labelMedium.copy(fontFamily = CpFont),
+        labelSmall = t.labelSmall.copy(fontFamily = CpFont),
+    )
+    MaterialTheme(colorScheme = scheme, typography = type) {
         CompositionLocalProvider(
             LocalContentColor provides CpColors.Text,
             LocalBackdrop provides backdrop,
