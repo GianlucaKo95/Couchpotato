@@ -567,8 +567,9 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
     Column(
         Modifier
             .fillMaxWidth()
-            .height(124.dp)
-            .padding(start = ScreenPadding, end = ScreenPadding * 3, top = 4.dp),
+            .height(138.dp)
+            // breathing room below the tab bar, like in the mockup
+            .padding(start = ScreenPadding, end = ScreenPadding * 3, top = 18.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         if (hero == null) return@Column
