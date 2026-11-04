@@ -76,11 +76,16 @@ internal fun UpdateRow() {
     var busy by remember { mutableStateOf(false) }
     val updater = de.koeven.couchpotato.data.Updater
     if (!updater.configured) return
+    // opening "Über Couchpotato" always asks GitHub for the newest build (1 small request) –
+    // otherwise an older build found hours ago would be offered here
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        runCatching { updater.check(context, force = true) }.onSuccess { release = it }
+    }
     val r = release
     SettingRow(
         title = if (r != null) "Update verfügbar: Build ${r.build}" else "Updates",
         description = status ?: if (r != null) "Du hast Build ${updater.currentBuild}. Deine Daten bleiben beim Update erhalten."
-            else "Build ${updater.currentBuild} – sucht alle 6 Stunden selbst nach neuen Versionen",
+            else "Build ${updater.currentBuild} – sucht stündlich selbst nach neuen Versionen",
         value = when {
             busy -> "…"
             r == null -> "Jetzt suchen"
@@ -105,7 +110,10 @@ internal fun UpdateRow() {
             else -> scope.launch {
                 busy = true
                 status = try {
-                    updater.install(context, r) { pct -> status = "Lade herunter … $pct %" }
+                    // the newest build, not the one found earlier
+                    val newest = runCatching { updater.check(context, force = true) }.getOrNull() ?: r
+                    release = newest
+                    updater.install(context, newest) { pct -> status = "Lade herunter … $pct %" }
                     "Gleich fragt Fire TV, ob installiert werden soll – mit „Installieren“ bestätigen."
                 } catch (e: Exception) { "Fehler: ${e.message ?: "Update fehlgeschlagen"}" }
                 busy = false

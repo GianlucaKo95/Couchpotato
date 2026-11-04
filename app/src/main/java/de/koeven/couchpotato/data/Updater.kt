@@ -21,14 +21,14 @@ import java.security.MessageDigest
 
 /**
  * In-app updates straight from this repo's GitHub releases (read-only token from the build).
- * Couchpotato looks at most every 6 hours, downloads the APK, checks its SHA-256 (when GitHub
+ * Couchpotato looks at most once an hour, downloads the APK, checks its SHA-256 (when GitHub
  * provides one) and hands it to Android's installer – no adb needed any more.
  */
 object Updater {
     data class Release(val build: Int, val url: String, val size: Long, val sha256: String?)
 
     private const val PREFS = "updater"
-    private const val CHECK_GAP_MS = 6 * 3600_000L
+    private const val CHECK_GAP_MS = 1 * 3600_000L      // GitHub only, never the IPTV provider
     private const val API = "https://api.github.com/repos/GianlucaKo95/Couchpotato"
 
     val configured: Boolean get() = BuildConfig.UPDATE_TOKEN.isNotBlank()
@@ -39,7 +39,7 @@ object Updater {
     /** Last known newer release (from the last check), or null. */
     fun known(c: Context): Release? = prefs(c).getString("latest", null)?.let { parse(it) }?.takeIf { it.build > currentBuild }
 
-    /** Looks for a newer build. [force] ignores the 6-hour gap (button in the settings). */
+    /** Looks for a newer build. [force] ignores the 1-hour gap (button in the settings). */
     suspend fun check(c: Context, force: Boolean = false): Release? = withContext(Dispatchers.IO) {
         if (!configured) return@withContext null
         val p = prefs(c)

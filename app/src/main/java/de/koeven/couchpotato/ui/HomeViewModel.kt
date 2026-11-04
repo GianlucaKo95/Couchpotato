@@ -84,7 +84,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** In-app updates: at most every 6 hours; tells once per new build. */
+    /** In-app updates: at most once an hour; tells once per new build. */
     private fun checkForUpdate() {
         viewModelScope.launch {
             val app = ctx.app
