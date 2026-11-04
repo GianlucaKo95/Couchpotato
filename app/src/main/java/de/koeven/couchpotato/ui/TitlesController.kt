@@ -89,7 +89,7 @@ class TitlesController(private val ctx: HomeContext) {
     }
 
     /** Title from another app (ARD, ZDF …): plot and wide picture from TMDB by its name. */
-    suspend fun heroByTitle(title: String): TitleDetails? = tmdb.byTitle(title, fetch = true)
+    suspend fun heroByTitle(names: List<String>): TitleDetails? = tmdb.byTitle(names, fetch = true)
 
     /** Wide TMDB picture for the info area, if already on the stick. No request. */
     suspend fun heroBackdrop(kind: Char, id: Long): String? = withContext(Dispatchers.IO) {
@@ -107,11 +107,11 @@ class TitlesController(private val ctx: HomeContext) {
         // other apps: look the titles up right away, so picture and plot are there when you get to them
         val others = cw.take(12).mapNotNull { c ->
             when (c) {
-                is ContinueItem.External -> c.program.title
-                is ContinueItem.Media -> c.play.title
+                is ContinueItem.External -> de.koeven.couchpotato.data.Names.lookupNames(c.program.title, c.program.subtitle)
+                is ContinueItem.Media -> de.koeven.couchpotato.data.Names.lookupNames(c.play.title, c.play.subtitle)
                 else -> null
             }
-        }.filter { heroPrefetched.add("x:$it") }
+        }.filter { it.isNotEmpty() && heroPrefetched.add("x:$it") }
         if (others.isNotEmpty()) ctx.scope.launch(Dispatchers.IO) { others.forEach { runCatching { tmdb.byTitle(it, fetch = true) } } }
         val todo = cw.take(12).mapNotNull { c ->
             when (c) {

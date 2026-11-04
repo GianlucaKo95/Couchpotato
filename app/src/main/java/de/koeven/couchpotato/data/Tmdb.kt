@@ -161,21 +161,37 @@ class Tmdb(context: Context) {
 
     /**
      * Details for a title that only comes with its name (e.g. "Werwölfe" from the ARD app):
-     * TMDB search, taken only if the name matches exactly. Kept on the stick (also "not found").
+     * tries the [names] one after another (see Names.lookupNames), takes a TMDB hit only if the
+     * name matches exactly. Every answer is kept on the stick (also "not found").
      * With [fetch] = false nothing is requested.
      */
-    suspend fun byTitle(title: String, fetch: Boolean): TitleDetails? = withContext(Dispatchers.IO) {
+    suspend fun byTitle(names: List<String>, fetch: Boolean): TitleDetails? = withContext(Dispatchers.IO) {
         if (!enabled) return@withContext null
+        var asked = false
+        for (name in names) {
+            val r = byTitleOne(name, fetch)
+            if (r.second) asked = true
+            r.first?.let { found ->
+                if (asked) logLookup(names, name)
+                return@withContext found
+            }
+        }
+        if (asked) logLookup(names, null)
+        null
+    }
+
+    /** One name: (details or null, true if TMDB was asked). */
+    private fun byTitleOne(title: String, fetch: Boolean): Pair<TitleDetails?, Boolean> {
         val norm = SearchIndex.normalize(title)
         // placeholders some apps send instead of a name: nothing to look up
-        if (norm.length < 3 || norm in setOf("film", "folge", "serie", "video", "live", "livestream")) return@withContext null
+        if (norm.length < 3 || norm in setOf("film", "folge", "serie", "video", "live", "livestream")) return null to false
         val f = File(dir, "x/" + norm.replace(' ', '_').take(80) + ".json")
         if (f.exists()) {
             val o = runCatching { JSONObject(f.readText()) }.getOrNull()
-            if (o != null && !o.optBoolean("notFound")) return@withContext runCatching { parse(o, o.optBoolean("_tv")) }.getOrNull()
-            if (o != null && System.currentTimeMillis() - f.lastModified() < 7 * DAY) return@withContext null
+            if (o != null && !o.optBoolean("notFound")) return runCatching { parse(o, o.optBoolean("_tv")) }.getOrNull() to false
+            if (o != null && System.currentTimeMillis() - f.lastModified() < 7 * DAY) return null to false
         }
-        if (!fetch) return@withContext null
+        if (!fetch) return null to false
         val hit = runCatching {
             get("search/multi?query=${URLEncoder.encode(title, "UTF-8")}&language=de-DE").optJSONArray("results")
                 .objects().firstOrNull { r ->
@@ -183,20 +199,32 @@ class Tmdb(context: Context) {
                         listOfNotNull(r.str("name"), r.str("title"), r.str("original_name"), r.str("original_title"))
                             .any { SearchIndex.normalize(it) == norm }
                 }
-        }.getOrElse { return@withContext null }      // offline / TMDB busy: try again another time
+        }.getOrElse { return null to true }      // offline / TMDB busy: try again another time
         f.parentFile?.mkdirs()
         if (hit == null) {
             f.writeText(JSONObject().put("notFound", true).toString())
-            return@withContext null
+            return null to true
         }
         val tv = hit.str("media_type") == "tv"
         val append = if (tv) "credits,content_ratings,videos" else "credits,release_dates,videos"
         val json = runCatching {
             get("${if (tv) "tv" else "movie"}/${hit.optLong("id")}?language=de-DE&append_to_response=$append&include_video_language=de,en")
-        }.getOrElse { return@withContext null }
-        f.writeText(json.put("_tv", tv).toString())
-        runCatching { parse(json, tv) }.getOrNull()
+        }.getOrElse { return null to true }
+        f.writeText(json.put("_tv", tv).put("_name", hit.str("name") ?: hit.str("title")).toString())
+        return runCatching { parse(json, tv) }.getOrNull() to true
     }
+
+    private fun logLookup(names: List<String>, found: String?) = runCatching {
+        val f = File(dir, "x/_log.txt")
+        f.parentFile?.mkdirs()
+        val line = names.joinToString(" / ") { "„$it“" } + " → " + (found?.let { "gefunden als „$it“" } ?: "nichts bei TMDB")
+        val lines = (if (f.exists()) f.readLines() else emptyList()) + line
+        f.writeText(lines.takeLast(10).joinToString("\n"))
+    }
+
+    /** The last lookups for titles from other apps, newest first (for the settings). */
+    fun lookupLog(): List<String> =
+        runCatching { File(dir, "x/_log.txt").readLines().filter { it.isNotBlank() }.reversed() }.getOrDefault(emptyList())
 
     // ---------------- streaming services (data: JustWatch via TMDB) ----------------
 

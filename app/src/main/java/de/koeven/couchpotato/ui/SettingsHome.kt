@@ -149,4 +149,9 @@ internal fun ContinueSection(vm: HomeViewModel, state: HomeState) {
         refresh++
         vm.onResume()
     }
+    // what other apps hand over and what TMDB made of it (picture and plot in the info area)
+    val lookups = remember(refresh) { vm.tmdb.lookupLog() }
+    if (lookups.isNotEmpty()) {
+        Hint("Andere Apps – zuletzt bei TMDB gesucht:\n" + lookups.take(6).joinToString("\n"))
+    }
 }

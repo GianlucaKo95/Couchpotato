@@ -31,6 +31,33 @@ object Names {
         return s.trim().trim(*SEPARATORS).ifEmpty { raw.trim() }
     }
 
+    private val BRACKETS = Regex("""\s*[(\[][^)\]]*[)\]]""")
+    private val EPISODE_TAIL = Regex("""\s*[-–—:|,·]?\s*\b(Folge|Episode|Teil|Staffel|Season|Ep\.?)\s*\d+.*$""", RegexOption.IGNORE_CASE)
+    private val SEASON_EPISODE = Regex("""\s*[-–—:|,·]?\s*\bS\s?\d{1,3}\s?[ ._-]?\s?E\s?\d{1,4}\b.*$""", RegexOption.IGNORE_CASE)
+    private val APP_TAIL = Regex("""\s*[|–—-]\s*(ARD|ZDF|Mediathek|ARD Mediathek|ZDFmediathek|arte|3sat|Joyn|RTL\+?).*$""", RegexOption.IGNORE_CASE)
+    private val SPLIT = Regex("""\s+[-–—|]\s+|:\s+""")
+
+    /**
+     * Names to look a title from another app up by (TMDB): "Werwölfe (1/6) | ARD Mediathek",
+     * "Werwölfe – Folge 3: Vollmond" → "Werwölfe"; also the part before " - " / ":" as a second try.
+     * Most likely first, at most [max].
+     */
+    fun lookupNames(vararg raw: String?, max: Int = 3): List<String> {
+        val out = LinkedHashSet<String>()
+        for (r in raw) {
+            if (r.isNullOrBlank()) continue
+            var s = display(r)
+            s = APP_TAIL.replace(s, "")
+            s = BRACKETS.replace(s, "")
+            s = EPISODE_TAIL.replace(s, "")
+            s = SEASON_EPISODE.replace(s, "")
+            s = s.trim().trim(*SEPARATORS)
+            if (s.length >= 3) out += s
+            SPLIT.split(s).first().trim().trim(*SEPARATORS).takeIf { it.length >= 3 }?.let { out += it }
+        }
+        return out.take(max)
+    }
+
     /** "DE - Breaking Bad - S01E03 - Der Bote" → "Der Bote"; nothing left → "Folge 3". */
     fun episode(raw: String?, seriesName: String, number: Int): String {
         val fallback = "Folge $number"

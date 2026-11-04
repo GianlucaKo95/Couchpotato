@@ -37,3 +37,29 @@ class NamesTest {
         assertEquals("Folge 4", Names.episode("Breaking Bad S01E04", "Breaking Bad", 4))
     }
 }
+
+class LookupNamesTest {
+    @Test fun `plain title stays`() {
+        assertEquals(listOf("Werwölfe"), Names.lookupNames("Werwölfe"))
+    }
+
+    @Test fun `episode and app additions are cut off`() {
+        assertEquals("Werwölfe", Names.lookupNames("Werwölfe (1/6)").first())
+        assertEquals("Werwölfe", Names.lookupNames("Werwölfe | ARD Mediathek").first())
+        assertEquals("Werwölfe", Names.lookupNames("Werwölfe – Folge 3: Vollmond").first())
+        assertEquals("Werwölfe", Names.lookupNames("Werwölfe S01E03").first())
+        assertEquals("Babylon Berlin", Names.lookupNames("Babylon Berlin - Staffel 4").first())
+    }
+
+    @Test fun `series name before a dash is a second try`() {
+        assertEquals(listOf("Tatort: Der Fall", "Tatort"), Names.lookupNames("Tatort: Der Fall"))
+    }
+
+    @Test fun `subtitle is tried after the title`() {
+        assertEquals(listOf("Vollmond", "Werwölfe"), Names.lookupNames("Vollmond", "Werwölfe"))
+    }
+
+    @Test fun `placeholders and empty fields give nothing`() {
+        assertEquals(emptyList<String>(), Names.lookupNames(null, "", "  "))
+    }
+}

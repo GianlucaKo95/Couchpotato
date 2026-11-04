@@ -263,7 +263,8 @@ fun HomeScreen(
                                             onClick = { vm.openExternal(item) },
                                             onLongClick = onLong,
                                             modifier = focusMod.heroOn {
-                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.title, p.subtitle, p.fraction, image = p.image, lookup = p.title)
+                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.title, p.subtitle, p.fraction, image = p.image,
+                                                    lookup = de.koeven.couchpotato.data.Names.lookupNames(p.title, p.subtitle))
                                             },
                                         )
                                     }
@@ -280,7 +281,8 @@ fun HomeScreen(
                                             onClick = { vm.openMedia(item) },
                                             onLongClick = onLong,
                                             modifier = focusMod.heroOn {
-                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.subtitle ?: p.title, if (p.subtitle != null) p.title else null, p.fraction, image = p.image, lookup = p.title)
+                                                Hero("Weiterschauen" + (item.appLabel?.let { " · $it" } ?: ""), p.subtitle ?: p.title, if (p.subtitle != null) p.title else null, p.fraction, image = p.image,
+                                                    lookup = de.koeven.couchpotato.data.Names.lookupNames(p.title, p.subtitle))
                                             },
                                         )
                                     }
@@ -582,7 +584,7 @@ private data class Hero(
     val season: Int? = null,
     val episode: Int? = null,
     val image: String? = null,      // wide picture (episode still) – films/series use TMDB's backdrop
-    val lookup: String? = null,     // title from another app: plot and picture from TMDB by name
+    val lookup: List<String>? = null,   // title from another app: plot and picture from TMDB by name
 )
 
 /**
@@ -599,7 +601,7 @@ private fun HeroBackdrop(vm: HomeViewModel, hero: Hero?) {
         delay(250)   // only where you stop, not while flying through a row
         val tmdb = when {
             h.plotKind != null && h.plotId != null -> vm.titles.heroBackdrop(h.plotKind, h.plotId)
-            h.lookup != null -> vm.titles.heroByTitle(h.lookup)?.backdrop?.replace("/w1280/", "/w780/")
+            !h.lookup.isNullOrEmpty() -> vm.titles.heroByTitle(h.lookup)?.backdrop?.replace("/w1280/", "/w780/")
             else -> null
         }
         url = tmdb ?: h.image
@@ -616,7 +618,7 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
     var plot by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(hero?.plotKind, hero?.plotId, hero?.episode, hero?.lookup) {
         plot = null
-        hero?.lookup?.let { t ->
+        hero?.lookup?.takeIf { it.isNotEmpty() }?.let { t ->
             delay(250)
             plot = vm.titles.heroByTitle(t)?.plot?.takeIf { it.isNotBlank() }
             return@LaunchedEffect
