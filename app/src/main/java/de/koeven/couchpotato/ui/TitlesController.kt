@@ -88,6 +88,9 @@ class TitlesController(private val ctx: HomeContext) {
             ?: if (kind == SearchEntry.KIND_SERIES) repo.cachedSeries(id)?.plot?.takeIf { it.isNotBlank() } else null
     }
 
+    /** Title from another app (ARD, ZDF …): plot and wide picture from TMDB by its name. */
+    suspend fun heroByTitle(title: String): TitleDetails? = tmdb.byTitle(title, fetch = true)
+
     /** Wide TMDB picture for the info area, if already on the stick. No request. */
     suspend fun heroBackdrop(kind: Char, id: Long): String? = withContext(Dispatchers.IO) {
         tmdb.cachedDetails(kind, id)?.backdrop?.replace("/w1280/", "/w780/")   // plenty for a third of a TV
@@ -101,6 +104,15 @@ class TitlesController(private val ctx: HomeContext) {
      */
     fun prefetchHeroPlots(cw: List<ContinueItem>) {
         if (!tmdb.enabled) return
+        // other apps: look the titles up right away, so picture and plot are there when you get to them
+        val others = cw.take(12).mapNotNull { c ->
+            when (c) {
+                is ContinueItem.External -> c.program.title
+                is ContinueItem.Media -> c.play.title
+                else -> null
+            }
+        }.filter { heroPrefetched.add("x:$it") }
+        if (others.isNotEmpty()) ctx.scope.launch(Dispatchers.IO) { others.forEach { runCatching { tmdb.byTitle(it, fetch = true) } } }
         val todo = cw.take(12).mapNotNull { c ->
             when (c) {
                 is ContinueItem.Iptv -> c.entry.item

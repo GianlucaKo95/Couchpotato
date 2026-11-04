@@ -157,6 +157,47 @@ class Tmdb(context: Context) {
             parse(json, tv)?.also { rememberRating(kind, providerId, it) }
         }
 
+    // ---------------- titles from other apps (ARD, ZDF …) ----------------
+
+    /**
+     * Details for a title that only comes with its name (e.g. "Werwölfe" from the ARD app):
+     * TMDB search, taken only if the name matches exactly. Kept on the stick (also "not found").
+     * With [fetch] = false nothing is requested.
+     */
+    suspend fun byTitle(title: String, fetch: Boolean): TitleDetails? = withContext(Dispatchers.IO) {
+        if (!enabled) return@withContext null
+        val norm = SearchIndex.normalize(title)
+        // placeholders some apps send instead of a name: nothing to look up
+        if (norm.length < 3 || norm in setOf("film", "folge", "serie", "video", "live", "livestream")) return@withContext null
+        val f = File(dir, "x/" + norm.replace(' ', '_').take(80) + ".json")
+        if (f.exists()) {
+            val o = runCatching { JSONObject(f.readText()) }.getOrNull()
+            if (o != null && !o.optBoolean("notFound")) return@withContext runCatching { parse(o, o.optBoolean("_tv")) }.getOrNull()
+            if (o != null && System.currentTimeMillis() - f.lastModified() < 7 * DAY) return@withContext null
+        }
+        if (!fetch) return@withContext null
+        val hit = runCatching {
+            get("search/multi?query=${URLEncoder.encode(title, "UTF-8")}&language=de-DE").optJSONArray("results")
+                .objects().firstOrNull { r ->
+                    r.str("media_type") in setOf("tv", "movie") &&
+                        listOfNotNull(r.str("name"), r.str("title"), r.str("original_name"), r.str("original_title"))
+                            .any { SearchIndex.normalize(it) == norm }
+                }
+        }.getOrElse { return@withContext null }      // offline / TMDB busy: try again another time
+        f.parentFile?.mkdirs()
+        if (hit == null) {
+            f.writeText(JSONObject().put("notFound", true).toString())
+            return@withContext null
+        }
+        val tv = hit.str("media_type") == "tv"
+        val append = if (tv) "credits,content_ratings,videos" else "credits,release_dates,videos"
+        val json = runCatching {
+            get("${if (tv) "tv" else "movie"}/${hit.optLong("id")}?language=de-DE&append_to_response=$append&include_video_language=de,en")
+        }.getOrElse { return@withContext null }
+        f.writeText(json.put("_tv", tv).toString())
+        runCatching { parse(json, tv) }.getOrNull()
+    }
+
     // ---------------- streaming services (data: JustWatch via TMDB) ----------------
 
     /** A film/series found at TMDB, with the streaming services that have it in Germany (flatrate/free). */
