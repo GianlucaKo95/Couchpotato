@@ -60,7 +60,7 @@ fun NoticeHost() {
                 modifier = Modifier
                     .padding(bottom = 40.dp)
                     .widthIn(max = 760.dp)
-                    .background(Color(0xF20B3236), RoundedCornerShape(16.dp))
+                    .background(CpColors.PanelGlass, RoundedCornerShape(16.dp))
                     .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
                     .padding(horizontal = 24.dp, vertical = 14.dp),
             )

@@ -11,7 +11,7 @@ import de.koeven.couchpotato.ui.CpColors
 
 /** Couchpotato's colours (ui/Theme.kt) for the player's own views: menu petrol, gold accent, cream text. */
 internal object PlayerStyle {
-    const val PANEL = 0xF20B3236.toInt()       // like the Notice panel in the launcher
+    val PANEL = CpColors.PanelGlass.toArgb()
     val ACCENT = CpColors.Accent.toArgb()
     val ON_ACCENT = CpColors.OnAccent.toArgb()
     val TEXT = CpColors.Text.toArgb()

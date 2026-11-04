@@ -1,5 +1,9 @@
 package de.koeven.couchpotato.player
 
+import de.koeven.couchpotato.player.PlayerStyle.ACCENT
+import de.koeven.couchpotato.player.PlayerStyle.ON_ACCENT
+import de.koeven.couchpotato.player.PlayerStyle.PANEL
+import de.koeven.couchpotato.player.PlayerStyle.TEXT
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Canvas
@@ -430,10 +434,6 @@ internal class VodControls(private val a: PlayerActivity, root: FrameLayout) {
     }
 
     companion object {
-        const val PANEL = 0xF20B3236.toInt()
-        const val ACCENT = 0xFFE8B86D.toInt()
-        const val ON_ACCENT = 0xFF1B1408.toInt()
-        const val TEXT = 0xFFF4F1EC.toInt()
         const val MUTED = 0xFFC3D6D7.toInt()
     }
 }

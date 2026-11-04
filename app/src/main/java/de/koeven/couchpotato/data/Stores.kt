@@ -110,6 +110,11 @@ class SettingsStore(context: Context) {
 
     fun setRowOrder(ids: List<String>) = p.edit().putString("rowOrder", JSONArray(ids).toString()).apply()
 
+    /** Automatic catalogue sync: every 24 h (default) or every 12 h. */
+    var syncIntervalHours: Int
+        get() = if (p.getInt("syncHours", 24) == 12) 12 else 24
+        set(value) = p.edit().putInt("syncHours", if (value == 12) 12 else 24).apply()
+
     /** Mediathek order: 0 = newest first, 1 = A–Z, 2 = best rating. */
     var browseSort: Int
         get() = p.getInt("browseSort", 0)

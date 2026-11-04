@@ -31,6 +31,8 @@ object CpColors {
     val Text = Color(0xFFF4F1EC)
     val TextMuted = Color(0xFFC3D6D7)
     val Error = Color(0xFFFFA197)
+    val Panel = Color(0xFF0B3236)        // menus, dialogs, the player's panels
+    val PanelGlass = Panel.copy(alpha = 0.95f)   // notices floating over a picture
 }
 
 /** Inter everywhere – the same crisp look on Fire TV and on the projector (instead of each device's system font). */

@@ -17,8 +17,10 @@ class CatalogSyncPolicyTest {
         assertEquals(12 * hour, CatalogController.backoffMs(50))
     }
 
-    @Test fun `catalogue syncs at most once a day`() {
-        assertEquals(24 * hour, CatalogController.SYNC_MAX_AGE_MS)
+    @Test fun `catalogue syncs once or twice a day, never more often`() {
+        assertEquals(24 * hour, CatalogController.syncMaxAgeMs(24))
+        assertEquals(12 * hour, CatalogController.syncMaxAgeMs(12))
+        assertEquals(12 * hour, CatalogController.syncMaxAgeMs(1))     // never below 12 h
         assertTrue(CatalogController.MIN_MANUAL_SYNC_GAP_MS >= 10 * 60_000L)
     }
 }

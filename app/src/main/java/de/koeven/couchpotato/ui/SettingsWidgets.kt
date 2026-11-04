@@ -246,7 +246,7 @@ internal fun TextFieldButton(
            Row(
                 Modifier
                     .width(if (phone) 900.dp else 600.dp)
-                    .background(androidx.compose.ui.graphics.Color(0xFF0B3236), RoundedCornerShape(18.dp))
+                    .background(CpColors.Panel, RoundedCornerShape(18.dp))
                     .border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
                     .padding(horizontal = 22.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),

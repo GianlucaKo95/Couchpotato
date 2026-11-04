@@ -59,7 +59,7 @@ fun ContextMenu(title: String, actions: List<MenuAction>, onDismiss: () -> Unit)
             Modifier
                 .width(400.dp)
                 // solid dark panel with a light edge, so it stands out over any background
-                .background(Color(0xFF0B3236), RoundedCornerShape(18.dp))
+                .background(CpColors.Panel, RoundedCornerShape(18.dp))
                 .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
                 .padding(22.dp)
                 .onPreviewKeyEvent { e ->
@@ -94,7 +94,7 @@ fun ContextMenu(title: String, actions: List<MenuAction>, onDismiss: () -> Unit)
                         containerColor = Color.White.copy(alpha = if (cancel) 0.05f else 0.12f),
                         contentColor = if (cancel) CpColors.TextMuted else CpColors.Text,
                         focusedContainerColor = CpColors.Text,
-                        focusedContentColor = Color(0xFF0B3236),
+                        focusedContentColor = CpColors.Panel,
                     ),
                     scale = ButtonDefaults.scale(focusedScale = 1.03f),
                     contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),

@@ -233,6 +233,13 @@ internal fun CatalogSection(vm: HomeViewModel, state: HomeState, setStatus: (Str
         description = "Höchstens alle 10 Minuten · bei einer Sperre pausiert die App 15 Minuten",
         value = "Abgleichen",
     ) { setStatus(vm.catalog.syncNow()) }
+    var syncHours by remember { mutableStateOf(vm.catalog.syncIntervalHours) }
+    SettingRow(
+        title = "Automatischer Abgleich",
+        description = "Holt neue Filme, Serien und Folgen · 6 Anfragen pro Abgleich",
+        value = "alle $syncHours Stunden",
+        onStep = { syncHours = if (syncHours == 24) 12 else 24; vm.catalog.syncIntervalHours = syncHours },
+    ) { syncHours = if (syncHours == 24) 12 else 24; vm.catalog.syncIntervalHours = syncHours }
     SettingRow(
         title = "Bilder vom Anbieter-Server",
         description = "Einzeln, mit Pause, max. ${XtreamClient.IMAGES_PER_HOUR} pro Stunde · jedes Bild nur einmal",

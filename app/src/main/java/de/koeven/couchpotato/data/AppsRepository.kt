@@ -1,5 +1,6 @@
 package de.koeven.couchpotato.data
 
+import androidx.compose.ui.graphics.toArgb
 import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
@@ -71,7 +72,7 @@ object AppsRepository {
         val w = 480; val h = 270
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(bmp)
-        c.drawColor(0xFF0B3236.toInt())
+        c.drawColor(de.koeven.couchpotato.ui.CpColors.Panel.toArgb())
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
         // projector: body, lens and a light cone
         p.color = 0x40E8B86D
@@ -80,7 +81,7 @@ object AppsRepository {
         c.drawRoundRect(80f, 70f, 250f, 140f, 18f, 18f, p)
         p.color = 0xFFE8B86D.toInt()
         c.drawCircle(214f, 105f, 22f, p)
-        p.color = 0xFF0B3236.toInt()
+        p.color = de.koeven.couchpotato.ui.CpColors.Panel.toArgb()
         c.drawCircle(214f, 105f, 11f, p)
         p.color = 0xFFF4F1EC.toInt()
         p.textSize = 46f

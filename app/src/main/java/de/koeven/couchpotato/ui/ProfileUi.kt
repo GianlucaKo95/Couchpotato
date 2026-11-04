@@ -167,7 +167,7 @@ fun PinDialog(title: String, hint: String? = null, onDismiss: () -> Unit, onPin:
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
-                .background(androidx.compose.ui.graphics.Color(0xFF0B3236), RoundedCornerShape(18.dp))
+                .background(CpColors.Panel, RoundedCornerShape(18.dp))
                     .border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
                 .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

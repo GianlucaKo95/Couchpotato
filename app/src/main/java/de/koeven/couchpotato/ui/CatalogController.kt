@@ -27,6 +27,10 @@ class CatalogController(
 
     fun config(): XtreamConfig = settings.config()
 
+    var syncIntervalHours: Int
+        get() = settings.syncIntervalHours
+        set(value) { settings.syncIntervalHours = value }
+
     var loginAsLink: Boolean
         get() = settings.loginAsLink
         set(value) { settings.loginAsLink = value }
@@ -141,7 +145,7 @@ class CatalogController(
             setIndexStatus("IPTV ist noch nicht eingerichtet – gesucht wird nur in Apps.")
             return
         }
-        val stale = !searchIndex.exists() || searchIndex.ageMs() > SYNC_MAX_AGE_MS
+        val stale = !searchIndex.exists() || searchIndex.ageMs() > syncMaxAgeMs(settings.syncIntervalHours)
         if (!force && !stale) return
         val now = System.currentTimeMillis()
         if (!force && settings.syncFailures > 0) {
@@ -263,7 +267,8 @@ class CatalogController(
     internal companion object {
         const val ROW_SIZE = 40
         // kept low on purpose: the provider locks the account after too many requests
-        const val SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000L       // whole catalogue: once a day
+        /** Whole catalogue: once a day, or twice if set so (6 requests each time). */
+        fun syncMaxAgeMs(hours: Int): Long = hours.coerceIn(12, 24) * 60 * 60 * 1000L
         const val MIN_MANUAL_SYNC_GAP_MS = 10 * 60 * 1000L     // "jetzt abgleichen" not more often
 
         /** Failed syncs: retry after 1 h, 2 h, 4 h, 8 h, then every 12 h. */
