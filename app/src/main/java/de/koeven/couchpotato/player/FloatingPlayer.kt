@@ -32,13 +32,19 @@ import kotlinx.coroutines.flow.StateFlow
  */
 class FloatingPlayer : Service() {
 
-    data class State(val active: Boolean = false, val title: String = "", val muted: Boolean = true, val corner: Int = 0, val size: Int = 1, val minimized: Boolean = false) {
+    data class State(val active: Boolean = false, val title: String = "", val muted: Boolean = true, val corner: Int = 0, val size: Int = 1, val minimized: Boolean = false,
+        val vod: Boolean = false, val paused: Boolean = false, val hasNext: Boolean = false) {
         val percent: Int get() = SIZES[size]
         val canGrow: Boolean get() = size < SIZES.lastIndex
         val canShrink: Boolean get() = size > 0
     }
 
     private var player: ExoPlayer? = null
+    private val progress by lazy { de.koeven.couchpotato.data.ProgressStore(this) }
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val saveTask = object : Runnable {
+        override fun run() { saveCurrent(); main.postDelayed(this, 10_000) }
+    }
     private var view: PlayerView? = null
     private val wm by lazy { getSystemService(WINDOW_SERVICE) as WindowManager }
 
@@ -60,10 +66,11 @@ class FloatingPlayer : Service() {
         goForeground(item.title)
         prefs = getSharedPreferences("floating", MODE_PRIVATE)
         // size and corner as last time
-        _state.value = State(active = true, title = item.title,
+        _state.value = State(active = true, title = titleOf(item),
             corner = prefs?.getInt("corner", 0) ?: 0, size = (prefs?.getInt("size", 1) ?: 1).coerceIn(0, SIZES.lastIndex))
         play(item)
         show()
+        main.postDelayed(saveTask, 10_000)
         WindowRemote.start(this)
         showQr()
         return START_NOT_STICKY
@@ -109,23 +116,69 @@ class FloatingPlayer : Service() {
 
     private fun playItems(list: List<de.koeven.couchpotato.data.PlayItem>, i: Int) {
         if (list.isEmpty()) return
+        saveCurrent()
         items = list
         index = i.coerceIn(0, list.lastIndex)
-        _state.value = _state.value.copy(title = list[index].title)
         play(list[index])
+    }
+
+    private fun titleOf(item: de.koeven.couchpotato.data.PlayItem) =
+        if (item.kind == de.koeven.couchpotato.data.PlayItem.KIND_EPISODE && item.subtitle != null) "${item.title} · ${item.subtitle}" else item.title
+
+    private val isVod: Boolean get() = items.getOrNull(index)?.kind?.let { it != de.koeven.couchpotato.data.PlayItem.KIND_LIVE } == true
+
+    /** Films and episodes: the position goes to "Weiterschauen", like in the big player. */
+    private fun saveCurrent() {
+        val p = player ?: return
+        if (!isVod || _state.value.minimized) return
+        val item = items.getOrNull(index) ?: return
+        val pos = p.currentPosition
+        val dur = p.duration.takeIf { it > 0 } ?: 0L
+        when {
+            dur > 0 && pos >= dur * 0.95 -> progress.finished(item, items.getOrNull(index + 1))
+            pos > 5_000 -> progress.save(item, pos, dur)
+        }
+    }
+
+    private fun startPositionFor(item: de.koeven.couchpotato.data.PlayItem): Long {
+        val e = progress.get(item.key) ?: return 0L
+        if (e.upNext) return 0L
+        if (e.durationMs > 0 && e.positionMs >= e.durationMs * 0.95) return 0L
+        return e.positionMs
+    }
+
+    private fun seek(deltaMs: Long) {
+        val p = player ?: return
+        if (!isVod) return
+        p.seekTo((p.currentPosition + deltaMs).coerceAtLeast(0L))
+    }
+
+    private fun togglePause() {
+        val p = player ?: return
+        if (!isVod) return
+        p.playWhenReady = !p.playWhenReady
+        _state.value = _state.value.copy(paused = !p.playWhenReady)
+        if (!p.playWhenReady) saveCurrent()
     }
 
     /** Next/previous channel in the window – the old stream is replaced, still one connection. */
     private fun zap(step: Int) {
         if (items.size < 2) return
-        index = LiveSession.zapStep(index, step, items.size)
-        val item = items[index]
-        _state.value = _state.value.copy(title = item.title)
-        play(item)
+        if (isVod) {
+            // films/series: previous/next episode, no wrapping around
+            val to = index + step
+            if (to !in items.indices) return
+            saveCurrent()
+            index = to
+        } else {
+            index = LiveSession.zapStep(index, step, items.size)
+        }
+        play(items[index])
     }
 
     /** Back to the big player with the same channel (the window closes first: one connection). */
     private fun fullscreen() {
+        saveCurrent()           // the big player starts where the window was
         val list = items
         val i = index
         stopSelf()
@@ -146,8 +199,12 @@ class FloatingPlayer : Service() {
 
     private fun play(item: de.koeven.couchpotato.data.PlayItem) {
         val settings = de.koeven.couchpotato.data.SettingsStore(this)
-        settings.addRecentLive(de.koeven.couchpotato.data.LiveChannel(item.streamId, item.title, item.image, null))
+        if (item.kind == de.koeven.couchpotato.data.PlayItem.KIND_LIVE) {
+            settings.addRecentLive(de.koeven.couchpotato.data.LiveChannel(item.streamId, item.title, item.image, null))
+        }
         val url = XtreamClient.streamUrl(settings.config(), item)
+        val vod = item.kind != de.koeven.couchpotato.data.PlayItem.KIND_LIVE
+        _state.value = _state.value.copy(title = titleOf(item), vod = vod, paused = false, hasNext = vod && index < items.lastIndex)
         if (_state.value.minimized) return      // hidden: the channel starts when the window comes back
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(XtreamClient.USER_AGENT)
@@ -161,10 +218,20 @@ class FloatingPlayer : Service() {
                     override fun onPlayerError(error: PlaybackException) {
                         de.koeven.couchpotato.ui.Notice.show("Kleines Fenster: Wiedergabe fehlgeschlagen (${error.errorCodeName})", long = true)
                     }
+
+                    override fun onPlaybackStateChanged(state: Int) {
+                        if (state != Player.STATE_ENDED) return
+                        val cur = items.getOrNull(index) ?: return
+                        if (!isVod) { play(cur); return }          // live stream hiccup: start again
+                        val next = items.getOrNull(index + 1)
+                        progress.finished(cur, next)
+                        if (next != null) { index++; play(next) }   // series: the next episode
+                        else stopSelf()                             // film over: the window closes
+                    }
                 })
             }
         p.volume = if (_state.value.muted) 0f else 1f
-        p.setMediaItem(MediaItem.fromUri(url))
+        if (vod) p.setMediaItem(MediaItem.fromUri(url), startPositionFor(item)) else p.setMediaItem(MediaItem.fromUri(url))
         p.prepare()
         p.playWhenReady = true
     }
@@ -217,6 +284,7 @@ class FloatingPlayer : Service() {
         if (_state.value.minimized == on) return
         _state.value = _state.value.copy(minimized = on)
         if (on) {
+            saveCurrent()
             removeQr()
             view?.visibility = android.view.View.GONE
             player?.stop()
@@ -227,6 +295,8 @@ class FloatingPlayer : Service() {
     }
 
     override fun onDestroy() {
+        saveCurrent()
+        main.removeCallbacks(saveTask)
         removeQr()
         WindowRemote.stop()
         view?.let { runCatching { wm.removeView(it) } }
@@ -261,6 +331,8 @@ class FloatingPlayer : Service() {
         fun minimize() = instance?.setMinimized(true)
         fun restore() = instance?.setMinimized(false)
         fun previous() = instance?.zap(-1)
+        fun seekBy(ms: Long) = instance?.seek(ms)
+        fun pauseToggle() = instance?.togglePause()
         fun fullscreen() = instance?.fullscreen()
 
         fun toggleSound() {
