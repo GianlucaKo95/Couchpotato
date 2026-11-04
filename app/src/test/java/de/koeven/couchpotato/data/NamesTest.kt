@@ -63,3 +63,9 @@ class LookupNamesTest {
         assertEquals(emptyList<String>(), Names.lookupNames(null, "", "  "))
     }
 }
+
+class LookupNamesEdgeTest {
+    @Test fun `words that only start like an app name stay`() {
+        assertEquals("Reise - Ardennen", Names.lookupNames("Reise - Ardennen").first())
+    }
+}

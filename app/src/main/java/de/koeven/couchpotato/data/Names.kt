@@ -34,7 +34,7 @@ object Names {
     private val BRACKETS = Regex("""\s*[(\[][^)\]]*[)\]]""")
     private val EPISODE_TAIL = Regex("""\s*[-–—:|,·]?\s*\b(Folge|Episode|Teil|Staffel|Season|Ep\.?)\s*\d+.*$""", RegexOption.IGNORE_CASE)
     private val SEASON_EPISODE = Regex("""\s*[-–—:|,·]?\s*\bS\s?\d{1,3}\s?[ ._-]?\s?E\s?\d{1,4}\b.*$""", RegexOption.IGNORE_CASE)
-    private val APP_TAIL = Regex("""\s*[|–—-]\s*(ARD|ZDF|Mediathek|ARD Mediathek|ZDFmediathek|arte|3sat|Joyn|RTL\+?).*$""", RegexOption.IGNORE_CASE)
+    private val APP_TAIL = Regex("""\s*[|–—-]\s*(ARD|ZDF|Mediathek|ARD Mediathek|ZDFmediathek|arte|3sat|Joyn|RTL\+?)\b.*$""", RegexOption.IGNORE_CASE)
     private val SPLIT = Regex("""\s+[-–—|]\s+|:\s+""")
 
     /**
