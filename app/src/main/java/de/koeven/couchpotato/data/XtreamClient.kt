@@ -17,7 +17,6 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.PriorityQueue
 
 /**
  * Minimal Xtream Codes client.
@@ -129,87 +128,6 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         "Verbunden · Status: $status$exp"
     }
 
-    private fun readVod(r: JsonReader): VodItem? {
-        var id: Long? = null
-        var name = ""
-        var icon: String? = null
-        var added = 0L
-        var ext = "mp4"
-        var cat: String? = null
-        r.beginObject()
-        while (r.hasNext()) {
-            when (r.nextName()) {
-                "stream_id" -> id = r.nextLenient()?.toLongOrNull()
-                "name" -> name = r.nextLenient() ?: ""
-                "stream_icon" -> icon = r.nextLenient()?.takeIf { it.startsWith("http") }
-                "added" -> added = r.nextLenient()?.toLongOrNull() ?: 0L
-                "container_extension" -> ext = r.nextLenient()?.takeIf { it.isNotBlank() } ?: "mp4"
-                "category_id" -> cat = r.nextLenient()
-                else -> r.skipValue()
-            }
-        }
-        r.endObject()
-        return id?.let { VodItem(it, Names.display(name), icon, added, ext, cat) }
-    }
-
-    private fun readSeries(r: JsonReader): SeriesItem? {
-        var id: Long? = null
-        var name = ""
-        var cover: String? = null
-        var updated = 0L
-        var cat: String? = null
-        r.beginObject()
-        while (r.hasNext()) {
-            when (r.nextName()) {
-                "series_id" -> id = r.nextLenient()?.toLongOrNull()
-                "name" -> name = r.nextLenient() ?: ""
-                "cover" -> cover = r.nextLenient()?.takeIf { it.startsWith("http") }
-                "last_modified" -> updated = r.nextLenient()?.toLongOrNull() ?: 0L
-                "category_id" -> cat = r.nextLenient()
-                else -> r.skipValue()
-            }
-        }
-        r.endObject()
-        return id?.let { SeriesItem(it, Names.display(name), cover, updated, cat) }
-    }
-
-    /** Newest [limit] movies, skipping categories in [hiddenCats] (ids without prefix). */
-    suspend fun latestMovies(limit: Int, hiddenCats: Set<String> = emptySet()): List<VodItem> =
-        withContext(Dispatchers.IO) {
-            val heap = PriorityQueue<VodItem>(limit + 1, compareBy<VodItem> { it.added })
-            streamArray("get_vod_streams", onObject = { r ->
-                readVod(r)?.takeIf { (it.categoryId ?: "") !in hiddenCats }?.let {
-                    heap.add(it)
-                    if (heap.size > limit) heap.poll()
-                }
-            }) { heap.sortedByDescending { it.added } }
-        }
-
-    suspend fun latestSeries(limit: Int, hiddenCats: Set<String> = emptySet()): List<SeriesItem> =
-        withContext(Dispatchers.IO) {
-            val heap = PriorityQueue<SeriesItem>(limit + 1, compareBy<SeriesItem> { it.updated })
-            streamArray("get_series", onObject = { r ->
-                readSeries(r)?.takeIf { (it.categoryId ?: "") !in hiddenCats }?.let {
-                    heap.add(it)
-                    if (heap.size > limit) heap.poll()
-                }
-            }) { heap.sortedByDescending { it.updated } }
-        }
-
-    suspend fun moviesInCategory(categoryId: String): List<VodItem> = withContext(Dispatchers.IO) {
-        val list = ArrayList<VodItem>()
-        streamArray("get_vod_streams", "&category_id=${Uri.encode(categoryId)}", onObject = { r ->
-            readVod(r)?.let { list += it }
-        }) { list.sortedByDescending { it.added } }
-    }
-
-    suspend fun seriesInCategory(categoryId: String): List<SeriesItem> = withContext(Dispatchers.IO) {
-        val list = ArrayList<SeriesItem>()
-        streamArray("get_series", "&category_id=${Uri.encode(categoryId)}", onObject = { r ->
-            readSeries(r)?.let { list += it }
-        }) { list.sortedByDescending { it.updated } }
-    }
-
     /** kind: SearchEntry.KIND_MOVIE / KIND_SERIES / KIND_LIVE */
     suspend fun categories(kind: Char): List<LiveCategory> = withContext(Dispatchers.IO) {
         val action = when (kind) {
@@ -225,30 +143,6 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         arr.mapObjects { o ->
             o.str("category_id")?.let { id -> LiveCategory(id, o.str("category_name") ?: id) }
         }.filterNotNull()
-    }
-
-    suspend fun liveCategories(): List<LiveCategory> = categories(SearchEntry.KIND_LIVE)
-
-    suspend fun liveChannels(categoryId: String): List<LiveChannel> = withContext(Dispatchers.IO) {
-        val list = ArrayList<LiveChannel>()
-        streamArray("get_live_streams", "&category_id=${Uri.encode(categoryId)}", onObject = { r ->
-            var id: Long? = null
-            var name = ""
-            var logo: String? = null
-            var cat: String? = null
-            r.beginObject()
-            while (r.hasNext()) {
-                when (r.nextName()) {
-                    "stream_id" -> id = r.nextLenient()?.toLongOrNull()
-                    "name" -> name = r.nextLenient() ?: ""
-                    "stream_icon" -> logo = r.nextLenient()?.takeIf { it.startsWith("http") }
-                    "category_id" -> cat = r.nextLenient()
-                    else -> r.skipValue()
-                }
-            }
-            r.endObject()
-            id?.let { list += LiveChannel(it, Names.display(name), logo, cat ?: categoryId) }
-        }) { list }
     }
 
     /**
@@ -333,9 +227,6 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
     private fun decodeEpg(raw: String): String = runCatching {
         String(android.util.Base64.decode(raw, android.util.Base64.DEFAULT), Charsets.UTF_8).trim()
     }.getOrNull()?.takeIf { it.isNotEmpty() && it.none { ch -> ch == '\uFFFD' } } ?: raw
-
-    suspend fun seriesInfo(seriesId: Long, fallbackName: String): SeriesInfo =
-        parseSeriesInfo(seriesInfoRaw(seriesId), seriesId, fallbackName)
 
     /** Raw answer of get_series_info (kept on the stick by the caller). */
     suspend fun seriesInfoRaw(seriesId: Long): String = withContext(Dispatchers.IO) {

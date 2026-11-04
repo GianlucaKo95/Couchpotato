@@ -87,9 +87,6 @@ class CatalogController(
         ctx.update { it.copy(loadProviderImages = value) }
     }
 
-    /** "Neue Filme/Serien" come from the local catalogue; this only syncs if it is older than a day. */
-    fun refresh(force: Boolean) = ensureIndex(force)
-
     /** The local catalogue; loads it from the stick (or does the first sync) if needed. */
     suspend fun entries(): List<SearchEntry> {
         if (ctx.entries == null) ensureIndex(force = false)

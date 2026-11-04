@@ -51,7 +51,7 @@ class PlayerActivity : Activity() {
     internal var controls: VodControls? = null
     internal lateinit var live: LiveSession
     internal lateinit var overlays: PlayerOverlays
-    private lateinit var upNext: UpNextPanel
+    internal lateinit var upNext: UpNextPanel
     private lateinit var tracks: TrackMemory
 
     private val saveTask = object : Runnable {
@@ -156,8 +156,6 @@ class PlayerActivity : Activity() {
 
     // ---------- sleep timer ----------
 
-    internal fun sleepLabel(): String? = sleep.label()
-
     internal fun cycleSleep() {
         val episode = !isLive && items.getOrNull(player.currentMediaItemIndex)?.kind == PlayItem.KIND_EPISODE
         val step = sleep.cycle(episode)
@@ -174,8 +172,6 @@ class PlayerActivity : Activity() {
         de.koeven.couchpotato.ui.Notice.show(message, long = true)   // shown in the launcher
         finish()
     }
-
-    internal fun playNextNow(auto: Boolean = false) = upNext.playNextNow(auto)
 
     // ---------- every 0.5 s: up next, controls; every 2 s: sleep timer, screen time ----------
 

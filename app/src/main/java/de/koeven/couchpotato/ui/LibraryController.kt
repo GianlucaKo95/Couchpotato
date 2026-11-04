@@ -81,25 +81,15 @@ class LibraryController(
             .distinctBy { it.id }
     }
 
-    /** Live categories without the hidden ones (used by "Sender verwalten"). */
-    suspend fun liveCategories(): List<LiveCategory> {
-        val hidden = ctx.hidden()
-        return allCategories(SearchEntry.KIND_LIVE).filterNot { "l:${it.id}" in hidden }
-    }
-
-    fun setCategoryHidden(kind: Char, categoryId: String, hidden: Boolean) =
-        setCategoriesHidden(kind, listOf(categoryId), hidden)
-
     /** Hides/shows categories – everything is recomputed locally, without a single request. */
-    @Suppress("UNUSED_PARAMETER")
-    fun setCategoriesHidden(kind: Char, categoryIds: List<String>, hidden: Boolean, refresh: Boolean = true) {
+    fun setCategoriesHidden(kind: Char, categoryIds: List<String>, hidden: Boolean) {
         if (categoryIds.isEmpty()) return
         settings.setCategoriesHidden(categoryIds.map { "$kind:$it" }, hidden)
         ctx.update { it.copy(hiddenCategories = ctx.hidden()) }
         applyCategoryChanges()
     }
 
-    fun applyCategoryChanges(@Suppress("UNUSED_PARAMETER") kind: Char? = null) {
+    fun applyCategoryChanges() {
         ctx.scope.launch {
             catalog.recomputeRows()
             search.run()

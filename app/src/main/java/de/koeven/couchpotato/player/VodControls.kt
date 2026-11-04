@@ -96,7 +96,7 @@ internal class VodControls(private val a: PlayerActivity, root: FrameLayout) {
         playBtn = iconButton(R.drawable.ic_pl_pause, "Pause") { togglePlay() }
         val back10 = iconButton(R.drawable.ic_pl_rewind, "10 s") { jump(-10_000) }
         val fwd10 = iconButton(R.drawable.ic_pl_forward, "10 s") { jump(10_000) }
-        nextBtn = iconButton(R.drawable.ic_pl_next, "Nächste Folge") { hide(); a.playNextNow() }
+        nextBtn = iconButton(R.drawable.ic_pl_next, "Nächste Folge") { hide(); a.upNext.playNextNow() }
         episodesBtn = iconButton(R.drawable.ic_pl_episodes, "Folgen") { showEpisodes() }
         val tracks = iconButton(R.drawable.ic_pl_subtitles, "Audio & Untertitel") { showTracks() }
         sleepBtn = iconButton(R.drawable.ic_pl_sleep, "Sleep-Timer") { a.cycleSleep(); refresh() }
@@ -166,7 +166,7 @@ internal class VodControls(private val a: PlayerActivity, root: FrameLayout) {
             if (player.playWhenReady) "Pause" else "Abspielen")
         nextBtn.visibility = if (episode && a.items.getOrNull(player.currentMediaItemIndex + 1) != null) View.VISIBLE else View.GONE
         episodesBtn.visibility = if (episode && a.items.size > 1) View.VISIBLE else View.GONE
-        setButton(sleepBtn, R.drawable.ic_pl_sleep, a.sleepLabel()?.removePrefix("☾ ")?.let { "Sleep: $it" } ?: "Sleep-Timer")
+        setButton(sleepBtn, R.drawable.ic_pl_sleep, a.sleep.label()?.removePrefix("☾ ")?.let { "Sleep: $it" } ?: "Sleep-Timer")
     }
 
     // ---------------------------------------------------------------- keys

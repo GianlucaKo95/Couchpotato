@@ -12,7 +12,7 @@ import android.os.Build
  *
  * EXPERIMENTAL on Fire TV: Amazon's own apps report progress to the Amazon home screen,
  * and Android may restrict reading other apps' entries. Whatever comes back is merged
- * into "Weiterschauen"; if nothing comes back, [lastResult] says why.
+ * into "Weiterschauen".
  */
 object WatchNextSource {
 
@@ -34,18 +34,15 @@ object WatchNextSource {
     private val CONTENT_URI: Uri = Uri.parse("content://android.media.tv/watch_next_program")
 
     @Volatile
-    var lastResult: String = "noch nicht abgefragt"
         private set
 
     fun load(context: Context): List<Program> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            lastResult = "nicht verfügbar (Android ${Build.VERSION.RELEASE} zu alt)"
             return emptyList()
         }
         return try {
             val cursor = context.contentResolver.query(CONTENT_URI, null, null, null, null)
             if (cursor == null) {
-                lastResult = "Schnittstelle auf diesem Gerät nicht vorhanden"
                 return emptyList()
             }
             val list = cursor.use { c ->
@@ -78,13 +75,10 @@ object WatchNextSource {
                     }
                 }
             }
-            lastResult = "${list.size} Einträge aus anderen Apps gefunden"
             list
         } catch (e: SecurityException) {
-            lastResult = "Zugriff von Android verweigert"
             emptyList()
         } catch (e: Exception) {
-            lastResult = "Fehler: ${e.message ?: "unerwarteter Fehler"}"
             emptyList()
         }
     }

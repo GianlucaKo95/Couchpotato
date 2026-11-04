@@ -243,10 +243,10 @@ fun BrowseScreen(
                     val cats = categories.orEmpty()
                     Row(Modifier.padding(top = 10.dp)) {
                         TabPill("Alle aus", false) {
-                            vm.library.setCategoriesHidden(kind, cats.map { it.id }, hidden = true, refresh = false)
+                            vm.library.setCategoriesHidden(kind, cats.map { it.id }, hidden = true)
                         }
                         TabPill("Alle an", false) {
-                            vm.library.setCategoriesHidden(kind, cats.map { it.id }, hidden = false, refresh = false)
+                            vm.library.setCategoriesHidden(kind, cats.map { it.id }, hidden = false)
                         }
                     }
                     Text(
@@ -286,7 +286,7 @@ fun BrowseScreen(
                             selected = isSelected && !editing,
                             dimmed = hidden,
                             onClick = {
-                                if (editing) vm.library.setCategoriesHidden(kind, listOf(cat.id), !hidden, refresh = false)
+                                if (editing) vm.library.setCategoriesHidden(kind, listOf(cat.id), !hidden)
                                 else {
                                     selectedId = cat.id
                                     jumpToContent = true
@@ -447,10 +447,10 @@ fun BrowseScreen(
             title = m.category.name,
             actions = listOf(
                 if (m.hidden) {
-                    MenuAction("Wieder einblenden") { vm.library.setCategoryHidden(kind, m.category.id, hidden = false) }
+                    MenuAction("Wieder einblenden") { vm.library.setCategoriesHidden(kind, listOf(m.category.id), hidden = false) }
                 } else {
                     MenuAction("Kategorie ausblenden") {
-                        vm.library.setCategoryHidden(kind, m.category.id, hidden = true)
+                        vm.library.setCategoriesHidden(kind, listOf(m.category.id), hidden = true)
                         Notice.show("„${m.category.name}“ ausgeblendet – über „Ausgeblendete anzeigen“ wieder einblenden", long = true)
                     }
                 },

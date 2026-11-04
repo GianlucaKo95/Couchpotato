@@ -6,13 +6,15 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.widget.Button
+import androidx.compose.ui.graphics.toArgb
+import de.koeven.couchpotato.ui.CpColors
 
 /** Couchpotato's colours (ui/Theme.kt) for the player's own views: menu petrol, gold accent, cream text. */
 internal object PlayerStyle {
-    const val PANEL = 0xF20B3236.toInt()
-    const val ACCENT = 0xFFE8B86D.toInt()
-    const val ON_ACCENT = 0xFF1B1408.toInt()
-    const val TEXT = 0xFFF4F1EC.toInt()
+    const val PANEL = 0xF20B3236.toInt()       // like the Notice panel in the launcher
+    val ACCENT = CpColors.Accent.toArgb()
+    val ON_ACCENT = CpColors.OnAccent.toArgb()
+    val TEXT = CpColors.Text.toArgb()
 }
 
 internal fun Context.dp(v: Int) = (v * resources.displayMetrics.density).toInt()

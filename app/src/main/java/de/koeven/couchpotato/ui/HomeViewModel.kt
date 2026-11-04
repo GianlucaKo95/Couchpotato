@@ -154,7 +154,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 continueWatching = cw,
                 configured = settings.config().isValid,
                 tick = it.tick + 1,
-                externalStatus = WatchNextSource.lastResult,
                 favorites = settings.favorites(),
                 liveInExternalApp = settings.liveInExternalApp,
                 rowOrder = settings.rowOrder(),

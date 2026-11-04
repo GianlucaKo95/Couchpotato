@@ -22,17 +22,8 @@ class ProfilesController(
 
     /** Start of the app: profiles into the state, "Wer schaut?" after every start of the stick. */
     fun init() {
-        val profiles = Profiles.all(app)
-        ctx.update {
-            it.copy(
-                profile = Profiles.active(app),
-                profiles = profiles,
-                needsProfilePick = Profiles.firstStartSinceBoot(app) && profiles.size > 1,
-                hasPin = Profiles.hasPin(app),
-                kidCategories = Profiles.kidCategories(app),
-                kidApps = Profiles.kidApps(app),
-            )
-        }
+        refresh()
+        ctx.update { it.copy(needsProfilePick = Profiles.firstStartSinceBoot(app) && it.profiles.size > 1) }
     }
 
     fun refresh() {

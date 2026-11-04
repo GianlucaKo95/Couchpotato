@@ -56,7 +56,6 @@ data class HomeState(
     val loading: Boolean = false,
     val error: String? = null,
     val tick: Int = 0,          // bumps whenever local data (progress) was re-read
-    val externalStatus: String = "",
     val favorites: List<LiveChannel> = emptyList(),
     val nowPlaying: Map<Long, String> = emptyMap(),
     val liveInExternalApp: Boolean = false,

@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
             }
             ?: return false
         if (vm.catalog.applyLogin(cfg)) {
-            vm.catalog.refresh(force = true)
+            vm.catalog.ensureIndex(force = true)
             Notice.show("IPTV-Zugang gespeichert")
         } else {
             Notice.show("IPTV-Zugang unverändert")
