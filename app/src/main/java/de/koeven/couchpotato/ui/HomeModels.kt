@@ -57,6 +57,7 @@ data class HomeState(
     val error: String? = null,
     val tick: Int = 0,          // bumps whenever local data (progress) was re-read
     val favorites: List<LiveChannel> = emptyList(),
+    val recentLive: List<LiveChannel> = emptyList(),   // newest first, favourites included
     val nowPlaying: Map<Long, String> = emptyMap(),
     val liveInExternalApp: Boolean = false,
     val indexStatus: String = "",

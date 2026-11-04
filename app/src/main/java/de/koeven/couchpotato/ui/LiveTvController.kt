@@ -81,6 +81,11 @@ class LiveTvController(private val ctx: HomeContext) {
         ctx.update { it.copy(favorites = updated) }
     }
 
+    fun removeRecent(channel: LiveChannel) {
+        settings.removeRecentLive(channel.id)
+        ctx.update { it.copy(recentLive = settings.recentLive()) }
+    }
+
     fun setLiveInExternalApp(value: Boolean) {
         settings.liveInExternalApp = value
         ctx.update { it.copy(liveInExternalApp = value) }
@@ -109,7 +114,7 @@ class LiveTvController(private val ctx: HomeContext) {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         de.koeven.couchpotato.data.ScreenTime.leaveLauncher(context)   // kids: screen time runs from here
         return runCatching { context.startActivity(intent) }.isSuccess.also { ok ->
-            if (ok) settings.markLaunched(pkg)
+            if (ok) { settings.markLaunched(pkg); settings.addRecentLive(channel) }
             else Notice.show("IsiPro nimmt keine Sender-Links an – spiele in Couchpotato", long = true)
         }
     }

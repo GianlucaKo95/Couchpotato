@@ -328,17 +328,23 @@ fun HomeScreen(
                             state = liveRowState,
                             hint = if (moving?.row == HomeRows.LIVE) MOVE_HINT else null,
                         ) {
-                            itemsIndexed(state.favorites, key = { _, ch -> ch.id }) { i, ch ->
+                            // the favourites, then the 3 channels watched last that aren't favourites
+                            val favIds = state.favorites.map { it.id }.toSet()
+                            val recent = state.recentLive.filter { it.id !in favIds }.take(3)
+                            val channels = state.favorites + recent
+                            itemsIndexed(channels, key = { _, ch -> ch.id }) { i, ch ->
+                                val isRecent = ch.id !in favIds
                                 ChannelCard(
                                     name = ch.name,
                                     logo = ch.logo,
-                                    nowPlaying = state.nowPlaying[ch.id],
-                                    onClick = { vm.live.play(context, state.favorites, i) },
-                                    onLongClick = { menu = HomeMenu.Channel(ch) },
+                                    nowPlaying = if (!isRecent) state.nowPlaying[ch.id]
+                                        else state.nowPlaying[ch.id]?.let { "Zuletzt · $it" } ?: "Zuletzt geschaut",
+                                    onClick = { vm.live.play(context, channels, i) },
+                                    onLongClick = { menu = if (isRecent) HomeMenu.Recent(ch) else HomeMenu.Channel(ch) },
                                     modifier = Modifier
                                         .then(if (i == 0 && firstRow == HomeRows.LIVE) Modifier.focusRequester(firstFocus) else Modifier)
                                         .remembered("l:${ch.id}")
-                                        .heroOn { Hero("Live-TV · jetzt", ch.name, state.nowPlaying[ch.id]) }
+                                        .heroOn { Hero(if (isRecent) "Live-TV · zuletzt geschaut" else "Live-TV · jetzt", ch.name, state.nowPlaying[ch.id]) }
                                         .movable(HomeRows.LIVE, ch.id.toString()) { delta ->
                                             val j = vm.live.moveFavorite(ch.id, delta)
                                             scope.launch { liveRowState.keepVisible(j) }
@@ -350,7 +356,7 @@ fun HomeScreen(
                                 Box(Modifier.height(ChannelWidth * 9 / 16), contentAlignment = Alignment.Center) {
                                     SecondaryPill(
                                         if (state.favorites.isEmpty()) "Sender auswählen" else "Sender verwalten",
-                                        modifier = (if (state.favorites.isEmpty() && firstRow == HomeRows.LIVE) Modifier.focusRequester(firstFocus) else Modifier)
+                                        modifier = (if (channels.isEmpty() && firstRow == HomeRows.LIVE) Modifier.focusRequester(firstFocus) else Modifier)
                                             .heroOn { Hero("Live-TV", "Sender verwalten", "Lieblingssender auswählen und sortieren") },
                                         onClick = onOpenLive,
                                     )
@@ -526,6 +532,14 @@ fun HomeScreen(
             ),
             onDismiss = { menu = null },
         )
+        is HomeMenu.Recent -> ContextMenu(
+            title = m.channel.name,
+            actions = listOf(
+                MenuAction("Zu Favoriten hinzufügen") { vm.live.toggleFavorite(m.channel) },
+                MenuAction("Aus „Zuletzt geschaut“ entfernen") { vm.live.removeRecent(m.channel) },
+            ),
+            onDismiss = { menu = null },
+        )
         is HomeMenu.Continue -> ContextMenu(
             title = when (val c = m.item) {
                 is ContinueItem.Iptv -> c.entry.item.title
@@ -555,6 +569,7 @@ private data class Moving(val row: String, val key: String)
 private sealed interface HomeMenu {
     data class App(val app: AppEntry) : HomeMenu
     data class Channel(val channel: LiveChannel) : HomeMenu
+    data class Recent(val channel: LiveChannel) : HomeMenu
     data class Continue(val item: ContinueItem) : HomeMenu
     data class Title(val kind: Char, val id: Long, val name: String) : HomeMenu
 }

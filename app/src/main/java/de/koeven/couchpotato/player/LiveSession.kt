@@ -29,6 +29,8 @@ internal class LiveSession(private val a: PlayerActivity) {
             if (this.index >= 0) previous = this.index
             this.index = index
             a.onChannel(index)
+            de.koeven.couchpotato.data.SettingsStore(a)
+                .addRecentLive(de.koeven.couchpotato.data.LiveChannel(item.streamId, item.title, item.image, null))
             timeshift?.stop()
             timeshift = if (timeshiftOn) {
                 TimeshiftBuffer(XtreamClient.streamUrl(a.cfg, item), File(a.cacheDir, "timeshift")).start()

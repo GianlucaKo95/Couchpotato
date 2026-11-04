@@ -74,6 +74,24 @@ class SettingsStore(context: Context) {
         p.edit().putString(mine("liveFavs"), arr.toString()).apply()
     }
 
+    /** Channels watched last, newest first (per profile) – the home screen shows 3 behind the favourites. */
+    fun recentLive(): List<LiveChannel> = runCatching {
+        JSONArray(p.getString(mine("liveRecent"), null) ?: "[]").mapObjects {
+            LiveChannel(it.getLong("id"), Names.display(it.str("name") ?: ""), it.str("logo"), it.str("cat"))
+        }
+    }.getOrDefault(emptyList())
+
+    fun addRecentLive(c: LiveChannel) = saveRecentLive(listOf(c) + recentLive().filterNot { it.id == c.id })
+
+    fun removeRecentLive(id: Long) = saveRecentLive(recentLive().filterNot { it.id == id })
+
+    private fun saveRecentLive(list: List<LiveChannel>) {
+        val arr = JSONArray(list.take(10).map {
+            JSONObject().put("id", it.id).put("name", it.name).put("logo", it.logo).put("cat", it.categoryId)
+        })
+        p.edit().putString(mine("liveRecent"), arr.toString()).apply()
+    }
+
     /** true: hand live channels to IsiPro instead of Couchpotato's own player. */
     var liveInExternalApp: Boolean
         get() = p.getBoolean("liveExternal", false)

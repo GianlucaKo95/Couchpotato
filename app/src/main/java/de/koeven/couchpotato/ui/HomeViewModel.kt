@@ -155,6 +155,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 configured = settings.config().isValid,
                 tick = it.tick + 1,
                 favorites = settings.favorites(),
+                recentLive = settings.recentLive(),
                 liveInExternalApp = settings.liveInExternalApp,
                 rowOrder = settings.rowOrder(),
                 appsCustomOrder = settings.appsCustomOrder,
