@@ -158,10 +158,11 @@ class PlayerActivity : Activity() {
             toast("Erst freigeben: adb shell appops set de.koeven.couchpotato SYSTEM_ALERT_WINDOW allow")
             return
         }
-        val item = items.getOrNull(live.index.coerceAtLeast(0)) ?: return
+        val i = live.index.coerceAtLeast(0)
+        if (items.getOrNull(i) == null) return
         live.release()
         player.stop()
-        FloatingPlayer.start(this, XtreamClient.streamUrl(cfg, item), item.title)
+        FloatingPlayer.start(this, items, i)
         finish()
     }
 

@@ -192,13 +192,18 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("▣  ${floating.title}", style = MaterialTheme.typography.labelLarge, color = CpColors.Accent, maxLines = 1)
+            Text("▣  ${floating.title}", style = MaterialTheme.typography.labelLarge, color = CpColors.Accent, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
+            // short labels: everything fits in one row on the TV
+            SecondaryPill("◀") { fp.previous() }
+            SecondaryPill("▶") { fp.next() }
+            SecondaryPill("Vollbild") { fp.fullscreen() }
             SecondaryPill(if (floating.muted) "Ton an" else "Ton aus") { fp.toggleSound() }
-            SecondaryPill("Ecke wechseln") { fp.nextCorner() }
-            SecondaryPill("− Kleiner", enabled = floating.canShrink) { fp.resize(-1) }
+            SecondaryPill("Ecke") { fp.nextCorner() }
+            SecondaryPill("−", enabled = floating.canShrink) { fp.resize(-1) }
             Text("${floating.percent} %", style = MaterialTheme.typography.labelLarge, color = CpColors.TextMuted)
-            SecondaryPill("+ Größer", enabled = floating.canGrow) { fp.resize(+1) }
-            SecondaryPill("Fenster schließen") { fp.stop(context) }
+            SecondaryPill("+", enabled = floating.canGrow) { fp.resize(+1) }
+            SecondaryPill("Schließen") { fp.stop(context) }
         }
     }
     HeroArea(vm, hero)

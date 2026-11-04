@@ -49,17 +49,40 @@ class FloatingPlayer : Service() {
         instance = this
     }
 
+    /** The channels you can switch through in the window (the list the player had) and the current one. */
+    private var items: List<de.koeven.couchpotato.data.PlayItem> = emptyList()
+    private var index = 0
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val url = intent?.getStringExtra(EXTRA_URL) ?: run { stopSelf(); return START_NOT_STICKY }
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: "Live-TV"
-        goForeground(title)
-        play(url)
+        items = runCatching { Playback.decode(intent?.getStringExtra(Playback.EXTRA_ITEMS)) }.getOrDefault(emptyList())
+        index = (intent?.getIntExtra(Playback.EXTRA_INDEX, 0) ?: 0).coerceIn(0, (items.size - 1).coerceAtLeast(0))
+        val item = items.getOrNull(index) ?: run { stopSelf(); return START_NOT_STICKY }
+        goForeground(item.title)
         prefs = getSharedPreferences("floating", MODE_PRIVATE)
         // size and corner as last time
-        _state.value = State(active = true, title = title,
+        _state.value = State(active = true, title = item.title,
             corner = prefs?.getInt("corner", 0) ?: 0, size = (prefs?.getInt("size", 1) ?: 1).coerceIn(0, SIZES.lastIndex))
+        play(item)
         show()
         return START_NOT_STICKY
+    }
+
+    /** Next/previous channel in the window – the old stream is replaced, still one connection. */
+    private fun zap(step: Int) {
+        if (items.size < 2) return
+        index = LiveSession.zapStep(index, step, items.size)
+        val item = items[index]
+        _state.value = _state.value.copy(title = item.title)
+        play(item)
+    }
+
+    /** Back to the big player with the same channel (the window closes first: one connection). */
+    private fun fullscreen() {
+        val list = items
+        val i = index
+        stopSelf()
+        player?.stop()
+        Playback.start(applicationContext, list, i)
     }
 
     private fun goForeground(title: String) {
@@ -73,7 +96,10 @@ class FloatingPlayer : Service() {
         else startForeground(1, n)
     }
 
-    private fun play(url: String) {
+    private fun play(item: de.koeven.couchpotato.data.PlayItem) {
+        val settings = de.koeven.couchpotato.data.SettingsStore(this)
+        settings.addRecentLive(de.koeven.couchpotato.data.LiveChannel(item.streamId, item.title, item.image, null))
+        val url = XtreamClient.streamUrl(settings.config(), item)
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(XtreamClient.USER_AGENT)
             .setAllowCrossProtocolRedirects(true)
@@ -81,14 +107,14 @@ class FloatingPlayer : Service() {
             .setReadTimeoutMs(30_000)
         val p = player ?: ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
-            .build().also { player = it }
-        p.volume = 0f
-        p.addListener(object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) {
-                de.koeven.couchpotato.ui.Notice.show("Kleines Fenster: Wiedergabe fehlgeschlagen (${error.errorCodeName})", long = true)
-                stopSelf()
+            .build().also { player = it }.apply {
+                addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        de.koeven.couchpotato.ui.Notice.show("Kleines Fenster: Wiedergabe fehlgeschlagen (${error.errorCodeName})", long = true)
+                    }
+                })
             }
-        })
+        p.volume = if (_state.value.muted) 0f else 1f
         p.setMediaItem(MediaItem.fromUri(url))
         p.prepare()
         p.playWhenReady = true
@@ -146,8 +172,6 @@ class FloatingPlayer : Service() {
 
     companion object {
         private const val CHANNEL = "floating"
-        private const val EXTRA_URL = "url"
-        private const val EXTRA_TITLE = "title"
         private var instance: FloatingPlayer? = null
         private val _state = MutableStateFlow(State())
         val state: StateFlow<State> = _state
@@ -155,12 +179,17 @@ class FloatingPlayer : Service() {
         /** "Über anderen Apps einblenden" granted? (adb shell appops set de.koeven.couchpotato SYSTEM_ALERT_WINDOW allow) */
         fun allowed(context: Context): Boolean = Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(context)
 
-        fun start(context: Context, url: String, title: String) {
-            val i = Intent(context, FloatingPlayer::class.java).putExtra(EXTRA_URL, url).putExtra(EXTRA_TITLE, title)
+        fun start(context: Context, items: List<de.koeven.couchpotato.data.PlayItem>, index: Int) {
+            val json = org.json.JSONArray(items.map { it.toJson() }).toString()
+            val i = Intent(context, FloatingPlayer::class.java).putExtra(Playback.EXTRA_ITEMS, json).putExtra(Playback.EXTRA_INDEX, index)
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(i) else context.startService(i)
         }
 
         fun stop(context: Context) { context.stopService(Intent(context, FloatingPlayer::class.java)) }
+
+        fun next() = instance?.zap(1)
+        fun previous() = instance?.zap(-1)
+        fun fullscreen() = instance?.fullscreen()
 
         fun toggleSound() {
             val s = _state.value
