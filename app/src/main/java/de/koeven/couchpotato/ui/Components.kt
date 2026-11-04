@@ -334,8 +334,18 @@ fun ContinueCard(
                     )
                 }
                 if (fraction > 0f) {
+                    // dark shade at the bottom edge: the bar stays visible on bright pictures too
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .fillMaxHeight(0.32f)
+                            .background(androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(Color.Transparent, Color(0xCC0B2A2E))))
+                    )
                     ProgressBar(
                         fraction,
+                        onPicture = true,
                         Modifier
                             .align(Alignment.BottomCenter)
                             .padding(horizontal = 8.dp, vertical = 7.dp),
@@ -354,12 +364,13 @@ fun ContinueCard(
 }
 
 @Composable
-fun ProgressBar(fraction: Float, modifier: Modifier = Modifier) {
+fun ProgressBar(fraction: Float, modifier: Modifier = Modifier, onPicture: Boolean = false) {
     Box(
         modifier
             .fillMaxWidth()
             .height(4.dp)
-            .background(Color(0x4DFFFFFF), RoundedCornerShape(2.dp))
+            // on a picture: a solid dark track, so you always see how much is left
+            .background(if (onPicture) Color(0xE62A3436) else Color(0x40FFFFFF), RoundedCornerShape(2.dp))
     ) {
         Box(
             Modifier

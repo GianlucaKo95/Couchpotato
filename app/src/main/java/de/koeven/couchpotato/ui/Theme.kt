@@ -22,8 +22,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
 object CpColors {
-    val Background = Color(0xFF165A61)   // lighter petrol (design B)
-    val Surface = Color(0xFF1F6B72)      // dialogs, plain tiles
+    // dark petrol: on a TV (and even more on a projector) the content should glow, not the background
+    val Background = Color(0xFF0E3E44)
+    val Surface = Color(0xFF165A61)      // dialogs, plain tiles – the former background
     val SurfaceHigh = Color(0x1FFFFFFF)  // translucent tile background, lets the glow shine through
     val Accent = Color(0xFFE8B86D)
     val OnAccent = Color(0xFF1B1408)

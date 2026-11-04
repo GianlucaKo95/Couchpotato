@@ -135,7 +135,7 @@ object PhoneLink {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Couchpotato</title>
 <style>
-body{margin:0;background:#165A61;color:#F4F1EC;font:17px/1.4 system-ui,sans-serif}
+body{margin:0;background:#0E3E44;color:#F4F1EC;font:17px/1.4 system-ui,sans-serif}
 main{max-width:520px;margin:0 auto;padding:28px 18px}
 h1{font-size:24px;margin:0 0 4px}p{margin:0 0 18px;color:#C3D6D7}
 label{display:block;font-weight:600;margin:14px 0 6px}

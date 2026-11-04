@@ -1,5 +1,6 @@
 package de.koeven.couchpotato.ui
 
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -404,8 +405,17 @@ private fun EpisodeCard(
                     )
                 }
                 if (progress != null && !progress.upNext && progress.fraction > 0f) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .fillMaxHeight(0.32f)
+                            .background(androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(Color.Transparent, Color(0xCC0B2A2E))))
+                    )
                     ProgressBar(
                         fraction = progress.fraction,
+                        onPicture = true,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
