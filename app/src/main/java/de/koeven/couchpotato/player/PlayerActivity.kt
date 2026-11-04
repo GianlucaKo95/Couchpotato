@@ -51,6 +51,7 @@ class PlayerActivity : Activity() {
     internal var controls: VodControls? = null
     internal lateinit var live: LiveSession
     internal lateinit var overlays: PlayerOverlays
+    internal lateinit var split: TwitchSplit
     internal lateinit var upNext: UpNextPanel
     private lateinit var tracks: TrackMemory
 
@@ -116,6 +117,7 @@ class PlayerActivity : Activity() {
         live = LiveSession(this)
         upNext = UpNextPanel(this, root)
         overlays = PlayerOverlays(this, root)
+        split = TwitchSplit(this, root)
         handler.post(tick)
 
         if (isLive) {
@@ -289,6 +291,7 @@ class PlayerActivity : Activity() {
         if (::player.isInitialized) player.playWhenReady = false
         // live in the background: close the provider connection (most allow only one or two)
         if (isLive && ::live.isInitialized) live.pause()
+        if (::split.isInitialized) split.stop()            // Twitch doesn't keep running in the background
         super.onStop()
     }
 
@@ -317,6 +320,14 @@ class PlayerActivity : Activity() {
                 return super.dispatchKeyEvent(event)
             }
         }
+        // Twitch channel picker: the keyboard and its buttons get the keys, Back closes it
+        if (split.pickerVisible) {
+            if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+                if (event.action == KeyEvent.ACTION_UP) split.hidePicker()
+                return true
+            }
+            return super.dispatchKeyEvent(event)
+        }
         // ≡ menu panel: last channel, live, sleep timer
         if (overlays.menuVisible) {
             if (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_MENU) {
@@ -333,6 +344,19 @@ class PlayerActivity : Activity() {
         controls?.let { c ->
             if (c.handleKey(event)) return true
             if (c.visible) return super.dispatchKeyEvent(event)      // D-pad between the buttons
+        }
+        // Splitscreen: ◀ ▶ moves the sound to Twitch / the TV, Back ends the split (not the player)
+        if (split.active && !playerView.isControllerFullyVisible) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) split.setSound(event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT)
+                    return true
+                }
+                KeyEvent.KEYCODE_BACK -> {
+                    if (event.action == KeyEvent.ACTION_UP) split.stop()
+                    return true
+                }
+            }
         }
         if (isLive && event.keyCode == KeyEvent.KEYCODE_LAST_CHANNEL) {
             if (event.action == KeyEvent.ACTION_DOWN && live.previous >= 0) live.switchTo(live.previous)

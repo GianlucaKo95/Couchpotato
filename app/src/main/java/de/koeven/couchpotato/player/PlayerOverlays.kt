@@ -45,7 +45,8 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
         ).apply { setMargins(0, a.dp(28), 0, 0) })
         // "≡ Menü" while the controls are visible, so the menu can be found
         menuHint = TextView(a).apply {
-            text = "≡  Menü: Sleep-Timer" + if (a.isLive) " · letzter Sender · zurückspulen" else ""
+            text = "≡  Menü: Sleep-Timer" + if (a.isLive) " · letzter Sender · zurückspulen" +
+                (if (de.koeven.couchpotato.data.Profiles.active(a).kid) "" else " · Splitscreen") else ""
             setTextColor(TEXT); textSize = 15f; setTypeface(typeface, Typeface.BOLD)
             setPadding(a.dp(14), a.dp(6), a.dp(14), a.dp(6))
             background = GradientDrawable().apply { cornerRadius = a.dp(14).toFloat(); setColor(PANEL) }
@@ -112,6 +113,16 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
             if (live.canRewind) {
                 add("⏪ 30 Sekunden zurück") { live.shiftBy(-30_000L); refreshMenu() }
                 add("⏪ 5 Minuten zurück") { live.shiftBy(-5 * 60_000L); refreshMenu() }
+            }
+        }
+        if (a.isLive && !de.koeven.couchpotato.data.Profiles.active(a).kid) {
+            val split = a.split
+            if (split.active) {
+                add(if (split.soundLeft) "🔈 Ton auf Live-TV" else "🔈 Ton auf Twitch") { split.setSound(!split.soundLeft); refreshMenu() }
+                add("▥ Anderer Twitch-Kanal") { hideMenu(); split.showPicker() }
+                add("▥ Splitscreen beenden") { hideMenu(); split.stop() }
+            } else {
+                add("▥ Splitscreen mit Twitch") { hideMenu(); split.showPicker() }
             }
         }
         add("☾ Sleep-Timer: ${a.sleep.label()?.removePrefix("☾ ") ?: "aus"}") { a.cycleSleep() }
