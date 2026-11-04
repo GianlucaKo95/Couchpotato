@@ -164,6 +164,10 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                 }
 
                 // ---------------- content ----------------
+                // scroll only as far as needed (the TV default pulls the focused row up and cuts off the top)
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides MinimalScroll,
+                ) {
                 Column(
                     Modifier
                         .weight(1f)
@@ -190,6 +194,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                         )
                     }
                 }
+                }
             }
         }
     }
@@ -198,3 +203,13 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
 // =====================================================================================
 // Sections
 // =====================================================================================
+
+/** Scrolls a focused row just into view, like a phone – nothing moves while it is already visible. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private val MinimalScroll = object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = when {
+        offset >= 0f && offset + size <= containerSize -> 0f
+        offset < 0f || size > containerSize -> offset
+        else -> offset + size - containerSize
+    }
+}

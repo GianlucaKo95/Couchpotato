@@ -302,7 +302,9 @@ class CloudSync(context: Context) {
         "profiles" -> key == "pin" || key == "bootedAt" || key == "active"
         "couchpotato" -> key in setOf(
             "url", "user", "pass", "tmdbToken", "syncFailures", "syncAttemptAt", "cloudSyncAttemptAt", "epgAt", "epgTitles",
-        )
+            // every TV has other apps installed: their order and last use stay on the device
+            "appOrder", "appsCustom",
+        ) || key.startsWith("launch:")
         else -> false
     }
 

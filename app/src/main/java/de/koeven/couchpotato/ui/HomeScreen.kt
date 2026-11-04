@@ -108,7 +108,8 @@ fun HomeScreen(
             else -> false
         }
     }
-    val hasFocusTarget = firstRow != null
+    // wait for apps / favourites / "Weiterschauen" (tick > 0), else the focus lands on whatever exists first
+    val hasFocusTarget = firstRow != null && state.tick > 0
 
     /** While this card is being moved: left/right moves it, OK or Back finishes. */
     fun Modifier.movable(row: String, key: String, onMove: (Int) -> Unit): Modifier {
