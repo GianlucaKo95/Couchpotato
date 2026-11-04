@@ -256,7 +256,7 @@ class CatalogController(
 
     private fun setIndexStatus(text: String) = ctx.update { it.copy(indexStatus = text) }
 
-    private companion object {
+    internal companion object {
         const val ROW_SIZE = 40
         // kept low on purpose: the provider locks the account after too many requests
         const val SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000L       // whole catalogue: once a day
@@ -264,6 +264,6 @@ class CatalogController(
 
         /** Failed syncs: retry after 1 h, 2 h, 4 h, 8 h, then every 12 h. */
         fun backoffMs(failures: Int): Long =
-            (60 * 60 * 1000L shl (failures - 1).coerceIn(0, 3)).coerceAtMost(12 * 60 * 60 * 1000L)
+            (60 * 60 * 1000L shl (failures - 1).coerceIn(0, 4)).coerceAtMost(12 * 60 * 60 * 1000L)
     }
 }

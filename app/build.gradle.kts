@@ -61,6 +61,16 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    testOptions {
+        // plain JVM tests: Android calls (logging, Uri …) return defaults instead of failing
+        unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            it.testLogging {
+                events("failed")
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
+        }
+    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -91,4 +101,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.5.1")   // .m3u8 streams
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    testImplementation("junit:junit:4.13.2")
 }

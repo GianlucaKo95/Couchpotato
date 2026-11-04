@@ -45,13 +45,13 @@ jobs:
           if [ -z "$UPDATE_TOKEN" ]; then echo "::warning::UPDATE_TOKEN secret not set - in-app updates off"; else echo "::notice::Update token present"; fi
           if [ -z "$TMDB_TOKEN" ]; then echo "::warning::TMDB_TOKEN secret not set - TMDB details off"; else echo "::notice::TMDB token present"; fi
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then echo "::warning::SUPABASE secrets not set - device sync off"; else echo "::notice::Supabase sync configured"; fi
-          ./gradlew assembleRelease --no-daemon 2>&1 | tee build.log
+          ./gradlew testReleaseUnitTest assembleRelease --no-daemon 2>&1 | tee build.log
 
       # Compiler errors as annotations, so they can be read without downloading the log
       - name: Report compile errors
         if: failure()
         run: |
-          grep -E "^e: |error:|What went wrong" -A2 build.log | head -40 | while IFS= read -r line; do
+          grep -E "^e: |error:|What went wrong| FAILED$|Error:|expected:" -A2 build.log | head -40 | while IFS= read -r line; do
             echo "::error::${line}"
           done
 

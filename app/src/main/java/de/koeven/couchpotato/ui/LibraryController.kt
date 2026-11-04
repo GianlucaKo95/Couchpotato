@@ -34,21 +34,8 @@ class LibraryController(
         return sortedByOwnOrder(kind, list)
     }
 
-    /** Own order first; categories the provider added later keep their place among the others. */
-    private fun sortedByOwnOrder(kind: Char, list: List<LiveCategory>): List<LiveCategory> {
-        val order = settings.categoryOrder(kind)
-        if (order.isEmpty()) return list
-        val pos = order.withIndex().associate { (i, id) -> id to i }
-        val known = list.filter { it.id in pos }.sortedBy { pos[it.id] }
-        // new categories: right after the category that comes before them at the provider
-        val out = known.toMutableList()
-        list.forEachIndexed { i, c ->
-            if (c.id in pos) return@forEachIndexed
-            val before = list.subList(0, i).lastOrNull { it.id in pos || it in out }
-            out.add(if (before == null) 0 else out.indexOf(before) + 1, c)
-        }
-        return out
-    }
+    private fun sortedByOwnOrder(kind: Char, list: List<LiveCategory>): List<LiveCategory> =
+        sortByOwnOrder(list, settings.categoryOrder(kind))
 
     fun hasOwnCategoryOrder(kind: Char) = settings.categoryOrder(kind).isNotEmpty()
 
@@ -141,4 +128,21 @@ class LibraryController(
 
     /** All categories of a kind (also hidden ones) – for the kids release list. */
     fun categoriesFor(kind: Char): List<LiveCategory> = ctx.categoriesByKind[kind].orEmpty()
+}
+
+/**
+ * Own order first; categories the provider added later keep their place among the others
+ * (right after the category that comes before them at the provider).
+ */
+internal fun sortByOwnOrder(list: List<LiveCategory>, order: List<String>): List<LiveCategory> {
+    if (order.isEmpty()) return list
+    val pos = order.withIndex().associate { (i, id) -> id to i }
+    val known = list.filter { it.id in pos }.sortedBy { pos[it.id] }
+    val out = known.toMutableList()
+    list.forEachIndexed { i, c ->
+        if (c.id in pos) return@forEachIndexed
+        val before = list.subList(0, i).lastOrNull { it.id in pos || it in out }
+        out.add(if (before == null) 0 else out.indexOf(before) + 1, c)
+    }
+    return out
 }

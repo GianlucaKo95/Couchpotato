@@ -125,11 +125,7 @@ class ProfilesController(
      */
     fun gate(kind: Char, id: Long, fsk: String?, detailsLoaded: Boolean): Gate {
         val p = Profiles.active(app)
-        if (!p.kid) return Gate.Allowed
-        if ("$kind:$id" in Profiles.unlocked(app)) return Gate.Allowed
-        if (!detailsLoaded) return Gate.Checking
-        val age = fsk?.toIntOrNull() ?: return Gate.Blocked("FSK unbekannt")
-        return if (age <= p.maxFsk) Gate.Allowed else Gate.Blocked("FSK $age")
+        return decide(p.kid, p.kid && "$kind:$id" in Profiles.unlocked(app), detailsLoaded, fsk, p.maxFsk)
     }
 
     fun unlockTitle(kind: Char, id: Long) = Profiles.unlock(app, "$kind:$id")
@@ -159,5 +155,16 @@ class ProfilesController(
     fun screenTimeInfo(p: Profile): String {
         val used = ScreenTime.usedMs(app, p) / 60_000
         return "heute $used Min. geschaut"
+    }
+
+    companion object {
+        /** The FSK rule on its own: unknown FSK counts as blocked for kids, a PIN release always wins. */
+        fun decide(kid: Boolean, unlocked: Boolean, detailsLoaded: Boolean, fsk: String?, maxFsk: Int): Gate {
+            if (!kid) return Gate.Allowed
+            if (unlocked) return Gate.Allowed
+            if (!detailsLoaded) return Gate.Checking
+            val age = fsk?.toIntOrNull() ?: return Gate.Blocked("FSK unbekannt")
+            return if (age <= maxFsk) Gate.Allowed else Gate.Blocked("FSK $age")
+        }
     }
 }

@@ -52,9 +52,7 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
             if (code in BLOCK_CODES) {
                 // The provider locks the account for a while after too many requests (it answers 404).
                 // Stay away completely for a while instead of making it worse.
-                blockedUntil = System.currentTimeMillis() + COOLDOWN_MS
-                persist()
-                throw ProviderBlockedException(code, blockedUntil)
+                throw ProviderBlockedException(code, blockNow())
             }
             throw IOException("Server antwortet mit HTTP $code")
         }
@@ -65,18 +63,18 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
      * All API requests of the app go through here: one at a time, at least [MIN_GAP_MS] apart,
      * and none at all while the provider has us blocked.
      */
-    private fun <T> gated(block: () -> T): T = synchronized(GATE) {
-        val now = System.currentTimeMillis()
+    internal fun <T> gated(block: () -> T): T = synchronized(GATE) {
+        val now = clock()
         if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
         while (requestLog.isNotEmpty() && requestLog.first() !in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS)) requestLog.removeFirst()
         val limit = if (background) BACKGROUND_PER_HOUR else MAX_PER_HOUR
         if (requestLog.size >= limit) throw RequestBudgetException(background)
         val wait = lastRequestAt + MIN_GAP_MS - now
-        if (wait > 0) Thread.sleep(wait)
+        if (wait > 0) sleep(wait)
         try {
             block()
         } finally {
-            lastRequestAt = System.currentTimeMillis()
+            lastRequestAt = clock()
             requestLog.addLast(lastRequestAt)
             persist()
         }
@@ -414,14 +412,17 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
         const val USER_AGENT = "Couchpotato/0.1"
 
         private val GATE = Any()
-        private const val MIN_GAP_MS = 2_500L
+        /** Time and waiting – replaceable only so the tests don't have to wait for real. */
+        @Volatile internal var clock: () -> Long = { System.currentTimeMillis() }
+        @Volatile internal var sleep: (Long) -> Unit = { Thread.sleep(it) }
+        internal const val MIN_GAP_MS = 2_500L
         private const val HOUR_MS = 60 * 60 * 1000L
         private const val CLOCK_FUTURE_TOLERANCE_MS = 5 * 60 * 1000L
         /** Hard cap for everything in one hour (a normal day needs ~6 for the sync). */
         const val MAX_PER_HOUR = 40
         /** Background work (sync, "Jetzt läuft") stops earlier, so you still have room to browse. */
-        private const val BACKGROUND_PER_HOUR = 20
-        private const val COOLDOWN_MS = 15 * 60 * 1000L
+        internal const val BACKGROUND_PER_HOUR = 20
+        internal const val COOLDOWN_MS = 15 * 60 * 1000L
         private val BLOCK_CODES = setOf(401, 403, 404, 429, 509)
 
         /** Pictures that live on the provider's own server: one at a time, own hourly budget. */
@@ -469,9 +470,21 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
                 ?.apply()
         }
 
+        /** The provider answered with a lock code: stay away completely for a while instead of making it worse. */
+        internal fun blockNow(): Long = synchronized(GATE) {
+            blockedUntil = clock() + COOLDOWN_MS
+            persist()
+            blockedUntil
+        }
+
+        /** Tests only: forget all limits. */
+        internal fun resetForTests() = synchronized(GATE) {
+            requestLog.clear(); imageLog.clear(); lastRequestAt = 0L; blockedUntil = 0L
+        }
+
         /** For the settings screen. */
         fun requestsLastHour(): Int = synchronized(GATE) {
-            val now = System.currentTimeMillis()
+            val now = clock()
             requestLog.count { it in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS) }
         }
 
@@ -488,16 +501,16 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
 
         /** Runs a picture download from the provider's server through the same brake. */
         fun <T> gateImage(block: () -> T): T = synchronized(GATE) {
-            val now = System.currentTimeMillis()
+            val now = clock()
             if (now < blockedUntil) throw ProviderBlockedException(null, blockedUntil)
             while (imageLog.isNotEmpty() && imageLog.first() !in (now - HOUR_MS)..(now + CLOCK_FUTURE_TOLERANCE_MS)) imageLog.removeFirst()
             if (imageLog.size >= IMAGES_PER_HOUR) throw RequestBudgetException(true)
             val wait = lastRequestAt + IMAGE_GAP_MS - now
-            if (wait > 0) Thread.sleep(wait)
+            if (wait > 0) sleep(wait)
             try {
                 block()
             } finally {
-                lastRequestAt = System.currentTimeMillis()
+                lastRequestAt = clock()
                 imageLog.addLast(lastRequestAt)
                 persist()
             }
