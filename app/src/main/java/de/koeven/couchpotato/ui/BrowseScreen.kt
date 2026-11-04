@@ -93,7 +93,6 @@ fun BrowseScreen(
     var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var catError by remember { mutableStateOf<String?>(null) }
     var selectedId by remember { mutableStateOf(vm.library.browseCategoryId) }
-    var focusedId by remember { mutableStateOf<String?>(null) }
     var content by remember { mutableStateOf<BrowseContent>(BrowseContent.Loading) }
     var showHidden by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<BrowseMenu?>(null) }
@@ -103,8 +102,8 @@ fun BrowseScreen(
     var sortMode by remember { mutableStateOf(vm.library.browseSort) }
     val catListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val selectedFocus = remember { FocusRequester() }
+    val firstTitle = remember { FocusRequester() }      // OK on a category jumps here
 
     val hiddenSet = state.hiddenCategories
     val kidMode = state.profile.kid      // kids: only released categories, nothing to edit
@@ -160,14 +159,6 @@ fun BrowseScreen(
         }
     }
 
-    // focusing a category shows it after a short pause, so scrolling through the list stays smooth
-    LaunchedEffect(focusedId) {
-        val id = focusedId ?: return@LaunchedEffect
-        if (editing) return@LaunchedEffect
-        delay(450)
-        selectedId = id
-    }
-
     LaunchedEffect(kind, selectedId, sortMode) {
         val id = selectedId ?: return@LaunchedEffect
         vm.library.browseCategoryId = id
@@ -203,7 +194,7 @@ fun BrowseScreen(
         }
         if (ready) {
             delay(80)
-            focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Right)
+            runCatching { firstTitle.requestFocus() }
         }
         jumpToContent = false
     }
@@ -294,7 +285,6 @@ fun BrowseScreen(
                             },
                             onLongClick = { if (!editing && !kidMode) menu = BrowseMenu.Category(cat, hidden) },
                             modifier = Modifier
-                                .onFocusChanged { if (it.isFocused) focusedId = cat.id }
                                 .then(if (wantsFocus) Modifier.focusRequester(selectedFocus) else Modifier)
                                 .then(
                                     if (movingId != cat.id) Modifier
@@ -388,6 +378,8 @@ fun BrowseScreen(
                     val liveCols = 5
                     val posterW = cellWidth(maxWidth, posterCols)
                     val liveW = cellWidth(maxWidth, liveCols)
+                    val first = Modifier.focusRequester(firstTitle)
+                    androidx.compose.runtime.key(selectedId) {
                     when (val c = content) {
                         BrowseContent.Loading ->
                             if (selectedId != null) Text("Lade …", color = CpColors.TextMuted)
@@ -396,11 +388,12 @@ fun BrowseScreen(
                             Text("Keine Filme in dieser Kategorie.", color = CpColors.TextMuted)
                         } else {
                             TitleGrid(posterCols) {
-                                itemsIndexed(c.items, key = { _, m -> m.id }) { _, movie ->
+                                itemsIndexed(c.items, key = { _, m -> m.id }) { i, movie ->
                                     PosterCard(
                                         title = movie.name,
                                         image = movie.image,
                                         width = posterW,
+                                        modifier = if (i == 0) first else Modifier,
                                         onClick = { onOpenMovie(movie.id, movie.name) },
                                     )
                                 }
@@ -410,11 +403,12 @@ fun BrowseScreen(
                             Text("Keine Serien in dieser Kategorie.", color = CpColors.TextMuted)
                         } else {
                             TitleGrid(posterCols) {
-                                itemsIndexed(c.items, key = { _, s -> s.id }) { _, series ->
+                                itemsIndexed(c.items, key = { _, s -> s.id }) { i, series ->
                                     PosterCard(
                                         title = series.name,
                                         image = series.image,
                                         width = posterW,
+                                        modifier = if (i == 0) first else Modifier,
                                         onClick = { onOpenSeries(series.id, series.name) },
                                     )
                                 }
@@ -430,12 +424,14 @@ fun BrowseScreen(
                                         logo = ch.logo,
                                         nowPlaying = state.nowPlaying[ch.id],
                                         width = liveW,
+                                        modifier = if (i == 0) first else Modifier,
                                         onClick = { vm.live.play(context, c.items, i) },
                                         onLongClick = { menu = BrowseMenu.Channel(ch) },
                                     )
                                 }
                             }
                         }
+                    }
                     }
                 }
             }

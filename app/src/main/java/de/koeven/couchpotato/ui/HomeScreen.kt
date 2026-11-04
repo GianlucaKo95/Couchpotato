@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -143,8 +144,29 @@ fun HomeScreen(
 
     LaunchedEffect(homeTick) { moving = null; menu = null }
 
+    // Back from a film or series: the same tile gets the focus again (the scroll positions
+    // are kept by MainActivity). Otherwise – first start, Home button – the first row.
+    var lastFocus by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val enteredTick = remember { homeTick }
+    var restoring by remember { mutableStateOf(lastFocus != null) }
+    fun Modifier.remembered(key: String): Modifier = composed {
+        val fr = remember { FocusRequester() }
+        if (restoring && key == lastFocus) {
+            LaunchedEffect(Unit) {
+                delay(120)
+                if (runCatching { fr.requestFocus() }.isSuccess) restoring = false
+            }
+        }
+        focusRequester(fr).onFocusChanged { if (it.isFocused) lastFocus = key }
+    }
+
     LaunchedEffect(homeTick, hasFocusTarget) {
         if (!hasFocusTarget) return@LaunchedEffect
+        if (restoring && homeTick == enteredTick) {
+            delay(600)
+            if (!restoring) return@LaunchedEffect        // the tile got its focus back
+            restoring = false                             // tile is gone (e.g. other profile): start at the top
+        }
         listState.scrollToItem(0)
         delay(150)
         runCatching { firstFocus.requestFocus() }
@@ -187,7 +209,8 @@ fun HomeScreen(
                     item(key = HomeRows.CONTINUE) {
                         Shelf(HomeRows.label(HomeRows.CONTINUE)) {
                             itemsIndexed(state.continueWatching, key = { _, c -> c.key }) { i, item ->
-                                val focusMod = if (i == 0 && firstRow == HomeRows.CONTINUE) Modifier.focusRequester(firstFocus) else Modifier
+                                val focusMod = (if (i == 0 && firstRow == HomeRows.CONTINUE) Modifier.focusRequester(firstFocus) else Modifier)
+                                    .remembered("c:${item.key}")
                                 val onLong = { menu = HomeMenu.Continue(item) }
                                 when (item) {
                                     is ContinueItem.Iptv -> {
@@ -311,6 +334,7 @@ fun HomeScreen(
                                     onLongClick = { menu = HomeMenu.Channel(ch) },
                                     modifier = Modifier
                                         .then(if (i == 0 && firstRow == HomeRows.LIVE) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .remembered("l:${ch.id}")
                                         .heroOn { Hero("Live-TV · jetzt", ch.name, state.nowPlaying[ch.id]) }
                                         .movable(HomeRows.LIVE, ch.id.toString()) { delta ->
                                             val j = vm.live.moveFavorite(ch.id, delta)
@@ -347,6 +371,7 @@ fun HomeScreen(
                                     onLongClick = { menu = HomeMenu.App(app) },
                                     modifier = Modifier
                                         .then(if (i == 0 && firstRow == HomeRows.APPS) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .remembered("a:${app.packageName}")
                                         .heroOn { Hero("App", app.label) }
                                         .movable(HomeRows.APPS, app.packageName) { delta ->
                                             val j = vm.apps.move(app.packageName, delta)
@@ -371,6 +396,7 @@ fun HomeScreen(
                                     onClick = { onOpenMovie(movie.id, movie.name) },
                                     onLongClick = { menu = HomeMenu.Title(SearchEntry.KIND_MOVIE, movie.id, movie.name) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.MOVIES) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .remembered("m:${movie.id}")
                                         .heroOn { Hero("Neu · Film", movie.name, plotKind = SearchEntry.KIND_MOVIE, plotId = movie.id) },
                                 )
                             }
@@ -388,6 +414,7 @@ fun HomeScreen(
                                     onClick = { onOpenSeries(series) },
                                     onLongClick = { menu = HomeMenu.Title(SearchEntry.KIND_SERIES, series.id, series.name) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.SERIES) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .remembered("s:${series.id}")
                                         .heroOn { Hero("Neu · Serie", series.name, plotKind = SearchEntry.KIND_SERIES, plotId = series.id) },
                                 )
                             }
@@ -411,6 +438,7 @@ fun HomeScreen(
                                     },
                                     onLongClick = { menu = HomeMenu.Title(e.kind, e.id, e.name) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.MY_LIST) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .remembered("L:${e.kind}${e.id}")
                                         .heroOn {
                                             Hero(
                                                 "Meine Liste · " + if (e.kind == SearchEntry.KIND_SERIES) "Serie" else "Film",
@@ -444,6 +472,7 @@ fun HomeScreen(
                                     },
                                     onLongClick = { menu = HomeMenu.Title(e.kind, e.id, e.name) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.RECOMMENDED) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .remembered("r:${e.kind}${e.id}")
                                         .heroOn {
                                             Hero(
                                                 "Für dich · " + if (e.kind == SearchEntry.KIND_SERIES) "Serie" else "Film",

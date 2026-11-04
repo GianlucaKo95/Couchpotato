@@ -103,7 +103,17 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
     val go: (Screen) -> Unit = { stack = stack + it }
     val back: () -> Unit = { if (stack.size > 1) stack = stack.dropLast(1) }
 
-    LaunchedEffect(homeTick) { stack = listOf(Screen.Home) }
+    // screens further back keep their state (scroll position, focused tile) until you leave them
+    val saved = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+    val savedKeys = remember { mutableSetOf<String>() }
+    LaunchedEffect(stack) {
+        val live = stack.map { it.toString() }.toSet()
+        savedKeys.filter { it !in live }.forEach { saved.removeState(it); savedKeys -= it }
+    }
+    LaunchedEffect(homeTick) {
+        stack = listOf(Screen.Home)
+        if (homeTick > 0) { saved.removeState(Screen.Home.toString()); savedKeys -= Screen.Home.toString() }   // Home key: start at the top
+    }
 
     val state by vm.state.collectAsState()
     // something that needs the parents' PIN first (leaving a kids profile, settings in a kids profile)
@@ -185,6 +195,8 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
             animationSpec = androidx.compose.animation.core.tween(180),
             label = "screen",
         ) { s ->
+        savedKeys += s.toString()
+        saved.SaveableStateProvider(s.toString()) {
         when (s) {
             Screen.Home -> if (kid) KidHomeScreen(
                 vm = vm,
@@ -225,6 +237,7 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
             is Screen.Movie -> key(s.id) {
                 MovieScreen(vm = vm, movieId = s.id, name = s.name, onOpenMovie = { id, name -> go(Screen.Movie(id, name)) })
             }
+        }
         }
         }
       }
