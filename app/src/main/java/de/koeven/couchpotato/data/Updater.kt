@@ -36,6 +36,10 @@ object Updater {
 
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /** What went wrong last time (search, download or Android's installer) – shown in the settings. */
+    fun lastProblem(c: Context): String? = prefs(c).getString("problem", null)
+    fun setProblem(c: Context, text: String?) = prefs(c).edit().putString("problem", text).apply()
+
     /** Last known newer release (from the last check), or null. */
     fun known(c: Context): Release? = prefs(c).getString("latest", null)?.let { parse(it) }?.takeIf { it.build > currentBuild }
 
@@ -157,18 +161,23 @@ object Updater {
 /** Android's installer reports back here; the confirmation dialog is started from here. */
 class UpdateResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 @Suppress("DEPRECATION")
-                val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
-                context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                // some projector firmwares have no confirmation screen for app installs: say so instead of nothing
+                val ok = confirm != null && runCatching { context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+                if (!ok) problem(context, "Dieses Gerät zeigt keinen Installationsdialog an – Update bitte einmal per adb einspielen.")
             }
-            PackageInstaller.STATUS_SUCCESS -> Unit   // the new version starts as the launcher
-            else -> Toast.makeText(
-                context,
-                "Update nicht installiert: ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "abgebrochen"}",
-                Toast.LENGTH_LONG,
-            ).show()
+            PackageInstaller.STATUS_SUCCESS -> Updater.setProblem(context, null)   // the new version starts as the launcher
+            else -> problem(context, "Android hat das Update nicht installiert: " +
+                (intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "abgebrochen") + " (Status $status)")
         }
+    }
+
+    private fun problem(context: Context, text: String) {
+        Updater.setProblem(context, text)
+        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
     }
 }
