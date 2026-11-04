@@ -149,6 +149,22 @@ class PlayerActivity : Activity() {
         currentIndex = index
     }
 
+    /**
+     * TEST: the channel keeps running as a small window on top of other apps; the player closes.
+     * The stream here is stopped first, so the provider still sees one connection.
+     */
+    internal fun floatAway() {
+        if (!FloatingPlayer.allowed(this)) {
+            toast("Erst freigeben: adb shell appops set de.koeven.couchpotato SYSTEM_ALERT_WINDOW allow")
+            return
+        }
+        val item = items.getOrNull(live.index.coerceAtLeast(0)) ?: return
+        live.release()
+        player.stop()
+        FloatingPlayer.start(this, XtreamClient.streamUrl(cfg, item), item.title)
+        finish()
+    }
+
     internal fun toast(text: String) {
         if (!::overlays.isInitialized) {
             Toast.makeText(this, text, Toast.LENGTH_SHORT).show(); return

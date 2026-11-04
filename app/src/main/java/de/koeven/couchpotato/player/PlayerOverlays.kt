@@ -124,6 +124,7 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
             } else {
                 add("▥ Splitscreen mit Twitch") { hideMenu(); split.showPicker() }
             }
+            add("▣ Als kleines Fenster weiterlaufen") { hideMenu(); a.floatAway() }
         }
         add("☾ Sleep-Timer: ${a.sleep.label()?.removePrefix("☾ ") ?: "aus"}") { a.cycleSleep() }
         add("Schließen") { hideMenu() }

@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- TEST: live TV as a small window on top of other apps (granted once via adb) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- in-app updates (Couchpotato installs its own new versions) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Android projectors: find the maker's hidden keystone/zoom window (HY300 & co.) -->
@@ -76,5 +80,9 @@
             </intent-filter>
         </service>
         <receiver android:name=".data.UpdateResultReceiver" android:exported="false" />
+        <service
+            android:name=".player.FloatingPlayer"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 </manifest>

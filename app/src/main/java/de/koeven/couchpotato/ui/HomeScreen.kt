@@ -183,6 +183,22 @@ fun HomeScreen(
         status = if (state.loading) "aktualisiere …" else null,
         onStart = { scope.launch { listState.animateScrollToItem(0) } },
     )
+    // TEST: a channel runs as a small window on top of other apps – its remote is here
+    val floating by de.koeven.couchpotato.player.FloatingPlayer.state.collectAsState()
+    if (floating.active) {
+        val fp = de.koeven.couchpotato.player.FloatingPlayer
+        Row(
+            Modifier.padding(start = ScreenPadding, end = ScreenPadding, top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("▣  ${floating.title}", style = MaterialTheme.typography.labelLarge, color = CpColors.Accent, maxLines = 1)
+            SecondaryPill(if (floating.muted) "Ton an" else "Ton aus") { fp.toggleSound() }
+            SecondaryPill("Ecke wechseln") { fp.nextCorner() }
+            SecondaryPill(if (floating.big) "Kleiner" else "Größer") { fp.toggleSize() }
+            SecondaryPill("Fenster schließen") { fp.stop(context) }
+        }
+    }
     HeroArea(vm, hero)
     LazyColumn(
         state = listState,
