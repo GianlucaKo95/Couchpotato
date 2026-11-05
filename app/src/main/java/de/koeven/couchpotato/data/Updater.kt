@@ -49,9 +49,11 @@ object Updater {
         val p = prefs(c)
         if (!force && System.currentTimeMillis() - p.getLong("checkedAt", 0L) < CHECK_GAP_MS) return@withContext known(c)
         p.edit().putLong("checkedAt", System.currentTimeMillis()).apply()
-        // the highest build number wins – GitHub's "latest" flag can lag when two builds finish together
-        val list = org.json.JSONArray(get("$API/releases?per_page=10"))
-        val best = (0 until list.length()).map { list.getJSONObject(it) }
+        // the highest build number wins. GitHub sorts the list by tag NAME ("build-99" before
+        // "build-115"), so look at a whole page plus the release flagged "latest"
+        val list = org.json.JSONArray(get("$API/releases?per_page=100"))
+        val latest = runCatching { JSONObject(get("$API/releases/latest")) }.getOrNull()
+        val best = ((0 until list.length()).map { list.getJSONObject(it) } + listOfNotNull(latest))
             .filter { !it.optBoolean("draft") }
             .maxByOrNull { it.optString("tag_name").removePrefix("build-").toIntOrNull() ?: -1 }
             ?.toString() ?: return@withContext null
