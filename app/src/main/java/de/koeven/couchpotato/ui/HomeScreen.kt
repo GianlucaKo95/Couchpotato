@@ -183,6 +183,16 @@ fun HomeScreen(
         status = if (state.loading) "aktualisiere …" else null,
         onStart = { scope.launch { listState.animateScrollToItem(0) } },
     )
+    // the same picture on several "Weiterschauen" tiles from other apps is the app's logo, not a scene
+    val sharedPictures = remember(state.continueWatching) {
+        state.continueWatching.mapNotNull {
+            when (it) {
+                is ContinueItem.External -> it.program.image
+                is ContinueItem.Media -> it.play.image
+                else -> null
+            }
+        }.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+    }
     // TEST: a channel runs as a small window on top of other apps – its remote is here
     val floating by de.koeven.couchpotato.player.FloatingPlayer.state.collectAsState()
     if (floating.active) {
@@ -280,13 +290,13 @@ fun HomeScreen(
                                     }
                                     is ContinueItem.External -> {
                                         val p = item.program
-                                        // the app's own picture is often just its logo (RTL+): TMDB's picture when it knows the title
-                                        val tmdbImage = rememberTmdbPicture(vm, p.title, p.subtitle)
+                                        // the app's scene picture if it sends one; its logo (RTL+) is replaced by TMDB's picture
+                                        val picture = rememberContinuePicture(vm, p.title, p.subtitle, p.image, p.image in sharedPictures)
                                         ContinueCard(
                                             showCaption = false,
                                             title = p.title,
                                             subtitle = p.subtitle,
-                                            image = tmdbImage ?: p.image,
+                                            image = picture,
                                             fraction = p.fraction,
                                             badge = item.appLabel,
                                             onClick = { vm.openExternal(item) },
@@ -299,13 +309,13 @@ fun HomeScreen(
                                     }
                                     is ContinueItem.Media -> {
                                         val p = item.play
-                                        val tmdbImage = rememberTmdbPicture(vm, p.title, p.subtitle)
+                                        val picture = rememberContinuePicture(vm, p.title, p.subtitle, p.image, p.image in sharedPictures)
                                         ContinueCard(
                                             showCaption = false,
                                             title = p.subtitle ?: p.title,
                                             subtitle = if (p.subtitle != null) p.title else null,
-                                            image = tmdbImage ?: p.image,
-                                            bitmap = if (tmdbImage == null && p.image == null) state.apps.firstOrNull { it.packageName == p.packageName }?.let { it.banner ?: it.icon } else null,
+                                            image = picture,
+                                            bitmap = if (picture == null) state.apps.firstOrNull { it.packageName == p.packageName }?.let { it.banner ?: it.icon } else null,
                                             fraction = p.fraction,
                                             badge = item.appLabel,
                                             onClick = { vm.openMedia(item) },
@@ -720,15 +730,29 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
 }
 
 /**
- * Wide TMDB picture for a title from another app (found by its name, kept on the stick);
- * null until it is there or when TMDB doesn't know it – then the app's own picture stays.
+ * Picture for a tile from another app: the app's own one when it is a real scene picture
+ * (landscape, big enough, not the same for several titles); otherwise – usually the app's logo,
+ * e.g. RTL+ – TMDB's wide picture of the title, found by its name and kept on the stick.
  */
 @Composable
-private fun rememberTmdbPicture(vm: HomeViewModel, title: String?, subtitle: String?): String? {
+private fun rememberContinuePicture(vm: HomeViewModel, title: String?, subtitle: String?, appPicture: String?, shared: Boolean): String? {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val names = remember(title, subtitle) { de.koeven.couchpotato.data.Names.lookupNames(title, subtitle) }
-    val picture by androidx.compose.runtime.produceState<String?>(null, names) {
-        if (names.isEmpty()) return@produceState
-        value = vm.titles.heroByTitle(names)?.let { d -> d.backdrop?.replace("/w1280/", "/w780/") ?: d.poster }
+    val picture by androidx.compose.runtime.produceState(appPicture, names, appPicture, shared) {
+        if (appPicture != null && !shared && isScenePicture(context, appPicture)) return@produceState
+        val tmdb = if (names.isEmpty()) null else vm.titles.heroByTitle(names)?.let { d -> d.backdrop?.replace("/w1280/", "/w780/") ?: d.poster }
+        value = tmdb ?: appPicture
     }
     return picture
 }
+
+/** A scene picture is landscape (≥ 4:3) and at least 320 px wide; logos are square, tall or tiny. */
+private suspend fun isScenePicture(context: android.content.Context, url: String): Boolean = runCatching {
+    val result = coil.Coil.imageLoader(context).execute(
+        coil.request.ImageRequest.Builder(context).data(url).size(coil.size.Size.ORIGINAL).allowHardware(false).build()
+    )
+    val d = result.drawable ?: return@runCatching false
+    val w = d.intrinsicWidth
+    val h = d.intrinsicHeight
+    w >= 320 && h > 0 && w.toFloat() / h >= 1.3f
+}.getOrDefault(false)
