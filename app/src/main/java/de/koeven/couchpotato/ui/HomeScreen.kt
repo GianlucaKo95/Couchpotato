@@ -280,11 +280,13 @@ fun HomeScreen(
                                     }
                                     is ContinueItem.External -> {
                                         val p = item.program
+                                        // the app's own picture is often just its logo (RTL+): TMDB's picture when it knows the title
+                                        val tmdbImage = rememberTmdbPicture(vm, p.title, p.subtitle)
                                         ContinueCard(
                                             showCaption = false,
                                             title = p.title,
                                             subtitle = p.subtitle,
-                                            image = p.image,
+                                            image = tmdbImage ?: p.image,
                                             fraction = p.fraction,
                                             badge = item.appLabel,
                                             onClick = { vm.openExternal(item) },
@@ -297,12 +299,13 @@ fun HomeScreen(
                                     }
                                     is ContinueItem.Media -> {
                                         val p = item.play
+                                        val tmdbImage = rememberTmdbPicture(vm, p.title, p.subtitle)
                                         ContinueCard(
                                             showCaption = false,
                                             title = p.subtitle ?: p.title,
                                             subtitle = if (p.subtitle != null) p.title else null,
-                                            image = p.image,
-                                            bitmap = if (p.image == null) state.apps.firstOrNull { it.packageName == p.packageName }?.let { it.banner ?: it.icon } else null,
+                                            image = tmdbImage ?: p.image,
+                                            bitmap = if (tmdbImage == null && p.image == null) state.apps.firstOrNull { it.packageName == p.packageName }?.let { it.banner ?: it.icon } else null,
                                             fraction = p.fraction,
                                             badge = item.appLabel,
                                             onClick = { vm.openMedia(item) },
@@ -714,4 +717,18 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
                 modifier = Modifier.widthIn(max = 540.dp))
         }
     }
+}
+
+/**
+ * Wide TMDB picture for a title from another app (found by its name, kept on the stick);
+ * null until it is there or when TMDB doesn't know it – then the app's own picture stays.
+ */
+@Composable
+private fun rememberTmdbPicture(vm: HomeViewModel, title: String?, subtitle: String?): String? {
+    val names = remember(title, subtitle) { de.koeven.couchpotato.data.Names.lookupNames(title, subtitle) }
+    val picture by androidx.compose.runtime.produceState<String?>(null, names) {
+        if (names.isEmpty()) return@produceState
+        value = vm.titles.heroByTitle(names)?.let { d -> d.backdrop?.replace("/w1280/", "/w780/") ?: d.poster }
+    }
+    return picture
 }
