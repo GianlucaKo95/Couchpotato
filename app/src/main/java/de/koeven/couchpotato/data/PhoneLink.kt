@@ -22,7 +22,7 @@ import java.security.SecureRandom
 object PhoneLink {
     data class Session(val url: String, val pin: String, val qr: Bitmap)
     /** One input on the phone page. A single field becomes a big text box without a heading. */
-    data class Field(val id: String, val label: String, val password: Boolean = false)
+    data class Field(val id: String, val label: String, val password: Boolean = false, val value: String = "")
 
     /** Everything typed on the phone, by field id. [text] = the single field. */
     data class Received(val values: Map<String, String>, val at: Long = System.nanoTime()) {
@@ -88,7 +88,10 @@ object PhoneLink {
                 if (wrong >= 5) stop()
                 return respond(c, 403, "text/plain; charset=utf-8", "Code falsch – er steht auf dem Fernseher.")
             }
-            return respond(c, 200, "text/plain; charset=utf-8", "ok")
+            // what is already in the fields on the TV – only after the code, and never a password
+            val prefill = org.json.JSONObject()
+            fields.filterNot { it.password }.forEach { prefill.put(it.id, it.value) }
+            return respond(c, 200, "application/json; charset=utf-8", prefill.toString())
         }
         if (method == "POST" && path.startsWith("/send")) {
             if (length > 16_000) return respond(c, 413, "text/plain", "zu lang")
@@ -103,7 +106,10 @@ object PhoneLink {
                 return respond(c, 403, "text/plain; charset=utf-8", "Code falsch – er steht auf dem Fernseher.")
             }
             // live: every keystroke on the phone, so an empty field (all deleted) is fine too
-            received.value = Received(fields.associate { f -> f.id to form["f_${f.id}"].orEmpty() })
+            // a password left empty on the phone keeps the one on the TV (it is never sent to the phone)
+            received.value = Received(fields.associate { f ->
+                f.id to form["f_${f.id}"].orEmpty().ifEmpty { if (f.password) f.value else "" }
+            })
             return respond(c, 200, "text/plain; charset=utf-8", "ok")
         }
         if (method == "GET") return respond(c, 200, "text/html; charset=utf-8", page())
@@ -126,7 +132,7 @@ object PhoneLink {
         val field = fields.joinToString("\n") { f ->
             val name = esc(f.label)
             when {
-                f.password -> """<input class="f" data-id="${f.id}" type="password" autocomplete="off" aria-label="$name"${if (single) "" else " placeholder=\"$name\""}>"""
+                f.password -> """<input class="f" data-id="${f.id}" type="password" autocomplete="off" aria-label="$name" placeholder="${if (f.value.isEmpty()) name else "$name (leer lassen = unverändert)"}">"""
                 single -> """<textarea class="f" data-id="${f.id}" rows="4" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="$name"></textarea>"""
                 else -> """<input class="f" data-id="${f.id}" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="$name" placeholder="$name">"""
             }
@@ -153,15 +159,19 @@ $field
 <div id="s" role="status"></div></section>
 </main><script>
 var fs=document.querySelectorAll('.f');
-function show(){document.getElementById('login').style.display='none';document.getElementById('form').style.display='block';fs[0].focus();}
-var q=new URLSearchParams(location.search).get('p');
-// opened via the QR code: it brings the code along – straight to the field
-if(q){document.getElementById('p').value=q;show();}
-document.getElementById('l').onclick=function(){
+// the fields start with what is already on the TV; the cursor goes to the end
+function show(v){fs.forEach(function(f){if(v&&v[f.dataset.id]!=null&&!f.value)f.value=v[f.dataset.id];});
+document.getElementById('login').style.display='none';document.getElementById('form').style.display='block';
+var f=fs[0];f.focus();try{f.setSelectionRange(f.value.length,f.value.length);}catch(e){}}
+function check(){
 var ls=document.getElementById('ls');ls.textContent='Prüfe …';
 fetch('/check',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({pin:document.getElementById('p').value})})
-.then(function(r){return r.text().then(function(t){if(r.ok){ls.textContent='';show();}else ls.textContent=t;});})
-.catch(function(){ls.textContent='Fernseher nicht erreichbar – gleiches WLAN?';});};
+.then(function(r){return r.text().then(function(t){if(r.ok){ls.textContent='';var v=null;try{v=JSON.parse(t);}catch(e){}show(v);}else ls.textContent=t;});})
+.catch(function(){ls.textContent='Fernseher nicht erreichbar – gleiches WLAN?';});}
+var q=new URLSearchParams(location.search).get('p');
+// opened via the QR code: it brings the code along – straight to the field
+if(q){document.getElementById('p').value=q;check();}
+document.getElementById('l').onclick=check;
 // live: send shortly after each keystroke (one request at a time, the newest text wins)
 var timer=null,busy=false,again=false;
 function push(){

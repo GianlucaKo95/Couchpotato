@@ -126,22 +126,22 @@ internal fun LoginSection(vm: HomeViewModel, setStatus: (String?) -> Unit) {
     if (phone) {
         key(asLink) {
             if (asLink) {
-                PhoneLinkPanel(listOf(de.koeven.couchpotato.data.PhoneLink.Field("link", "M3U-Link"))) { v ->
+                PhoneLinkPanel(listOf(de.koeven.couchpotato.data.PhoneLink.Field("link", "M3U-Link", value = link))) { v ->
                     link = v["link"].orEmpty().replace(Regex("[\r\n\t]+"), "").trim()
                 }
             } else {
                 PhoneLinkPanel(
                     listOf(
-                        de.koeven.couchpotato.data.PhoneLink.Field("url", "Server"),
-                        de.koeven.couchpotato.data.PhoneLink.Field("user", "Benutzername"),
-                        de.koeven.couchpotato.data.PhoneLink.Field("pass", "Passwort", password = true),
+                        de.koeven.couchpotato.data.PhoneLink.Field("url", "Server", value = url),
+                        de.koeven.couchpotato.data.PhoneLink.Field("user", "Benutzername", value = user),
+                        de.koeven.couchpotato.data.PhoneLink.Field("pass", "Passwort", password = true, value = pass),
                     )
                 ) { v ->
                     fun clean(s: String?) = s.orEmpty().replace(Regex("[\r\n\t]+"), "").trim()
                     val server = clean(v["url"])
                     // a whole M3U link pasted into "Server": split it into the three fields
                     val parsed = XtreamConfig.fromLink(server)
-                    if (parsed != null && clean(v["user"]).isEmpty() && clean(v["pass"]).isEmpty()) {
+                    if (parsed != null) {      // the link carries user and password itself
                         url = XtreamConfig.normalizeBase(parsed.baseUrl); user = parsed.user; pass = parsed.pass
                     } else {
                         url = server; user = clean(v["user"]); pass = clean(v["pass"])

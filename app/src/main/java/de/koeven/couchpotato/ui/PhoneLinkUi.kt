@@ -30,8 +30,8 @@ import de.koeven.couchpotato.data.PhoneLink
  * The little web server only runs while this panel is on screen.
  */
 @Composable
-fun PhoneLinkPanel(title: String, password: Boolean = false, compact: Boolean = false, vertical: Boolean = false, onText: (String) -> Unit) =
-    PhoneLinkPanel(listOf(PhoneLink.Field("t", title, password)), compact, vertical) { onText(it["t"].orEmpty()) }
+fun PhoneLinkPanel(title: String, password: Boolean = false, compact: Boolean = false, vertical: Boolean = false, value: String = "", onText: (String) -> Unit) =
+    PhoneLinkPanel(listOf(PhoneLink.Field("t", title, password, value)), compact, vertical) { onText(it["t"].orEmpty()) }
 
 /** Several fields on the phone at once (e.g. server, user name, password). */
 @Composable

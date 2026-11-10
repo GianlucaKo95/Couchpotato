@@ -223,11 +223,12 @@ internal fun TextFieldButton(
     )
 
     if (editing) {
-        var draft by remember { mutableStateOf(value) }
+        // cursor at the end of what is already there ("Ich|"), not in front of it
+        var draft by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(value, androidx.compose.ui.text.TextRange(value.length))) }
         var phone by remember { mutableStateOf(true) }      // QR code right away, next to the field
         val fieldFocus = remember { FocusRequester() }
         fun accept() {
-            onValueChange(draft.trim())
+            onValueChange(draft.text.trim())
             editing = false
         }
         LaunchedEffect(Unit) {
@@ -279,7 +280,10 @@ internal fun TextFieldButton(
                 // beside the field (not below), so the keyboard can't cover it
                 // live from the phone into the field; "Übernehmen" on the TV confirms
                 // copied links often carry a line break or spaces at the end – one line in the field
-                PhoneLinkPanel(label, password, compact = true, vertical = true) { text -> draft = text.replace(Regex("[\r\n\t]+"), "").trim() }
+                PhoneLinkPanel(label, password, compact = true, vertical = true, value = value) { text ->
+                    val t = text.replace(Regex("[\r\n\t]+"), "").trim()
+                    draft = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(t.length))
+                }
             }
            }
           }
