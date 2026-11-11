@@ -217,6 +217,9 @@ class SettingsStore(context: Context) {
 
     fun markLaunched(pkg: String) = p.edit().putLong("launch:$pkg", System.currentTimeMillis()).apply()
     fun lastLaunched(pkg: String): Long = p.getLong("launch:$pkg", 0L)
+
+    /** When any app was last started from Couchpotato. */
+    fun lastAnyLaunch(): Long = p.all.entries.filter { it.key.startsWith("launch:") }.maxOfOrNull { it.value as? Long ?: 0L } ?: 0L
 }
 
 /** Episodes marked as seen ("s:<series id>" → episode ids) – per profile, synced with the household. */

@@ -41,12 +41,39 @@ class MainActivity : ComponentActivity() {
         de.koeven.couchpotato.data.CrashLog.install(this)   // first: so even a crash during start is recorded
         ImageGate.start(this)          // request brake + picture loader, before anything goes online
         applyConfigExtras(intent)
+        if (savedInstanceState == null && isBootHijack(intent)) moveTaskToBack(true)
         setContent {
             CouchpotatoTheme {
                 CouchpotatoApp(vm, homeTick.intValue)
                 NoticeHost()
             }
         }
+    }
+
+    /**
+     * Home on Fire starts the launcher once more when the Fire TV has finished booting (its
+     * BOOT_COMPLETED arrives a minute or two late) – even if you are already in Netflix. Within the
+     * first minutes after a reboot, a "Home" right after Couchpotato started another app is taken
+     * as exactly that and ignored once: the app stays in front. Pressing Home again within
+     * 15 seconds always works.
+     */
+    private fun isBootHijack(intent: Intent?): Boolean {
+        if (intent?.categories?.contains(Intent.CATEGORY_HOME) != true) return false
+        if (android.os.SystemClock.elapsedRealtime() > BOOT_WINDOW_MS) return false
+        val now = System.currentTimeMillis()
+        val launched = de.koeven.couchpotato.data.SettingsStore(this).lastAnyLaunch()
+        val bootedAt = now - android.os.SystemClock.elapsedRealtime()
+        // only an app started since this boot – never hide the launcher on the very first start
+        if (launched < bootedAt || now - launched > RECENT_LAUNCH_MS) return false
+        val p = getSharedPreferences("bootguard", MODE_PRIVATE)
+        if (now - p.getLong("ignored", 0L) < 15_000L) return false
+        p.edit().putLong("ignored", now).apply()
+        return true
+    }
+
+    private companion object {
+        const val BOOT_WINDOW_MS = 5 * 60_000L
+        const val RECENT_LAUNCH_MS = 3 * 60_000L
     }
 
     override fun onResume() {
@@ -57,6 +84,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (isBootHijack(intent)) { moveTaskToBack(true); return }
         setIntent(intent)
         if (!applyConfigExtras(intent)) {
             // Home button / Launcher Manager brings us back: jump to the start screen.
