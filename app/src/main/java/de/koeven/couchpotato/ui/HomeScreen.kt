@@ -156,8 +156,11 @@ fun HomeScreen(
         val fr = remember { FocusRequester() }
         if (restoring && key == lastFocus) {
             LaunchedEffect(Unit) {
-                delay(120)
-                if (runCatching { fr.requestFocus() }.isSuccess) restoring = false
+                // the rows are restored a moment later than the screen: try a few times
+                for (wait in longArrayOf(120, 180, 300)) {
+                    delay(wait)
+                    if (runCatching { fr.requestFocus() }.isSuccess) { restoring = false; break }
+                }
             }
         }
         // after something was removed via the long-press menu: the tile next to it gets the focus
@@ -186,7 +189,7 @@ fun HomeScreen(
     LaunchedEffect(homeTick, hasFocusTarget) {
         if (!hasFocusTarget) return@LaunchedEffect
         if (restoring && homeTick == enteredTick) {
-            delay(600)
+            delay(900)
             if (!restoring) return@LaunchedEffect        // the tile got its focus back
             restoring = false                             // tile is gone (e.g. other profile): start at the top
         }
@@ -781,7 +784,10 @@ private fun rememberContinuePicture(vm: HomeViewModel, title: String?, subtitle:
     return picture
 }
 
-/** A scene picture is landscape (≥ 4:3) and at least 320 px wide; logos are square, tall or tiny. */
+/**
+ * A scene picture is landscape (≥ 4:3), at least 320 px wide and colourful. App logos – even
+ * wide ones like RTL+'s – are square/tall/tiny or made of a few flat colours.
+ */
 private suspend fun isScenePicture(context: android.content.Context, url: String): Boolean = runCatching {
     val result = coil.Coil.imageLoader(context).execute(
         coil.request.ImageRequest.Builder(context).data(url).size(coil.size.Size.ORIGINAL).allowHardware(false).build()
@@ -789,8 +795,30 @@ private suspend fun isScenePicture(context: android.content.Context, url: String
     val d = result.drawable ?: return@runCatching false
     val w = d.intrinsicWidth
     val h = d.intrinsicHeight
-    w >= 320 && h > 0 && w.toFloat() / h >= 1.3f
+    if (w < 320 || h <= 0 || w.toFloat() / h < 1.3f) return@runCatching false
+    colourful(d)
 }.getOrDefault(false)
+
+/** Counts the colours of a small copy: a photo has many, a logo on a plain background only a few. */
+internal fun colourful(d: android.graphics.drawable.Drawable): Boolean {
+    val bmp = android.graphics.Bitmap.createBitmap(48, 27, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bmp)
+    val old = d.bounds
+    d.setBounds(0, 0, 48, 27)
+    d.draw(canvas)
+    d.bounds = old
+    val colours = HashSet<Int>()
+    for (y in 0 until 27) for (x in 0 until 48) {
+        val p = bmp.getPixel(x, y)
+        // 4 bits per channel: tiny shading differences don't count as a new colour
+        colours += ((p shr 20) and 0xF shl 8) or ((p shr 12) and 0xF shl 4) or ((p shr 4) and 0xF)
+    }
+    bmp.recycle()
+    return colours.size >= LOGO_MAX_COLOURS
+}
+
+/** Fewer distinct colours than this in 48×27 pixels: a logo, not a scene. */
+private const val LOGO_MAX_COLOURS = 90
 
 /** Keys of the live row as shown: favourites, then the 3 channels watched last that aren't favourites. */
 private fun liveKeys(state: HomeState): List<String> {

@@ -96,6 +96,9 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
     var jumpToContent by remember { mutableStateOf(false) }   // OK on a section: focus goes to its settings
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val navFocus = remember { FocusRequester() }
+    var contentHasFocus by remember { mutableStateOf(false) }
+    // Back inside a section: to that section in the list on the left, not out of the settings
+    androidx.activity.compose.BackHandler(enabled = contentHasFocus) { runCatching { navFocus.requestFocus() } }
 
     LaunchedEffect(Unit) {
         delay(150)
@@ -170,6 +173,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                 ) {
                 Column(
                     Modifier
+                        .onFocusChanged { contentHasFocus = it.hasFocus }
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
                         .padding(bottom = 40.dp, end = 6.dp),

@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -184,11 +185,36 @@ fun BrowseScreen(
         }
     }
 
+    // back from a film or series: the tile you opened gets the focus again (grid position is kept)
+    var lastTile by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var restoreTile by remember { mutableStateOf(lastTile) }
+    var contentHasFocus by remember { mutableStateOf(false) }
+
     LaunchedEffect(categories) {
         if (categories != null) {
+            if (restoreTile != null) {
+                delay(800)
+                if (restoreTile == null) return@LaunchedEffect      // the tile got its focus back
+                restoreTile = null
+            }
             delay(150)
             runCatching { selectedFocus.requestFocus() }
         }
+    }
+    fun Modifier.tileFocus(key: String): Modifier = composed {
+        val fr = remember { FocusRequester() }
+        if (restoreTile == key) {
+            LaunchedEffect(Unit) {
+                delay(150)
+                if (runCatching { fr.requestFocus() }.isSuccess) restoreTile = null
+            }
+        }
+        focusRequester(fr).onFocusChanged { if (it.isFocused) lastTile = key }
+    }
+
+    // Back in the titles: to the category you came from, not out of the Mediathek
+    androidx.activity.compose.BackHandler(enabled = contentHasFocus && !editing && movingId == null) {
+        runCatching { (catFocus[selectedId] ?: selectedFocus).requestFocus() }
     }
 
     LaunchedEffect(jumpToContent, content) {
@@ -382,7 +408,7 @@ fun BrowseScreen(
                 }
                 Spacer(Modifier.height(12.dp))
 
-                BoxWithConstraints(Modifier.fillMaxSize()) {
+                BoxWithConstraints(Modifier.fillMaxSize().onFocusChanged { contentHasFocus = it.hasFocus }) {
                     val posterCols = 8
                     val liveCols = 5
                     val posterW = cellWidth(maxWidth, posterCols)
@@ -402,7 +428,7 @@ fun BrowseScreen(
                                         title = movie.name,
                                         image = movie.image,
                                         width = posterW,
-                                        modifier = if (i == 0) first else Modifier,
+                                        modifier = (if (i == 0) first else Modifier).tileFocus("m:${movie.id}"),
                                         onClick = { onOpenMovie(movie.id, movie.name) },
                                     )
                                 }
@@ -417,7 +443,7 @@ fun BrowseScreen(
                                         title = series.name,
                                         image = series.image,
                                         width = posterW,
-                                        modifier = if (i == 0) first else Modifier,
+                                        modifier = (if (i == 0) first else Modifier).tileFocus("s:${series.id}"),
                                         onClick = { onOpenSeries(series.id, series.name) },
                                     )
                                 }
@@ -433,7 +459,7 @@ fun BrowseScreen(
                                         logo = ch.logo,
                                         nowPlaying = state.nowPlaying[ch.id],
                                         width = liveW,
-                                        modifier = if (i == 0) first else Modifier,
+                                        modifier = (if (i == 0) first else Modifier).tileFocus("l:${ch.id}"),
                                         onClick = { vm.live.play(context, c.items, i) },
                                         onLongClick = { menu = BrowseMenu.Channel(ch) },
                                     )
