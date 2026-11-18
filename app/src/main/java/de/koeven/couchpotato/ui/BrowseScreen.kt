@@ -109,6 +109,14 @@ fun BrowseScreen(
     val kidMode = state.profile.kid      // kids: only released categories, nothing to edit
     fun isHidden(c: LiveCategory) = "$kind:${c.id}" in hiddenSet
     val visibleCats = categories.orEmpty().filter { editing || showHidden || !isHidden(it) }
+    // a category hidden via the long-press menu: the one below (or above) gets the focus, not the top bar
+    val catFocus = remember { mutableMapOf<String, FocusRequester>() }
+    var refocusCat by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(refocusCat, visibleCats.size) {
+        val id = refocusCat ?: return@LaunchedEffect
+        delay(150)
+        if (runCatching { catFocus[id]?.requestFocus() }.isSuccess) refocusCat = null
+    }
     val hiddenCount = categories.orEmpty().count { isHidden(it) }
     val favIds = state.favorites.map { it.id }.toSet()
     val unit = when (kind) {
@@ -286,6 +294,7 @@ fun BrowseScreen(
                             onLongClick = { if (!editing && !kidMode) menu = BrowseMenu.Category(cat, hidden) },
                             modifier = Modifier
                                 .then(if (wantsFocus) Modifier.focusRequester(selectedFocus) else Modifier)
+                                .focusRequester(catFocus.getOrPut(cat.id) { FocusRequester() })
                                 .then(
                                     if (movingId != cat.id) Modifier
                                     else Modifier
@@ -446,6 +455,9 @@ fun BrowseScreen(
                     MenuAction("Wieder einblenden") { vm.library.setCategoriesHidden(kind, listOf(m.category.id), hidden = false) }
                 } else {
                     MenuAction("Kategorie ausblenden") {
+                        val i = visibleCats.indexOfFirst { it.id == m.category.id }
+                        refocusCat = if (showHidden) m.category.id
+                            else (visibleCats.getOrNull(i + 1) ?: visibleCats.getOrNull(i - 1))?.id
                         vm.library.setCategoriesHidden(kind, listOf(m.category.id), hidden = true)
                         Notice.show("„${m.category.name}“ ausgeblendet – über „Ausgeblendete anzeigen“ wieder einblenden", long = true)
                     }

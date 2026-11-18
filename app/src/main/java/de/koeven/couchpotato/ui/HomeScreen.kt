@@ -150,6 +150,8 @@ fun HomeScreen(
     var lastFocus by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     val enteredTick = remember { homeTick }
     var restoring by remember { mutableStateOf(lastFocus != null) }
+    var refocusTick by remember { mutableStateOf(0) }
+    var refocused by remember { mutableStateOf(0) }
     fun Modifier.remembered(key: String): Modifier = composed {
         val fr = remember { FocusRequester() }
         if (restoring && key == lastFocus) {
@@ -158,7 +160,27 @@ fun HomeScreen(
                 if (runCatching { fr.requestFocus() }.isSuccess) restoring = false
             }
         }
+        // after something was removed via the long-press menu: the tile next to it gets the focus
+        LaunchedEffect(refocusTick) {
+            if (refocusTick > 0 && key == lastFocus) {
+                delay(150)
+                if (runCatching { fr.requestFocus() }.isSuccess) refocused = refocusTick
+            }
+        }
         focusRequester(fr).onFocusChanged { if (it.isFocused) lastFocus = key }
+    }
+
+    /** The tile removed: focus moves to its right neighbour, or the left one at the end of the row. */
+    fun removed(key: String, row: List<String>) {
+        val i = row.indexOf(key)
+        lastFocus = row.getOrNull(i + 1) ?: row.getOrNull(i - 1)
+        refocusTick++
+    }
+    // the row is empty now: the first row instead of the top bar
+    LaunchedEffect(refocusTick) {
+        if (refocusTick == 0) return@LaunchedEffect
+        delay(400)
+        if (refocused != refocusTick) runCatching { firstFocus.requestFocus() }
     }
 
     LaunchedEffect(homeTick, hasFocusTarget) {
@@ -443,7 +465,7 @@ fun HomeScreen(
                                     title = movie.name,
                                     image = movie.image,
                                     onClick = { onOpenMovie(movie.id, movie.name) },
-                                    onLongClick = { menu = HomeMenu.Title(SearchEntry.KIND_MOVIE, movie.id, movie.name) },
+                                    onLongClick = { menu = HomeMenu.Title(SearchEntry.KIND_MOVIE, movie.id, movie.name, HomeRows.MOVIES) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.MOVIES) Modifier.focusRequester(firstFocus) else Modifier)
                                         .remembered("m:${movie.id}")
                                         .heroOn { Hero("Neu · Film", movie.name, plotKind = SearchEntry.KIND_MOVIE, plotId = movie.id) },
@@ -461,7 +483,7 @@ fun HomeScreen(
                                     title = series.name,
                                     image = series.image,
                                     onClick = { onOpenSeries(series) },
-                                    onLongClick = { menu = HomeMenu.Title(SearchEntry.KIND_SERIES, series.id, series.name) },
+                                    onLongClick = { menu = HomeMenu.Title(SearchEntry.KIND_SERIES, series.id, series.name, HomeRows.SERIES) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.SERIES) Modifier.focusRequester(firstFocus) else Modifier)
                                         .remembered("s:${series.id}")
                                         .heroOn { Hero("Neu · Serie", series.name, plotKind = SearchEntry.KIND_SERIES, plotId = series.id) },
@@ -485,7 +507,7 @@ fun HomeScreen(
                                             onOpenMovie(e.id, e.name)
                                         }
                                     },
-                                    onLongClick = { menu = HomeMenu.Title(e.kind, e.id, e.name) },
+                                    onLongClick = { menu = HomeMenu.Title(e.kind, e.id, e.name, HomeRows.MY_LIST) },
                                     modifier = (if (i == 0 && firstRow == HomeRows.MY_LIST) Modifier.focusRequester(firstFocus) else Modifier)
                                         .remembered("L:${e.kind}${e.id}")
                                         .heroOn {
@@ -558,6 +580,7 @@ fun HomeScreen(
             actions = listOf(
                 MenuAction("Verschieben") { moving = Moving(HomeRows.APPS, m.app.packageName) },
                 MenuAction("Ausblenden") {
+                    removed("a:${m.app.packageName}", state.apps.map { "a:${it.packageName}" })
                     vm.apps.hide(m.app.packageName)
                     Notice.show("${m.app.label} ausgeblendet (Einstellungen → zurücksetzen)")
                 },
@@ -568,7 +591,10 @@ fun HomeScreen(
             title = m.channel.name,
             actions = listOf(
                 MenuAction("Verschieben") { moving = Moving(HomeRows.LIVE, m.channel.id.toString()) },
-                MenuAction("Aus Favoriten entfernen") { vm.live.removeFavorite(m.channel) },
+                MenuAction("Aus Favoriten entfernen") {
+                    removed("l:${m.channel.id}", liveKeys(state))
+                    vm.live.removeFavorite(m.channel)
+                },
             ),
             onDismiss = { menu = null },
         )
@@ -576,7 +602,10 @@ fun HomeScreen(
             title = m.channel.name,
             actions = listOf(
                 MenuAction("Zu Favoriten hinzufügen") { vm.live.toggleFavorite(m.channel) },
-                MenuAction("Aus „Zuletzt geschaut“ entfernen") { vm.live.removeRecent(m.channel) },
+                MenuAction("Aus „Zuletzt geschaut“ entfernen") {
+                    removed("l:${m.channel.id}", liveKeys(state))
+                    vm.live.removeRecent(m.channel)
+                },
             ),
             onDismiss = { menu = null },
         )
@@ -589,13 +618,19 @@ fun HomeScreen(
                 is ContinueItem.Media -> c.play.subtitle ?: c.play.title
             },
             actions = listOf(
-                MenuAction("Aus „Weiterschauen“ entfernen") { vm.removeFromContinue(m.item) },
+                MenuAction("Aus „Weiterschauen“ entfernen") {
+                    removed("c:${m.item.key}", state.continueWatching.map { "c:${it.key}" })
+                    vm.removeFromContinue(m.item)
+                },
             ),
             onDismiss = { menu = null },
         )
         is HomeMenu.Title -> ContextMenu(
             title = m.name,
-            actions = listOf(myListMenuAction(vm, m.kind, m.id)),
+            actions = listOf(myListMenuAction(vm, m.kind, m.id).let { a ->
+                // taken off "Meine Liste" in that row: the tile next to it gets the focus
+                if (m.row == HomeRows.MY_LIST) a.copy(onClick = { removed("L:${m.kind}${m.id}", state.myList.map { "L:${it.kind}${it.id}" }); a.onClick() }) else a
+            }),
             onDismiss = { menu = null },
         )
         null -> Unit
@@ -611,7 +646,7 @@ private sealed interface HomeMenu {
     data class Channel(val channel: LiveChannel) : HomeMenu
     data class Recent(val channel: LiveChannel) : HomeMenu
     data class Continue(val item: ContinueItem) : HomeMenu
-    data class Title(val kind: Char, val id: Long, val name: String) : HomeMenu
+    data class Title(val kind: Char, val id: Long, val name: String, val row: String = "") : HomeMenu
 }
 
 /** Scrolls the row so the moved card stays on screen. */
@@ -756,3 +791,9 @@ private suspend fun isScenePicture(context: android.content.Context, url: String
     val h = d.intrinsicHeight
     w >= 320 && h > 0 && w.toFloat() / h >= 1.3f
 }.getOrDefault(false)
+
+/** Keys of the live row as shown: favourites, then the 3 channels watched last that aren't favourites. */
+private fun liveKeys(state: HomeState): List<String> {
+    val favIds = state.favorites.map { it.id }.toSet()
+    return (state.favorites + state.recentLive.filter { it.id !in favIds }.take(3)).map { "l:${it.id}" }
+}
