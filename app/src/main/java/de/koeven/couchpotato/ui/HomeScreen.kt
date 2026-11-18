@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
@@ -706,6 +707,7 @@ private fun HeroBackdrop(vm: HomeViewModel, hero: Hero?) {
  * Start 2.0: big, readable info about the focused tile – like Netflix or Google TV. The plot comes
  * only from what is already on the stick (TMDB cache / series info), never from a new request.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
     var plot by remember { mutableStateOf<String?>(null) }
@@ -743,17 +745,19 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
             // the long press does a lot here – say so, quietly
             Text("OK lang: Optionen", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted, maxLines = 1)
         }
+        // long titles (other apps often send "Serie – Staffel 2 – Folge 5: …") run through instead of "…"
         Text(
             hero.title,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.ExtraBold,
             maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1_500, velocity = 40.dp),
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             hero.sub?.let {
                 Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    modifier = Modifier.weight(1f, fill = false)
+                        .basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1_500, velocity = 40.dp))
             }
             if (hero.fraction > 0f) ProgressBar(hero.fraction, Modifier.width(140.dp))
             hero.remaining?.let { Text(it, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1) }
