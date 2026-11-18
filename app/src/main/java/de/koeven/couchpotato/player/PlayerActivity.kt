@@ -52,6 +52,7 @@ class PlayerActivity : Activity() {
     internal lateinit var live: LiveSession
     internal lateinit var overlays: PlayerOverlays
     internal lateinit var split: TwitchSplit
+    internal lateinit var channels: ChannelPanel
     internal lateinit var upNext: UpNextPanel
     private lateinit var tracks: TrackMemory
 
@@ -118,6 +119,7 @@ class PlayerActivity : Activity() {
         upNext = UpNextPanel(this, root)
         overlays = PlayerOverlays(this, root)
         split = TwitchSplit(this, root)
+        channels = ChannelPanel(this, root)
         handler.post(tick)
 
         if (isLive) {
@@ -345,6 +347,21 @@ class PlayerActivity : Activity() {
             }
             return super.dispatchKeyEvent(event)
         }
+        // channel list: D-pad moves through categories and channels, Back closes it
+        if (channels.visible) {
+            if (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_MENU) {
+                if (event.action == KeyEvent.ACTION_UP) channels.hide()
+                return true
+            }
+            return super.dispatchKeyEvent(event)
+        }
+        // live: OK opens the channel list (switch channels without leaving the player)
+        if (isLive && !playerView.isControllerFullyVisible && !overlays.menuVisible &&
+            (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
+        ) {
+            if (event.action == KeyEvent.ACTION_UP) channels.show()
+            return true
+        }
         // ≡ menu panel: last channel, live, sleep timer
         if (overlays.menuVisible) {
             if (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_MENU) {
@@ -376,7 +393,7 @@ class PlayerActivity : Activity() {
             }
         }
         if (isLive && event.keyCode == KeyEvent.KEYCODE_LAST_CHANNEL) {
-            if (event.action == KeyEvent.ACTION_DOWN && live.previous >= 0) live.switchTo(live.previous)
+            if (event.action == KeyEvent.ACTION_DOWN) live.backToPrevious()
             return true
         }
         // Live timeshift: ◀ / ⏪ back 30 s, ▶ / ⏩ forward 30 s (towards live) while the controls are hidden

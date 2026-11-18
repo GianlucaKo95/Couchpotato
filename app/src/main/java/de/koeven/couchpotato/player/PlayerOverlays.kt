@@ -45,7 +45,7 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
         ).apply { setMargins(0, a.dp(28), 0, 0) })
         // "≡ Menü" while the controls are visible, so the menu can be found
         menuHint = TextView(a).apply {
-            text = "≡  Menü: Sleep-Timer" + if (a.isLive) " · letzter Sender · zurückspulen" +
+            text = (if (a.isLive) "OK  Senderliste   ·   " else "") + "≡  Menü: Sleep-Timer" + if (a.isLive) " · letzter Sender · zurückspulen" +
                 (if (de.koeven.couchpotato.data.Profiles.active(a).kid) "" else " · Splitscreen") else ""
             setTextColor(TEXT); textSize = 15f; setTypeface(typeface, Typeface.BOLD)
             setPadding(a.dp(14), a.dp(6), a.dp(14), a.dp(6))
@@ -108,7 +108,8 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = a.dp(8) })
         }
         if (a.isLive) {
-            a.items.getOrNull(live.previous)?.let { prev -> add("↩ Zurück zu ${prev.title}") { hideMenu(); live.switchTo(live.previous) } }
+            add("☰ Senderliste") { hideMenu(); a.channels.show() }
+            live.previousItem?.let { prev -> add("↩ Zurück zu ${prev.title}") { hideMenu(); live.backToPrevious() } }
             if (live.behindMs() > 8_000L) add("▶▶ Zurück zu Live") { hideMenu(); live.goLive() }
             if (live.canRewind) {
                 add("⏪ 30 Sekunden zurück") { live.shiftBy(-30_000L); refreshMenu() }

@@ -194,7 +194,7 @@ class CatalogController(
         if (ctx.entries == null && searchIndex.exists()) {
             setIndexStatus("Lade Katalog …")
             ctx.entries = searchIndex.load()
-            de.koeven.couchpotato.player.WindowRemote.catalogue = ctx.entries   // the phone remote shares it
+            de.koeven.couchpotato.player.LiveLineup.catalogue = ctx.entries   // the phone remote shares it
             ctx.categoriesByKind = withContext(Dispatchers.IO) { searchIndex.loadCategories() }
             setIndexStatus(indexSummary(emptyList()))
         } else if (ctx.entries != null) {

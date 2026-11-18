@@ -28,8 +28,6 @@ import java.net.URLDecoder
  * home-screen icon on the phone. It only steers the window – no logins, no settings.
  */
 internal object WindowRemote {
-    /** The catalogue the launcher has in memory (set when it is loaded) – no second copy. */
-    @Volatile var catalogue: List<SearchEntry>? = null
 
     @Volatile private var server: ServerSocket? = null
     @Volatile var url: String? = null; private set
@@ -110,9 +108,7 @@ internal object WindowRemote {
             .put("vod", s.vod).put("paused", s.paused).put("hasNext", s.hasNext).put("kid", kid())
     }
 
-    private fun entries(): List<SearchEntry> = catalogue ?: runCatching {
-        kotlinx.coroutines.runBlocking { SearchIndex(app).load() }
-    }.getOrDefault(emptyList()).also { if (catalogue == null && it.isNotEmpty()) catalogue = it }
+    private fun entries(): List<SearchEntry> = LiveLineup.entries(app)
 
     /** Films or series of a category, newest first. */
     private fun titles(kind: Char, cat: String): JSONArray = JSONArray(

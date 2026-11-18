@@ -17,7 +17,8 @@ internal class LiveSession(private val a: PlayerActivity) {
     private var timeshift: TimeshiftBuffer? = null
     private var timeshiftOn = true          // switched off for a channel the buffer can't handle
     var index = -1; private set
-    var previous = -1; private set
+    /** The channel before the current one (also from another category) – "letzter Sender". */
+    var previousItem: de.koeven.couchpotato.data.PlayItem? = null; private set
     private var startWall = 0L              // wall time of the frame the current playback started with
     private var resumeChannel = -1
 
@@ -26,7 +27,7 @@ internal class LiveSession(private val a: PlayerActivity) {
     fun start(index: Int, fromOffset: Long? = null) {
         val item = a.items.getOrNull(index) ?: return
         if (index != this.index) {
-            if (this.index >= 0) previous = this.index
+            a.items.getOrNull(this.index)?.let { if (it.key != item.key) previousItem = it }
             this.index = index
             a.onChannel(index)
             de.koeven.couchpotato.data.SettingsStore(a)
@@ -88,6 +89,31 @@ internal class LiveSession(private val a: PlayerActivity) {
         zapTarget = -1
         a.toast(a.items[target].title)
         start(target)
+    }
+
+    /** Back to the channel watched before – it may be in another category than the current list. */
+    fun backToPrevious() {
+        val p = previousItem ?: return
+        var i = a.items.indexOfFirst { it.key == p.key }
+        if (i < 0) { a.items = a.items + p; i = a.items.lastIndex }
+        switchTo(i)
+    }
+
+    /**
+     * Another channel list (a category from the channel list) – up/down then zap through it.
+     * The same channel keeps playing without a new connection.
+     */
+    fun play(list: List<de.koeven.couchpotato.data.PlayItem>, i: Int) {
+        val target = list.getOrNull(i) ?: return
+        a.handler.removeCallbacks(zapCommit)
+        zapTarget = -1
+        val current = a.items.getOrNull(index)
+        a.items = list
+        if (current?.key == target.key) { index = i; a.onChannel(i); return }
+        if (current != null) previousItem = current
+        index = -1
+        a.toast(target.title)
+        start(i)
     }
 
     /** The stream ended (provider hiccup): start the channel again. */
