@@ -396,11 +396,14 @@ class PlayerActivity : Activity() {
             if (event.action == KeyEvent.ACTION_DOWN) live.backToPrevious()
             return true
         }
-        // Live timeshift: ◀ / ⏪ back 30 s, ▶ / ⏩ forward 30 s (towards live) while the controls are hidden
-        if (isLive && !playerView.isControllerFullyVisible) {
+        // Live timeshift: ⏪ / ⏩ always, ◀ / ▶ while the controls are hidden – 30 s back / towards live
+        if (isLive) {
+            val dpad = !playerView.isControllerFullyVisible
             val delta = when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> -30_000L
-                KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> 30_000L
+                KeyEvent.KEYCODE_MEDIA_REWIND -> -30_000L
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> 30_000L
+                KeyEvent.KEYCODE_DPAD_LEFT -> if (dpad) -30_000L else 0L
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (dpad) 30_000L else 0L
                 else -> 0L
             }
             if (delta != 0L) {
