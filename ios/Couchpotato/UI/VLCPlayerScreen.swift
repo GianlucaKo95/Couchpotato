@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 import VLCKit
@@ -57,10 +58,10 @@ final class VLCController: ObservableObject {
         time = seconds
     }
 
-    var audioTracks: [VLCMediaPlayerTrack] { player.audioTracks }
-    var textTracks: [VLCMediaPlayerTrack] { player.textTracks }
+    var audioTracks: [VLCMediaPlayer.Track] { player.audioTracks }
+    var textTracks: [VLCMediaPlayer.Track] { player.textTracks }
 
-    func select(_ t: VLCMediaPlayerTrack) {
+    func select(_ t: VLCMediaPlayer.Track) {
         t.isSelectedExclusively = true
         objectWillChange.send()
     }

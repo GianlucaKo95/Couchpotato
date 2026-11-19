@@ -1,0 +1,37 @@
+{
+  "supportUrl": "https://axdnmlqdvewmtmwfovgr.supabase.co/functions/v1/couchpotato-legal?p=support",
+  "marketingUrl": "https://axdnmlqdvewmtmwfovgr.supabase.co/functions/v1/couchpotato-legal?p=support",
+  "languages": {
+    "de": {
+      "locales": [
+        "de-DE"
+      ],
+      "names": [
+        "Couchpotato",
+        "Couchpotato IPTV",
+        "Couchpotato – IPTV Player"
+      ],
+      "subtitle": "Dein IPTV, synchron mit dem TV",
+      "privacyPolicyUrl": "https://axdnmlqdvewmtmwfovgr.supabase.co/functions/v1/couchpotato-legal",
+      "description": "Couchpotato ist der Player für deine eigenen IPTV-Quellen – und das Gegenstück zu Couchpotato auf Fire TV und Android-TV-Beamern.\n\nLIVE-TV, FILME, SERIEN\n• Sender nach Kategorien, Favoriten zum Umsortieren, die zuletzt gesehenen Sender\n• Filme und Serien mit Staffeln und Folgen, neue Titel, eine Suche über alles\n• Spielt MP4, HLS und auch MKV, AVI und MPEG-TS – mit Tonspuren und Untertiteln\n• Bild-in-Bild und AirPlay\n\nIM TAKT MIT DEINEN FERNSEHERN\n• „Weiterschauen“, Meine Liste, Favoriten und Profile auf allen Geräten\n• Ende-zu-Ende-verschlüsselt: Der Abgleich-Server kann nichts davon lesen\n• Im WLAN: Katalog direkt vom Fernseher, „Auf Fernseher abspielen“ und das iPhone als Fernbedienung\n\nSCHONT DEIN KONTO\nCouchpotato fragt deinen Anbieter selten und mit Abstand an – höchstens 40 Anfragen pro Stunde. So sperrt er dein Konto nicht wegen zu vieler Anfragen.\n\nFÜR DIE GANZE FAMILIE\nKinderprofile sehen nur freigegebene Kategorien, mit Eltern-PIN, Fernsehzeit und Schlafenszeit.\n\nWICHTIG\nCouchpotato enthält keine Sender, Filme oder Serien und verkauft oder vermittelt keine. Du nutzt die App ausschließlich mit Quellen (Xtream-Zugang), für die du selbst berechtigt bist. Ohne eigene Quelle kannst du die App mit Demo-Streams ausprobieren.\n\nKeine Werbung, kein Tracking, kein Benutzerkonto.",
+      "keywords": "IPTV,Xtream,Live TV,Player,MKV,Fire TV,Fernbedienung,Mediathek,Serien,Filme,EPG,Kinderprofil",
+      "promotionalText": "Live-TV, Filme und Serien aus deiner eigenen IPTV-Quelle – mit „Weiterschauen“ auf iPhone, Fire TV und Beamer."
+    },
+    "en": {
+      "locales": [
+        "en-US",
+        "en-GB"
+      ],
+      "names": [
+        "Couchpotato",
+        "Couchpotato IPTV",
+        "Couchpotato – IPTV Player"
+      ],
+      "subtitle": "Your IPTV, synced with your TV",
+      "privacyPolicyUrl": "https://axdnmlqdvewmtmwfovgr.supabase.co/functions/v1/couchpotato-legal",
+      "description": "Couchpotato is the player for your own IPTV sources – and the companion to Couchpotato on Fire TV and Android TV projectors.\n\nLIVE TV, MOVIES, SERIES\n• Channels by category, favourites you can reorder, recently watched channels\n• Movies and series with seasons and episodes, new arrivals, one search for everything\n• Plays MP4, HLS and also MKV, AVI and MPEG-TS – with audio tracks and subtitles\n• Picture in Picture and AirPlay\n\nIN STEP WITH YOUR TVS\n• Continue watching, My List, favourites and profiles on every device\n• End-to-end encrypted: the sync server can't read any of it\n• On your Wi-Fi: catalogue straight from the TV, \"Play on TV\" and your iPhone as a remote\n\nEASY ON YOUR ACCOUNT\nCouchpotato asks your provider rarely and with pauses – at most 40 requests per hour – so your account doesn't get locked for too many requests.\n\nFOR THE WHOLE FAMILY\nKids profiles only see approved categories, with a parents' PIN, screen time and bedtime.\n\nIMPORTANT\nCouchpotato contains no channels, movies or series and doesn't sell or provide any. Use it only with sources (Xtream access) you are entitled to. Without a source of your own you can try the app with demo streams.\n\nNo ads, no tracking, no account.",
+      "keywords": "IPTV,Xtream,live TV,player,MKV,Fire TV,remote,series,movies,kids profile,AirPlay",
+      "promotionalText": "Live TV, movies and series from your own IPTV source – continue watching on iPhone, Fire TV and projector."
+    }
+  }
+}

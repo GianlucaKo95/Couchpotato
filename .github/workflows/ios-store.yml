@@ -1,0 +1,52 @@
+name: iOS – App Store Connect
+
+# Fills in the App Store page from ios/docs/store-listing.json and sets the remaining required answers
+# (content rights, age rating, copyright). Nothing is submitted. Report: branch "ios-store-report".
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Was tun?"
+        type: choice
+        options: [listing, setup-show, setup-apply, status]
+        default: listing
+      dry_run:
+        description: "Nur anzeigen (listing)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  store:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/key.p8"
+          export ASC_KEY_PATH="$RUNNER_TEMP/key.p8"
+          pip install -q pyjwt cryptography >/dev/null 2>&1 || true
+          cd ios
+          case "${{ inputs.action }}" in
+            listing) python3 ci/asc_listing.py de.koeven.couchpotato ${{ inputs.dry_run && '--dry-run' || '' }} ;;
+            setup-show) python3 ci/asc_setup.py de.koeven.couchpotato show ;;
+            setup-apply) python3 ci/asc_setup.py de.koeven.couchpotato apply ;;
+            status) python3 ci/asc.py status de.koeven.couchpotato ;;
+          esac > /tmp/report.txt 2>&1 || echo "Exit $?" >> /tmp/report.txt
+      - name: Bericht veröffentlichen
+        if: always()
+        run: |
+          git config user.name "couchpotato-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git checkout --orphan ios-store-report
+          git rm -rf . >/dev/null 2>&1 || true
+          cp /tmp/report.txt report.txt
+          git add report.txt
+          git commit -q -m "App Store Connect: ${{ inputs.action }}"
+          git push -f origin ios-store-report
