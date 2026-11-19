@@ -245,6 +245,21 @@ final class AppModel: ObservableObject {
         syncSoon()
     }
 
+    /// "Alle ausblenden" / "Alle einblenden" in one go (one sync instead of hundreds).
+    func setHidden(_ kind: Character, _ cats: [LiveCategory], _ hidden: Bool) {
+        var set = data.stringSet("couchpotato", "hiddenCats")
+        for c in cats { if hidden { set.insert("\(kind):\(c.id)") } else { set.remove("\(kind):\(c.id)") } }
+        data.setStringSet("couchpotato", "hiddenCats", set)
+        syncSoon()
+    }
+
+    func setKidCategories(_ kind: Character, _ cats: [LiveCategory], _ on: Bool) {
+        var set = data.stringSet("profiles", "kidCats")
+        for c in cats { if on { set.insert("\(kind):\(c.id)") } else { set.remove("\(kind):\(c.id)") } }
+        data.setStringSet("profiles", "kidCats", set)
+        syncSoon()
+    }
+
     func isKidCategory(_ kind: Character, _ c: LiveCategory) -> Bool { data.stringSet("profiles", "kidCats").contains("\(kind):\(c.id)") }
 
     func setKidCategory(_ kind: Character, _ c: LiveCategory, _ on: Bool) {

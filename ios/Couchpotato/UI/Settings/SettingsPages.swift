@@ -305,6 +305,14 @@ struct CategoryToggles: View {
     let mode: Mode
     @State private var query = ""
 
+    private func bulkButton(_ text: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(text, systemImage: icon).font(Theme.heading(16)).frame(maxWidth: .infinity).padding(.vertical, 12)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12)).foregroundStyle(Theme.text)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var title: String {
         let what = kind == Entry.live ? "Sender" : kind == Entry.movie ? "Filme" : "Serien"
         return mode == .hide ? "Ausblenden – \(what)" : "Kinderprofil – \(what)"
@@ -313,6 +321,19 @@ struct CategoryToggles: View {
     var body: some View {
         let cats = model.orderedCategories(kind).filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
         List {
+            Section {
+                // all at once – applies to what the search shows, otherwise to every category
+                HStack(spacing: 12) {
+                    bulkButton(mode == .hide ? "Alle ausblenden" : "Keine freigeben", icon: mode == .hide ? "eye.slash" : "circle") {
+                        if mode == .hide { model.setHidden(kind, cats, true) } else { model.setKidCategories(kind, cats, false) }
+                    }
+                    bulkButton(mode == .hide ? "Alle einblenden" : "Alle freigeben", icon: mode == .hide ? "eye" : "checkmark.circle") {
+                        if mode == .hide { model.setHidden(kind, cats, false) } else { model.setKidCategories(kind, cats, true) }
+                    }
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            }
             Section {
                 ForEach(cats) { c in
                     let on = mode == .hide ? !model.isHidden(kind, c) : model.isKidCategory(kind, c)
