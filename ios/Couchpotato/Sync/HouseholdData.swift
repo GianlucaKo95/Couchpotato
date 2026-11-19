@@ -71,7 +71,7 @@ final class HouseholdData: ObservableObject {
         try? FileManager.default.removeItem(at: url)
     }
 
-    static func filesOf(_ snapshot: [String: Any]) -> Files {
+    nonisolated static func filesOf(_ snapshot: [String: Any]) -> Files {
         let prefs = (snapshot["preferences"] as? [String: Any]) ?? snapshot
         var out: Files = [:]
         for (name, value) in prefs {
