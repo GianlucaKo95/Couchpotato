@@ -132,6 +132,12 @@ struct XtreamClient {
         return try JSONSerialization.data(withJSONObject: o)
     }
 
+    /// Raw get_short_epg answer: what's on now and next (one request).
+    func shortEpgRaw(_ id: Int64, limit: Int = 8) async throws -> Data {
+        let o = try await get(api("get_short_epg", [URLQueryItem(name: "stream_id", value: String(id)), URLQueryItem(name: "limit", value: String(limit))]))
+        return try JSONSerialization.data(withJSONObject: o)
+    }
+
     /// Raw get_vod_info answer (one request; kept for good).
     func vodInfoRaw(_ id: Int64) async throws -> Data {
         let o = try await get(api("get_vod_info", [URLQueryItem(name: "vod_id", value: String(id))]))

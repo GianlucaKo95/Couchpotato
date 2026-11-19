@@ -169,6 +169,7 @@ object TvLink {
             method == "GET" && req.path == "/categories" -> file(out, File(app.filesDir, "categories_v3.json"), "application/json")
             method == "GET" && req.path == "/series" -> series(out, req.query["id"]?.toLongOrNull() ?: 0L)
             method == "GET" && req.path == "/movie" -> file(out, File(app.filesDir, "vodinfo/${req.query["id"]?.toLongOrNull() ?: 0L}.json"), "application/json")
+            method == "GET" && req.path == "/epg" -> epg(out, req.query["id"]?.toLongOrNull() ?: 0L)
             method == "GET" && req.path == "/state" -> json(out, state())
             method == "POST" && req.path == "/play" -> json(out, play(JSONObject(String(req.body, Charsets.UTF_8))))
             method == "POST" && req.path == "/key" -> json(out, key(JSONObject(String(req.body, Charsets.UTF_8)).optString("k")))
@@ -226,6 +227,22 @@ object TvLink {
             ?: return send(out, 404, "application/json", "{}".toByteArray())
         runCatching { kotlinx.coroutines.runBlocking { titles.loadSeries(id, name) } }
         file(out, File(app.filesDir, "seriesinfo/$id.json"), "application/json")
+    }
+
+    /**
+     * Programme of a channel for the phone: kept 20 minutes, so several phones (and zapping back and forth)
+     * cost the provider at most one request per channel and 20 minutes – through the TV's brake.
+     */
+    private fun epg(out: OutputStream, id: Long) {
+        val dir = File(app.cacheDir, "epg").apply { mkdirs() }
+        val f = File(dir, "$id.json")
+        if (!f.exists() || System.currentTimeMillis() - f.lastModified() > 20 * 60_000L) {
+            val text = runCatching {
+                kotlinx.coroutines.runBlocking { de.koeven.couchpotato.data.XtreamClient(SettingsStore(app).config()).shortEpgRaw(id) }
+            }.getOrNull()
+            if (text != null) f.writeText(text)
+        }
+        file(out, f, "application/json")
     }
 
     /** What's on: the player's item, position and pause state (read on the main thread). */

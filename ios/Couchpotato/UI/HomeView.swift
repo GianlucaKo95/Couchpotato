@@ -1,73 +1,92 @@
 import SwiftUI
 
-/// Start: "Weiterschauen" from all devices of the household, then the favourite channels
-/// and the 3 channels watched last – like the home screen on the TVs.
+/// Start: a big title picture (what you were watching, otherwise the newest film), then "Weiterschauen",
+/// the favourite channels, Meine Liste and what's new – like the home screen on the TVs.
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.verticalSizeClass) private var vertical
+    @Binding var section: AppSection
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
-                    let continuing = model.continueWatching
-                    if !continuing.isEmpty {
-                        section("Weiterschauen") {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                LazyHStack(spacing: 14) {
-                                    ForEach(continuing) { e in ContinueCard(entry: e) }
-                                }
-                                .padding(.horizontal, 20)
-                            }
-                        }
+        NavigationStack(path: $path) {
+            GeometryReader { g in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 26) {
+                        if let hero { HeroView(hero: hero, height: vertical == .compact ? g.size.height * 0.82 : 440) { path.append(hero.entry) } }
+                        rows
+                        if model.continueWatching.isEmpty && model.favorites.isEmpty && model.catalog.entries.isEmpty { emptyState }
                     }
-
-                    let mine = model.myList
-                    if !mine.isEmpty { PosterRow(title: "Meine Liste", entries: mine) }
-
-                    let favs = model.favorites
-                    let recent = model.recent.filter { r in !favs.contains { $0.id == r.id } }.prefix(3)
-                    let channels = favs + recent
-                    if !channels.isEmpty {
-                        section("Live-TV") {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 14)], spacing: 16) {
-                                ForEach(channels) { c in
-                                    Button { model.play(c, in: channels) } label: {
-                                        VStack(spacing: 6) {
-                                            ChannelLogo(channel: c, size: 78)
-                                            Text(c.name).font(.footnote).lineLimit(1).foregroundStyle(Theme.text)
-                                        }
-                                    }
-                                    .contextMenu {
-                                        FavoriteButton(channel: c)
-                                        TVMenuItems(body: model.tvBody(channel: c))
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                        }
-                    }
-
-                    if continuing.isEmpty && channels.isEmpty { emptyState }
+                    .padding(.bottom, 24)
                 }
-                .padding(.vertical, 12)
             }
+            .background(Theme.background)
             .refreshable { await model.syncNow(quiet: false) }
             .navigationDestination(for: Entry.self) { e in
                 if e.kind == Entry.series { SeriesDetail(entry: e) } else { MovieDetail(entry: e) }
             }
-            .background(Theme.background.ignoresSafeArea())
-            .toolbar {
-                ToolbarItem(placement: .principal) { Text("Couchpotato").font(Theme.title(24)).foregroundStyle(Theme.text) }
-                ToolbarItem(placement: .topBarTrailing) { ProfileMenu() }
-            }
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
-    private func section<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
+    // MARK: hero
+
+    struct Hero {
+        let entry: Entry
+        let image: String?
+        let progress: ProgressEntry?
+    }
+
+    private var hero: Hero? {
+        if let p = model.continueWatching.first {
+            let e = p.item.kind == "episode" ? p.item.seriesId.flatMap { model.entry(Entry.series, $0) } : model.entry(Entry.movie, p.item.streamId)
+            if let e { return Hero(entry: e, image: p.item.image ?? e.image, progress: p) }
+        }
+        if let e = model.newest(Entry.movie, limit: 10).first(where: { $0.image != nil }) { return Hero(entry: e, image: e.image, progress: nil) }
+        return nil
+    }
+
+    // MARK: rows
+
+    @ViewBuilder private var rows: some View {
+        let continuing = model.continueWatching
+        if !continuing.isEmpty {
+            row("Weiterschauen") {
+                ForEach(continuing) { e in ContinueCard(entry: e) }
+            }
+        }
+        let favs = model.favorites
+        let channels = favs + model.recent.filter { r in !favs.contains { $0.id == r.id } }.prefix(3)
+        if !channels.isEmpty {
+            row("Live TV") {
+                ForEach(channels) { c in
+                    Button { model.play(c, in: channels, category: "Favoriten") } label: {
+                        VStack(spacing: 6) {
+                            ChannelLogo(channel: c, size: 84)
+                            Text(c.name).font(.footnote).lineLimit(1).frame(width: 96).foregroundStyle(Theme.text)
+                        }
+                    }
+                    .contextMenu {
+                        FavoriteButton(channel: c)
+                        TVMenuItems(body: model.tvBody(channel: c))
+                    }
+                }
+            }
+        }
+        let mine = model.myList
+        if !mine.isEmpty { PosterRow(title: "Meine Liste", entries: mine) }
+        let films = model.newest(Entry.movie)
+        if !films.isEmpty { PosterRow(title: "Neue Filme", entries: films) }
+        let series = model.newest(Entry.series)
+        if !series.isEmpty { PosterRow(title: "Neue Serien", entries: series) }
+    }
+
+    private func row<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(Theme.heading(22)).foregroundStyle(Theme.text).padding(.horizontal, 20)
-            content()
+            Text(title).font(Theme.title(26)).foregroundStyle(Theme.text).padding(.horizontal, 24)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14, content: content).padding(.horizontal, 24)
+            }
         }
     }
 
@@ -76,11 +95,58 @@ struct HomeView: View {
             Image(systemName: "sofa").font(.system(size: 44)).foregroundStyle(Theme.accent)
             Text("Noch nichts hier").font(Theme.heading(22)).foregroundStyle(Theme.text)
             Text(model.household.linked
-                 ? "Was du am Fernseher schaust und als Favorit markierst, erscheint hier."
-                 : "Markiere unter Live-TV Sender mit dem Stern – sie landen dann hier.")
+                 ? "Sobald ein Couchpotato-Fernseher im WLAN ist oder dein IPTV-Zugang eingetragen ist, geht's los."
+                 : "Trag in den Einstellungen deinen IPTV-Zugang ein – oder verbinde das iPhone mit deinen Fernsehern.")
                 .multilineTextAlignment(.center).foregroundStyle(Theme.muted)
+            if !model.household.linked && model.login == nil {
+                Button("Zu den Einstellungen") { section = .settings }.foregroundStyle(Theme.accent).padding(.top, 6)
+            }
         }
         .frame(maxWidth: .infinity).padding(40)
+    }
+}
+
+struct HeroView: View {
+    @EnvironmentObject private var model: AppModel
+    let hero: HomeView.Hero
+    let height: CGFloat
+    let more: () -> Void
+
+    var body: some View {
+        let e = hero.entry
+        ZStack(alignment: .bottomLeading) {
+            RemoteImage(url: hero.image) { Theme.surface }
+                .frame(height: height).frame(maxWidth: .infinity).clipped()
+            LinearGradient(colors: [Theme.background.opacity(0.95), Theme.background.opacity(0.4), .clear], startPoint: .leading, endPoint: .trailing)
+            LinearGradient(colors: [.clear, .clear, Theme.background], startPoint: .top, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 10) {
+                Text(e.year.map { "\(e.name) (\($0))" } ?? e.name)
+                    .font(Theme.title(38)).foregroundStyle(Theme.text).lineLimit(2).minimumScaleFactor(0.7)
+                let facts = [e.year, e.genre].compactMap { $0 }.joined(separator: " • ")
+                if !facts.isEmpty { Text(facts).font(.system(size: 18)).foregroundStyle(Theme.muted).lineLimit(1) }
+                if let p = hero.progress, let s = p.item.subtitle { Text(s).font(.subheadline).foregroundStyle(Theme.muted).lineLimit(1) }
+                HStack(spacing: 14) {
+                    Button {
+                        if let p = hero.progress { model.resume(p) } else if e.kind == Entry.movie { model.playMovie(e) } else { more() }
+                    } label: {
+                        Text(hero.progress == nil ? "Abspielen" : "Weiterschauen").font(Theme.heading(20))
+                            .padding(.horizontal, 28).padding(.vertical, 12)
+                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 14)).foregroundStyle(Theme.onAccent)
+                    }
+                    Button(action: more) {
+                        Text("Mehr Infos").font(Theme.heading(20))
+                            .padding(.horizontal, 24).padding(.vertical, 12)
+                            .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.25)))
+                            .foregroundStyle(Theme.text)
+                    }
+                }
+                .padding(.top, 6)
+            }
+            .padding(.horizontal, 24).padding(.bottom, 22)
+            .frame(maxWidth: 620, alignment: .leading)
+        }
+        .frame(height: height)
     }
 }
 
@@ -93,7 +159,7 @@ struct ContinueCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 ZStack(alignment: .bottomLeading) {
                     RemoteImage(url: entry.item.image) { Theme.surface.overlay(Image(systemName: "film").foregroundStyle(Theme.muted)) }
-                        .frame(width: 220, height: 124).clipped()
+                        .frame(width: 250, height: 141).clipped()
                     if entry.fraction > 0 {
                         GeometryReader { g in
                             Rectangle().fill(Theme.accent).frame(width: g.size.width * entry.fraction, height: 4)
@@ -101,11 +167,11 @@ struct ContinueCard: View {
                         .frame(height: 4)
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
                 Text(entry.item.title).font(Theme.heading(16)).lineLimit(1).foregroundStyle(Theme.text)
                 Text(entry.upNext ? "Nächste Folge" : (entry.item.subtitle ?? remaining)).font(.caption).lineLimit(1).foregroundStyle(Theme.muted)
             }
-            .frame(width: 220)
+            .frame(width: 250)
         }
         .contextMenu {
             TVMenuItems(body: model.tvBody(progress: entry))
@@ -119,18 +185,6 @@ struct ContinueCard: View {
     }
 }
 
-struct FavoriteButton: View {
-    @EnvironmentObject private var model: AppModel
-    let channel: LiveChannel
-
-    var body: some View {
-        let fav = model.isFavorite(channel)
-        Button { model.toggleFavorite(channel) } label: {
-            Label(fav ? "Aus Favoriten entfernen" : "Zu Favoriten", systemImage: fav ? "star.slash" : "star")
-        }
-    }
-}
-
 struct ProfileMenu: View {
     @EnvironmentObject private var model: AppModel
 
@@ -140,9 +194,9 @@ struct ProfileMenu: View {
                 ForEach(model.profiles) { p in Text(p.kid ? "\(p.name) (Kinder)" : p.name).tag(p.id) }
             }
         } label: {
-            Circle().fill(Theme.avatarColors[model.profile.color % Theme.avatarColors.count])
-                .frame(width: 32, height: 32)
-                .overlay(Text(String(model.profile.name.prefix(1))).font(Theme.heading(16)).foregroundStyle(Theme.onAccent))
+            RoundedRectangle(cornerRadius: 10).fill(Theme.avatarColors[model.profile.color % Theme.avatarColors.count])
+                .frame(width: 38, height: 38)
+                .overlay(Text(String(model.profile.name.prefix(1))).font(Theme.heading(18)).foregroundStyle(Theme.onAccent))
         }
         .accessibilityLabel("Profil: \(model.profile.name)")
     }

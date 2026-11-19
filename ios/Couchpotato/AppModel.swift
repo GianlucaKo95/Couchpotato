@@ -64,19 +64,6 @@ struct ProgressEntry: Identifiable, Hashable {
     var fraction: Double { duration > 0 ? min(max(position / duration, 0), 1) : 0 }
 }
 
-/// What the player shows.
-struct Playback: Identifiable {
-    enum Engine { case native, vlc }
-    let id = UUID()
-    let url: URL
-    let item: PlayItem
-    let start: Double
-    let engine: Engine
-    var channels: [LiveChannel] = []   // live: switch channels in the player
-    var queue: [PlayItem] = []         // episodes that follow
-    var fallback: URL?                  // live: MPEG-TS for VLC if the provider has no HLS
-}
-
 struct PinRequest: Identifiable {
     let id = UUID()
     let title: String
@@ -96,7 +83,9 @@ final class AppModel: ObservableObject {
     @Published var demo: Bool { didSet { UserDefaults.standard.set(demo, forKey: "cp.demo") } }
     @Published private(set) var catalog: Catalog = .empty
     @Published private(set) var profileId: String { didSet { UserDefaults.standard.set(profileId, forKey: "cp.profile") } }
-    @Published var playback: Playback?
+    @Published private(set) var vod: VodSession?
+    @Published private(set) var live: LiveSession?
+    @Published var liveFullscreen = false
     @Published var notice: String?
     @Published private(set) var loadingCatalog = false
     @Published var pendingIptv: XtreamLogin?
@@ -107,6 +96,8 @@ final class AppModel: ObservableObject {
     let directory: URL
     let catalogStore: CatalogStore
     let titles: TitleInfoStore
+    let epgStore = EpgStore()
+    private var screenTicker: Timer?
     private var syncTask: Task<Void, Never>?
     private var forward: [AnyCancellable] = []
 
@@ -136,6 +127,19 @@ final class AppModel: ObservableObject {
         ]
         Task {
             if let c = await catalogStore.load() { catalog = c }
+        }
+        // kids: playing time counts against the day's screen time
+        screenTicker = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.countScreenTime() }
+        }
+    }
+
+    private func countScreenTime() {
+        guard profile.kid, (live?.engine.playing ?? false) || (vod?.engine.playing ?? false) else { return }
+        screenTime.add(30, for: profile)
+        if !mayPlay() {
+            stopLive()
+            closeVod()
         }
     }
 
@@ -322,9 +326,6 @@ final class AppModel: ObservableObject {
 
     // MARK: playing
 
-    /// Formats the iPhone plays itself (with AirPlay and picture in picture); everything else goes through VLC.
-    static let nativeExtensions: Set<String> = ["mp4", "m4v", "mov", "m3u8"]
-
     func mayPlay() -> Bool {
         guard profile.kid else { return true }
         switch screenTime.state(profile) {
@@ -335,48 +336,65 @@ final class AppModel: ObservableObject {
         return false
     }
 
-    func play(_ channel: LiveChannel, in list: [LiveChannel]) {
-        guard mayPlay(), let url = tune(channel) else { return }
-        var p = Playback(url: url, item: .live(channel), start: 0, engine: .native)
-        p.channels = list
-        p.fallback = channel.id > 0 ? client?.liveTSURL(channel.id) : nil
-        playback = p
-    }
-
-    /// Stream address of a channel; remembers it as watched last (the TVs show those behind the favourites).
-    func tune(_ channel: LiveChannel) -> URL? {
-        let url: URL?
-        if channel.id < 0 { url = DemoSource.url(channel.id) } else { url = client?.liveURL(channel.id) }
-        guard let url else { notice = needLogin; return nil }
-        if channel.id > 0 {
-            var recents = recent.filter { $0.id != channel.id }
-            recents.insert(channel, at: 0)
-            saveChannels("liveRecent", Array(recents.prefix(10)))
-            syncSoon()
-        }
-        return url
-    }
-
     private var needLogin: String {
         tvBrowser.devices.isEmpty
             ? "Zum Abspielen auf dem iPhone braucht es den IPTV-Zugang (Einstellungen)."
             : "Zum Abspielen auf dem iPhone braucht es den IPTV-Zugang (Einstellungen) – oder spiel es auf dem Fernseher ab."
     }
 
-    func play(_ item: PlayItem, from start: Double = 0, queue: [PlayItem] = []) {
+    // live TV
+
+    /// Starts a channel – in the preview of the live list, or straight in full screen.
+    func startLive(_ list: [LiveChannel], at channel: LiveChannel, category: String, fullscreen: Bool) {
         guard mayPlay() else { return }
-        guard let client else { notice = needLogin; return }
-        let url = item.kind == "episode" ? client.episodeURL(item.streamId, ext: item.ext) : client.movieURL(item.streamId, ext: item.ext)
-        guard let url else { return }
-        var p = Playback(url: url, item: item, start: start, engine: Self.nativeExtensions.contains(item.ext.lowercased()) ? .native : .vlc)
-        p.queue = queue
-        playback = p
+        guard channel.id < 0 || client != nil else { notice = needLogin; return }
+        closeVod()
+        if let live, live.channels.map(\.id) == list.map(\.id), let i = list.firstIndex(where: { $0.id == channel.id }) {
+            if live.current.id != channel.id { live.tune(i) }
+        } else {
+            live?.stop()
+            live = LiveSession(model: self, channels: list, index: list.firstIndex { $0.id == channel.id } ?? 0, category: category)
+        }
+        if fullscreen { liveFullscreen = true }
     }
 
-    /// The next item of a queue as a new playback (episodes play on by themselves).
-    func playNext(after p: Playback) {
-        guard let next = p.queue.first else { playback = nil; return }
-        play(next, from: 0, queue: Array(p.queue.dropFirst()))
+    func play(_ channel: LiveChannel, in list: [LiveChannel], category: String = "Live-TV") {
+        startLive(list, at: channel, category: category, fullscreen: true)
+    }
+
+    func stopLive() {
+        liveFullscreen = false
+        live?.stop()
+        live = nil
+    }
+
+    /// Remembers a channel as watched last (the TVs show those behind the favourites).
+    func rememberWatched(_ channel: LiveChannel) {
+        guard channel.id > 0 else { return }
+        var recents = recent.filter { $0.id != channel.id }
+        recents.insert(channel, at: 0)
+        saveChannels("liveRecent", Array(recents.prefix(10)))
+        syncSoon()
+    }
+
+    // films & episodes
+
+    func streamURL(_ item: PlayItem) -> URL? {
+        guard let client else { return nil }
+        return item.kind == "episode" ? client.episodeURL(item.streamId, ext: item.ext) : client.movieURL(item.streamId, ext: item.ext)
+    }
+
+    func play(_ item: PlayItem, from start: Double = 0, queue: [PlayItem] = []) {
+        guard mayPlay() else { return }
+        guard client != nil else { notice = needLogin; return }
+        stopLive()
+        vod?.stop()
+        vod = VodSession(model: self, item: item, start: start, queue: queue)
+    }
+
+    func closeVod() {
+        vod?.stop()
+        vod = nil
     }
 
     func playMovie(_ e: Entry) {

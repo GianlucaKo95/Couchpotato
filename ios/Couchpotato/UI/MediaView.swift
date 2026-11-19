@@ -1,19 +1,30 @@
 import SwiftUI
 
-/// Films & series: Meine Liste, new arrivals, categories – and one search over everything.
+/// Films or series: Meine Liste, new arrivals, then the categories as rows of posters.
 struct MediaView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var kind: Character = Entry.movie
-    @State private var query = ""
+    let kind: Character
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                if query.isEmpty { browse } else { SearchResultsView(query: query) }
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    let mine = model.myList.filter { $0.kind == kind }
+                    if !mine.isEmpty { PosterRow(title: "Meine Liste", entries: mine) }
+                    let fresh = model.newest(kind)
+                    if !fresh.isEmpty { PosterRow(title: kind == Entry.movie ? "Neue Filme" : "Neue Serien", entries: fresh) }
+                    ForEach(model.categories(kind)) { c in
+                        let titles = model.titles(kind, in: c)
+                        if !titles.isEmpty {
+                            PosterRow(title: c.name, entries: Array(titles.prefix(30)),
+                                      more: titles.count > 30 ? CategoryRoute(kind: kind, category: c) : nil)
+                        }
+                    }
+                }
+                .padding(.vertical, 12)
             }
-            .background(Theme.background.ignoresSafeArea())
-            .navigationTitle("Mediathek")
-            .searchable(text: $query, prompt: "Filme, Serien, Sender")
+            .background(Theme.background)
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Entry.self) { e in
                 if e.kind == Entry.series { SeriesDetail(entry: e) } else { MovieDetail(entry: e) }
             }
@@ -23,51 +34,44 @@ struct MediaView: View {
         }
     }
 
-    @ViewBuilder private var browse: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            Picker("Art", selection: $kind) {
-                Text("Filme").tag(Entry.movie)
-                Text("Serien").tag(Entry.series)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 20)
-
-            let mine = model.myList.filter { $0.kind == kind }
-            if !mine.isEmpty { PosterRow(title: "Meine Liste", entries: mine) }
-            let fresh = model.newest(kind)
-            if !fresh.isEmpty { PosterRow(title: kind == Entry.movie ? "Neue Filme" : "Neue Serien", entries: fresh) }
-
-            let cats = model.categories(kind)
-            if !cats.isEmpty {
-                Text("Kategorien").font(Theme.heading(22)).foregroundStyle(Theme.text).padding(.horizontal, 20)
-                LazyVStack(spacing: 0) {
-                    ForEach(cats) { c in
-                        NavigationLink(value: CategoryRoute(kind: kind, category: c)) {
-                            HStack {
-                                Text(c.name).foregroundStyle(Theme.text)
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.footnote).foregroundStyle(Theme.muted)
-                            }
-                            .padding(.horizontal, 20).padding(.vertical, 13)
-                        }
-                        Divider().overlay(Theme.surface).padding(.leading, 20)
-                    }
-                }
-            }
-        }
-        .padding(.vertical, 10)
-    }
-
     @ViewBuilder private var placeholder: some View {
-        if model.catalog.entries.isEmpty && query.isEmpty {
+        if model.catalog.entries.isEmpty {
             if model.loadingCatalog {
-                ProgressView("Katalog wird geladen …")
+                ProgressView("Katalog wird geladen …").tint(Theme.accent)
             } else {
                 ContentUnavailableView("Noch kein Katalog", systemImage: "film.stack",
                                        description: Text(model.login == nil
                                                          ? "Der Katalog kommt von einem Couchpotato-Fernseher im selben WLAN – oder gib in den Einstellungen deinen IPTV-Zugang ein."
                                                          : "Zum Laden nach unten ziehen."))
             }
+        }
+    }
+}
+
+/// Search over films, series and channels.
+struct SearchView: View {
+    @State private var query = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
+                    TextField("Filme, Serien, Sender", text: $query).foregroundStyle(Theme.text).autocorrectionDisabled().focused($focused)
+                    if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.muted) } }
+                }
+                .padding(.horizontal, 16).frame(height: 50)
+                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 20).padding(.vertical, 8)
+                ScrollView { SearchResultsView(query: query) }
+            }
+            .background(Theme.background)
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: Entry.self) { e in
+                if e.kind == Entry.series { SeriesDetail(entry: e) } else { MovieDetail(entry: e) }
+            }
+            .onAppear { focused = query.isEmpty }
         }
     }
 }
@@ -99,15 +103,21 @@ struct CategoryGrid: View {
 struct PosterRow: View {
     let title: String
     let entries: [Entry]
+    var more: CategoryRoute? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(Theme.heading(22)).foregroundStyle(Theme.text).padding(.horizontal, 20)
+            HStack {
+                Text(title).font(Theme.title(24)).foregroundStyle(Theme.text).lineLimit(1)
+                Spacer()
+                if let more { NavigationLink(value: more) { Text("Alle").font(Theme.heading(16)).foregroundStyle(Theme.accent) } }
+            }
+            .padding(.horizontal, 24)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 12) {
-                    ForEach(entries) { e in NavigationLink(value: e) { Poster(entry: e, width: 112) } }
+                    ForEach(entries) { e in NavigationLink(value: e) { Poster(entry: e, width: 120) } }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 24)
             }
         }
     }
@@ -192,7 +202,7 @@ struct MovieDetail: View {
                 header
                 let p = model.progress("vod:\(entry.itemId)")
                 Button { model.playMovie(entry) } label: {
-                    Label(p.map { $0.position > 10 ? "Weiterschauen (\(VLCPlayerScreen.clock($0.position)))" : "Abspielen" } ?? "Abspielen", systemImage: "play.fill")
+                    Label(p.map { $0.position > 10 ? "Weiterschauen (\(clock($0.position)))" : "Abspielen" } ?? "Abspielen", systemImage: "play.fill")
                 }
                 .buttonStyle(AccentButton())
                 PlayOnTVButton { model.tvBody(movie: entry) }

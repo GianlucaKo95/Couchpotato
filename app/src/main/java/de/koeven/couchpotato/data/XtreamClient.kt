@@ -212,6 +212,11 @@ class XtreamClient(private val cfg: XtreamConfig, private val background: Boolea
             failed
         }
 
+    /** Raw get_short_epg answer (for the iPhone app via TvLink; one request through the brake). */
+    suspend fun shortEpgRaw(streamId: Long, limit: Int = 8): String = withContext(Dispatchers.IO) {
+        readText(apiUrl("get_short_epg", "&stream_id=$streamId&limit=$limit"))
+    }
+
     /** Title of what's on right now (Xtream sends EPG titles base64-encoded). */
     suspend fun nowPlaying(streamId: Long): String? = withContext(Dispatchers.IO) {
         val root = runCatching {

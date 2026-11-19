@@ -88,7 +88,7 @@ struct RemoteView: View {
             if let s = state["subtitle"] as? String { Text(s).font(.subheadline).foregroundStyle(Theme.muted).lineLimit(1) }
             if dur > 0 {
                 ProgressView(value: min(pos / dur, 1)).tint(Theme.accent)
-                Text("\(VLCPlayerScreen.clock(pos / 1000)) von \(VLCPlayerScreen.clock(dur / 1000))").font(.caption.monospacedDigit()).foregroundStyle(Theme.muted)
+                Text("\(clock(pos / 1000)) von \(clock(dur / 1000))").font(.caption.monospacedDigit()).foregroundStyle(Theme.muted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

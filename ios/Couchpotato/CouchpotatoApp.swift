@@ -27,12 +27,17 @@ struct RootView: View {
     var body: some View {
         Group {
             if model.ready {
-                MainTabs()
+                MainShell()
             } else {
                 WelcomeView()
             }
         }
-        .fullScreenCover(item: $model.playback) { PlayerView(start: $0) }
+        .fullScreenCover(isPresented: Binding(get: { model.vod != nil }, set: { if !$0 { model.closeVod() } })) {
+            if let vod = model.vod { VodPlayerScreen(session: vod) }
+        }
+        .fullScreenCover(isPresented: $model.liveFullscreen) {
+            if let live = model.live { LivePlayerScreen(session: live) }
+        }
         .sheet(item: $model.pinRequest) { PinSheet(request: $0) }
         .fullScreenCover(isPresented: Binding(get: { model.lockedReason != nil }, set: { if !$0 { model.lockedReason = nil } })) {
             LockedView(reason: model.lockedReason ?? "")
@@ -51,22 +56,6 @@ struct RootView: View {
             Button("Nicht jetzt", role: .cancel) {}
         } message: {
             Text("Dein Hauptfernseher teilt seinen IPTV-Zugang mit dem Haushalt. Soll das iPhone ihn auch nutzen?")
-        }
-    }
-}
-
-struct MainTabs: View {
-    @EnvironmentObject private var model: AppModel
-
-    var body: some View {
-        TabView {
-            HomeView().tabItem { Label("Start", systemImage: "house.fill") }
-            LiveView().tabItem { Label("Live-TV", systemImage: "dot.radiowaves.left.and.right") }
-            MediaView().tabItem { Label("Mediathek", systemImage: "film.stack") }
-            if model.household.linked {
-                RemoteView().tabItem { Label("Fernseher", systemImage: "tv.and.mediabox") }
-            }
-            SettingsView().tabItem { Label("Einstellungen", systemImage: "gearshape") }
         }
     }
 }
