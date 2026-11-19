@@ -3,6 +3,8 @@ name: Build APK
 on:
   push:
     branches: [main]
+    # the iPhone app has its own workflow (ios.yml) – no new TV release for it
+    paths-ignore: ["ios/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
 
 permissions:

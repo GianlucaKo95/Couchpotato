@@ -1,0 +1,5 @@
+Couchpotato.xcodeproj/
+build/
+*.log
+report.txt
+ExportOptions.plist

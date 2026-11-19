@@ -1,0 +1,66 @@
+name: iOS
+
+# iPhone app (ios/). Every push that touches ios/ builds it for the simulator and runs the tests.
+# "Run workflow" with "testflight" ticked builds a signed release and uploads it to TestFlight.
+# The report lands on the branch "ios-report" (report.txt).
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: "Zu TestFlight hochladen"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-${{ inputs.testflight && 'testflight' || 'build' }}
+  cancel-in-progress: ${{ !inputs.testflight }}
+
+permissions:
+  contents: write
+
+jobs:
+  ios:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bauen
+        id: build
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ "${{ inputs.testflight }}" = "true" ]; then ios/ci/testflight.sh; else ios/ci/build.sh; fi
+
+      - name: Bericht veröffentlichen
+        if: always()
+        run: |
+          {
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Lauf:   ${GITHUB_RUN_NUMBER} (${{ inputs.testflight && 'TestFlight' || 'Simulator + Tests' }})"
+            echo "Zeit:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Ergebnis: ${{ steps.build.outcome }}"
+            echo
+            cat ios/report.txt 2>/dev/null || echo "(kein Bericht)"
+          } > /tmp/report.txt
+          git config user.name "couchpotato-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git checkout --orphan ios-report
+          git rm -rf . >/dev/null 2>&1 || true
+          cp /tmp/report.txt report.txt
+          git add report.txt
+          git commit -q -m "iOS-Bericht ${GITHUB_SHA}"
+          git push -f origin ios-report
+
+      - name: Ergebnis
+        if: steps.build.outcome == 'failure'
+        run: exit 1
