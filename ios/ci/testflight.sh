@@ -120,4 +120,9 @@ RES=$?
 tail -20 upload.log | tee -a "$REPORT"
 [ $RES -eq 0 ] || { log "!! Upload fehlgeschlagen ($RES)"; exit 32; }
 UPLOADED=1
+# for the follow-up job that releases the certificate once Apple has processed the build (ids only, no secrets)
+if [ -n "$GITHUB_OUTPUT" ]; then
+  echo "ids=$(python3 -c "import json;print(json.dumps(json.load(open('$WORK/ids.json')),separators=(',',':')))")" >> "$GITHUB_OUTPUT"
+  echo "build=${GITHUB_RUN_NUMBER:-1}" >> "$GITHUB_OUTPUT"
+fi
 log "Hochgeladen: Version $(grep MARKETING_VERSION project.yml | head -1 | sed 's/.*: *//; s/\"//g') Build ${GITHUB_RUN_NUMBER:-1}"

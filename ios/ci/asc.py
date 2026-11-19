@@ -175,6 +175,32 @@ def status(bundle_identifier):
             settings = json.dumps(a.get("settings"), ensure_ascii=False) if a.get("settings") else ""
             print(f"  {a.get('capabilityType')} {settings}")
 
+def release(ids_json, bundle_identifier, build_number, max_wait=45 * 60):
+    """Gibt Zertifikat und Profil eines Laufs frei, sobald Apple den Build fertig verarbeitet hat.
+    Erst dann – vorher führt ein gelöschtes Zertifikat zu „ITMS-90035: Invalid Signature“. So belegt kein
+    Lauf (Couchpotato oder Meeterz) länger als nötig einen der wenigen Verteilungsplätze des Teams."""
+    ids = json.loads(ids_json)
+    app = api("GET", f"/v1/apps?filter[bundleId]={bundle_identifier}").get("data", [])
+    start = time.time()
+    state = None
+    while app and time.time() - start < max_wait:
+        builds = api("GET", f"/v1/builds?filter[app]={app[0]['id']}&filter[version]={build_number}&limit=5").get("data", [])
+        state = builds[0]["attributes"].get("processingState") if builds else None
+        print(f"Build {build_number}: {state or 'noch nicht sichtbar'} nach {int(time.time() - start)} s", flush=True)
+        if state in ("VALID", "INVALID", "FAILED"):
+            break
+        time.sleep(60)
+    if state not in ("VALID", "INVALID", "FAILED"):
+        print("Apple ist noch nicht fertig – das Zertifikat räumt der nächste Lauf ab (älter als 2 Stunden)")
+        return
+    for kind, key in (("profiles", "profile"), ("certificates", "certificate")):
+        if ids.get(key):
+            try:
+                api("DELETE", f"/v1/{kind}/{ids[key]}")
+                print("freigegeben:", kind, ids[key])
+            except SystemExit:
+                pass
+
 def certs(drop_expiring=None):
     """Listet die Distributionszertifikate (Ablaufdatum = Erstellung + 1 Jahr). Mit `drop_expiring` (Anfang des
     Ablaufdatums, z. B. 2027-10-29T09:08) wird genau dieses Zertifikat gelöscht – nur wenn es zu keinem Profil gehört."""
@@ -195,8 +221,9 @@ def certs(drop_expiring=None):
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "certs": certs(sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None); raise SystemExit
-    if cmd == "purge": purge(); raise SystemExit
+    if cmd == "purge": purge(int(sys.argv[2]) if len(sys.argv) > 2 else 7200); raise SystemExit
     if cmd == "status": status(sys.argv[2]); raise SystemExit
     if cmd == "create": create(sys.argv[2], sys.argv[3], sys.argv[4])
     elif cmd == "extra": extra(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
     elif cmd == "cleanup": cleanup(sys.argv[2])
+    elif cmd == "release": release(sys.argv[2], sys.argv[3], sys.argv[4])

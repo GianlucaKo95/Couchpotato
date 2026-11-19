@@ -8,7 +8,7 @@ on:
       action:
         description: "Was tun?"
         type: choice
-        options: [listing, setup-show, setup-apply, status]
+        options: [listing, setup-show, setup-apply, status, zertifikate-freigeben]
         default: listing
       dry_run:
         description: "Nur anzeigen (listing)"
@@ -38,6 +38,7 @@ jobs:
             setup-show) python3 ci/asc_setup.py de.koeven.couchpotato show ;;
             setup-apply) python3 ci/asc_setup.py de.koeven.couchpotato apply ;;
             status) python3 ci/asc.py status de.koeven.couchpotato ;;
+            zertifikate-freigeben) python3 ci/asc.py purge 1800; python3 ci/asc.py certs ;;
           esac > /tmp/report.txt 2>&1 || echo "Exit $?" >> /tmp/report.txt
       - name: Bericht veröffentlichen
         if: always()

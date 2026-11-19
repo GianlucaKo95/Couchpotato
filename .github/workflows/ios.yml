@@ -25,6 +25,9 @@ jobs:
   ios:
     runs-on: xcode-27
     timeout-minutes: 45
+    outputs:
+      ids: ${{ steps.build.outputs.ids }}
+      build: ${{ steps.build.outputs.build }}
     steps:
       - uses: actions/checkout@v4
 
@@ -64,3 +67,24 @@ jobs:
       - name: Ergebnis
         if: steps.build.outcome == 'failure'
         run: exit 1
+
+  # Gives the signing certificate back as soon as Apple has processed the build (Meeterz needs the place too).
+  # Runs on a cheap Linux machine – waiting on the Mac would cost ten times as many minutes.
+  release-certificate:
+    needs: ios
+    if: ${{ always() && needs.ios.outputs.ids != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zertifikat freigeben
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          IDS: ${{ needs.ios.outputs.ids }}
+          BUILD: ${{ needs.ios.outputs.build }}
+        run: |
+          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/key.p8"
+          export ASC_KEY_PATH="$RUNNER_TEMP/key.p8"
+          python3 ios/ci/asc.py release "$IDS" de.koeven.couchpotato "$BUILD"
