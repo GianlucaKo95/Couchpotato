@@ -48,10 +48,11 @@ targets:
         UIAppFonts: [baloo2_700.ttf, baloo2_800.ttf]
         # picture in picture and AirPlay keep playing when the app is in the background
         UIBackgroundModes: [audio]
-        # IPTV servers mostly speak plain http – the user enters them, the app can't know them beforehand
+        # IPTV servers mostly speak plain http – the user enters them, the app can't know them beforehand.
+        # Only this one key: with NSAllowsArbitraryLoadsForMedia (or …InWebContent / NSAllowsLocalNetworking)
+        # next to it, iOS ignores NSAllowsArbitraryLoads and blocks every http request.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
-          NSAllowsArbitraryLoadsForMedia: true
         # finding the household's Couchpotato TVs in the Wi-Fi
         NSLocalNetworkUsageDescription: "Couchpotato findet damit deine Couchpotato-Fernseher im WLAN – für den Katalog, „Auf Fernseher abspielen“ und die Fernbedienung."
         NSBonjourServices: [_couchpotato._tcp]
