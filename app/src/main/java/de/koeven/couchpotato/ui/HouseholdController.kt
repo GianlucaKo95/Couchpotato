@@ -22,10 +22,11 @@ class HouseholdController(
         get() = cloud.shareIptv
         set(value) { cloud.shareIptv = value }
 
-    suspend fun create(): String = cloud.createHousehold()
+    suspend fun create(): String = cloud.createHousehold().also { de.koeven.couchpotato.player.TvLink.refresh() }
 
     suspend fun join(code: String): String {
         val result = cloud.join(code)
+        de.koeven.couchpotato.player.TvLink.refresh()
         reload()
         return result.message + takeSharedLogin(result.iptv, always = true)
     }
@@ -37,9 +38,9 @@ class HouseholdController(
         return result.message + takeSharedLogin(result.iptv, always = false)
     }
 
-    suspend fun renewCode(): String = cloud.renewCode()
+    suspend fun renewCode(): String = cloud.renewCode().also { de.koeven.couchpotato.player.TvLink.refresh() }
 
-    suspend fun leave(): String = cloud.leave()
+    suspend fun leave(): String = cloud.leave().also { de.koeven.couchpotato.player.TvLink.refresh() }
 
     /**
      * Automatic sync in the background (at most once a minute). If the cloud can't be reached,

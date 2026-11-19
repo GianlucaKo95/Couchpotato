@@ -8,6 +8,11 @@ import coil.memory.MemoryCache
 
 /** One image loader for the whole launcher, tuned for a Fire TV stick with little RAM. */
 class CouchpotatoApp : Application(), ImageLoaderFactory {
+    override fun onCreate() {
+        super.onCreate()
+        de.koeven.couchpotato.player.TvLink.install(this)   // link to the iPhone app (same household, same Wi-Fi)
+    }
+
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
         .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.20).build() }
         // posters survive a reboot of the stick: no reloading every row from the provider

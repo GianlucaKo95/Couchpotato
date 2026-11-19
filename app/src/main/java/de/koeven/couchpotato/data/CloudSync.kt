@@ -54,6 +54,9 @@ class CloudSync(context: Context) {
         set(value) = prefs.edit().putBoolean("shareIptv", value).apply()
 
     /** "7KQ2M-X9P4T", or null when not part of a household. */
+    /** Key for the phone link on the local network (TvLink): derived from the household's AES key, never sent anywhere. */
+    fun linkKey(): ByteArray? = secure.read("keys")?.let { runCatching { HouseholdKeys.decode(it).linkKey() }.getOrNull() }
+
     fun householdCode(): String? = secure.read("code")?.let { "${it.take(5)}-${it.drop(5)}" }
 
     fun status(): String = when {
@@ -424,6 +427,11 @@ private class HouseholdKeys(private val auth: ByteArray, private val enc: ByteAr
         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(enc, "AES"), GCMParameterSpec(128, iv))
         cipher.updateAAD(aad)
         return Base64.encodeToString(byteArrayOf(FORMAT) + iv + cipher.doFinal(zipped), Base64.NO_WRAP)
+    }
+
+    fun linkKey(): ByteArray = javax.crypto.Mac.getInstance("HmacSHA256").run {
+        init(SecretKeySpec(enc, "HmacSHA256"))
+        doFinal("couchpotato-link-v1".toByteArray(Charsets.UTF_8))
     }
 
     fun open(blob: String): JSONObject? = runCatching {

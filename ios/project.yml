@@ -6,12 +6,20 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+packages:
+  # VLC for MKV, AVI & co. (official VideoLAN package, pinned)
+  VLCKit:
+    url: https://github.com/videolan/vlckit
+    revision: 3d0f0fa7031eab1a67c817c98a495e1c68fc998c
+
 targets:
   Couchpotato:
     type: application
     platform: iOS
     sources:
       - path: Couchpotato
+    dependencies:
+      - package: VLCKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.koeven.couchpotato
@@ -44,6 +52,9 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
           NSAllowsArbitraryLoadsForMedia: true
+        # finding the household's Couchpotato TVs in the Wi-Fi
+        NSLocalNetworkUsageDescription: "Couchpotato findet damit deine Couchpotato-Fernseher im WLAN – für den Katalog, „Auf Fernseher abspielen“ und die Fernbedienung."
+        NSBonjourServices: [_couchpotato._tcp]
         CPSupabaseURL: $(CP_SUPABASE_URL)
         CPSupabaseKey: $(CP_SUPABASE_KEY)
 

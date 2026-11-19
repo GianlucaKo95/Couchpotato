@@ -29,6 +29,9 @@ final class HouseholdSync: ObservableObject {
 
     static var configured: Bool { !Config.supabaseURL.isEmpty && !Config.supabaseKey.isEmpty }
 
+    /// Key for the TVs in the same Wi-Fi; nil outside a household.
+    var linkKey: Data? { Keychain.data("household.keys").flatMap(HouseholdKeys.init(encoded:))?.linkKey }
+
     var code: String? { Keychain.string("household.code").map(HouseholdCode.display) }
 
     // MARK: join / sync / leave

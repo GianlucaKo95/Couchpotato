@@ -32,7 +32,11 @@ struct RootView: View {
                 WelcomeView()
             }
         }
-        .fullScreenCover(item: $model.playback) { PlayerView(playback: $0) }
+        .fullScreenCover(item: $model.playback) { PlayerView(start: $0) }
+        .sheet(item: $model.pinRequest) { PinSheet(request: $0) }
+        .fullScreenCover(isPresented: Binding(get: { model.lockedReason != nil }, set: { if !$0 { model.lockedReason = nil } })) {
+            LockedView(reason: model.lockedReason ?? "")
+        }
         .alert("Hinweis", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -52,10 +56,16 @@ struct RootView: View {
 }
 
 struct MainTabs: View {
+    @EnvironmentObject private var model: AppModel
+
     var body: some View {
         TabView {
             HomeView().tabItem { Label("Start", systemImage: "house.fill") }
-            LiveView().tabItem { Label("Live-TV", systemImage: "tv") }
+            LiveView().tabItem { Label("Live-TV", systemImage: "dot.radiowaves.left.and.right") }
+            MediaView().tabItem { Label("Mediathek", systemImage: "film.stack") }
+            if model.household.linked {
+                RemoteView().tabItem { Label("Fernseher", systemImage: "tv.and.mediabox") }
+            }
             SettingsView().tabItem { Label("Einstellungen", systemImage: "gearshape") }
         }
     }

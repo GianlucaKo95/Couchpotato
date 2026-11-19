@@ -13,7 +13,7 @@ struct LiveView: View {
                             Label("Favoriten", systemImage: "star.fill").foregroundStyle(Theme.accent)
                         }
                     }
-                    ForEach(model.categories) { c in
+                    ForEach(model.categories(Entry.live)) { c in
                         NavigationLink(value: c) { Text(c.name).foregroundStyle(Theme.text) }
                     }
                 } else {
@@ -28,17 +28,17 @@ struct LiveView: View {
             .navigationTitle("Live-TV")
             .searchable(text: $query, prompt: "Sender suchen")
             .navigationDestination(for: LiveCategory.self) { ChannelList(category: $0) }
-            .refreshable { await model.refreshCatalog(background: false) }
+            .refreshable { await model.refreshCatalog(force: true, background: false) }
         }
     }
 
     @ViewBuilder private var placeholder: some View {
-        if model.categories.isEmpty && query.isEmpty {
+        if model.categories(Entry.live).isEmpty && query.isEmpty {
             if model.loadingCatalog {
                 ProgressView("Senderliste wird geladen …")
-            } else if model.login == nil {
-                ContentUnavailableView("Kein IPTV-Zugang", systemImage: "key",
-                                       description: Text("Gib in den Einstellungen deinen Zugang ein – oder übernimm ihn von deinem Fernseher."))
+            } else if model.login == nil && model.catalog.entries.isEmpty {
+                ContentUnavailableView("Keine Senderliste", systemImage: "key",
+                                       description: Text("Die Senderliste kommt von einem Couchpotato-Fernseher im selben WLAN – oder gib in den Einstellungen deinen IPTV-Zugang ein."))
             } else {
                 ContentUnavailableView("Noch keine Senderliste", systemImage: "tv",
                                        description: Text("Zum Laden nach unten ziehen."))
@@ -86,6 +86,9 @@ struct ChannelRow: View {
             Button { model.toggleFavorite(channel) } label: { Label(fav ? "Entfernen" : "Favorit", systemImage: fav ? "star.slash" : "star") }
                 .tint(fav ? .gray : Theme.accent)
         }
-        .contextMenu { FavoriteButton(channel: channel) }
+        .contextMenu {
+            FavoriteButton(channel: channel)
+            TVMenuItems(body: model.tvBody(channel: channel))
+        }
     }
 }

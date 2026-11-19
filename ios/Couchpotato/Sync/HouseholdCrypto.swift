@@ -39,6 +39,14 @@ struct HouseholdKeys: Equatable {
 
     private var aad: Data { Data(SHA256.hash(data: auth)) }
 
+    /// Key for talking to the TVs in the same Wi-Fi (TvLink.kt): derived from the AES key, never sent anywhere.
+    var linkKey: Data {
+        Data(HMAC<SHA256>.authenticationCode(for: Data("couchpotato-link-v1".utf8), using: SymmetricKey(data: enc)))
+    }
+
+    /// What the TVs announce in Bonjour so the phone only lists its own household's TVs.
+    static func tag(_ linkKey: Data) -> String { SHA256.hash(data: linkKey).prefix(6).map { String(format: "%02x", $0) }.joined() }
+
     /// JSON → gzip → AES-256-GCM, bound to this household. Same layout as on the TVs: 1 | iv | ciphertext | tag.
     func seal(_ json: Data) throws -> String {
         let box = try AES.GCM.seal(Gzip.compress(json), using: SymmetricKey(data: enc), nonce: AES.GCM.Nonce(), authenticating: aad)

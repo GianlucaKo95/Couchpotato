@@ -112,29 +112,38 @@ struct XtreamClient {
         return line
     }
 
-    /// Two requests: categories and all channels.
-    func liveCatalog() async throws -> LiveCatalog {
-        guard let cats = try await get(api("get_live_categories")) as? [[String: Any]] else {
-            throw XtreamError.badAnswer("Kategorien konnten nicht geladen werden")
-        }
-        guard let streams = try await get(api("get_live_streams")) as? [[String: Any]] else {
-            throw XtreamError.badAnswer("Sender konnten nicht geladen werden")
-        }
-        let categories = cats.compactMap { o -> LiveCategory? in
+    func categories(_ action: String) async throws -> [LiveCategory] {
+        guard let cats = try await get(api(action)) as? [[String: Any]] else { throw XtreamError.badAnswer("Kategorien konnten nicht geladen werden") }
+        return cats.compactMap { o in
             guard let id = Self.string(o["category_id"]) else { return nil }
             return LiveCategory(id: id, name: Self.string(o["category_name"]) ?? id)
         }
-        var seen = Set<Int64>()
-        let channels = streams.compactMap { o -> LiveChannel? in
-            guard let id = Self.string(o["stream_id"]).flatMap({ Int64($0) }), seen.insert(id).inserted else { return nil }
-            let logo = Self.string(o["stream_icon"]).flatMap { $0.hasPrefix("http") ? $0 : nil }
-            return LiveChannel(id: id, name: Names.display(Self.string(o["name"]) ?? ""), logo: logo, cat: Self.string(o["category_id"]))
-        }
-        return LiveCatalog(categories: categories, channels: channels, fetchedAt: Date())
+    }
+
+    func list(_ action: String) async throws -> [[String: Any]] {
+        guard let list = try await get(api(action)) as? [[String: Any]] else { throw XtreamError.badAnswer("Liste konnte nicht geladen werden") }
+        return list
+    }
+
+    /// Raw get_series_info answer (one request; the caller keeps it).
+    func seriesInfoRaw(_ id: Int64) async throws -> Data {
+        let o = try await get(api("get_series_info", [URLQueryItem(name: "series_id", value: String(id))]))
+        guard o is [String: Any] else { throw XtreamError.badAnswer("Serie konnte nicht geladen werden") }
+        return try JSONSerialization.data(withJSONObject: o)
+    }
+
+    /// Raw get_vod_info answer (one request; kept for good).
+    func vodInfoRaw(_ id: Int64) async throws -> Data {
+        let o = try await get(api("get_vod_info", [URLQueryItem(name: "vod_id", value: String(id))]))
+        guard let root = o as? [String: Any], root["info"] is [String: Any] else { throw XtreamError.badAnswer("Der Anbieter hat zu diesem Film keine Details") }
+        return try JSONSerialization.data(withJSONObject: root)
     }
 
     /// Live channels as HLS – the format the iPhone plays natively (with AirPlay and picture in picture).
     func liveURL(_ id: Int64) -> URL? { stream("live", id, "m3u8") }
+
+    /// Plain MPEG-TS – for providers without HLS (played with VLC).
+    func liveTSURL(_ id: Int64) -> URL? { stream("live", id, "ts") }
 
     func movieURL(_ id: Int64, ext: String) -> URL? { stream("movie", id, ext) }
     func episodeURL(_ id: Int64, ext: String) -> URL? { stream("series", id, ext) }
@@ -154,12 +163,6 @@ struct XtreamClient {
         default: return nil
         }
     }
-}
-
-struct LiveCatalog: Codable {
-    var categories: [LiveCategory]
-    var channels: [LiveChannel]
-    var fetchedAt: Date
 }
 
 enum XtreamError: LocalizedError {

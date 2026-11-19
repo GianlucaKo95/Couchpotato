@@ -23,4 +23,22 @@ enum Names {
         let out = s.trimmingCharacters(in: separators)
         return out.isEmpty ? raw.trimmed : out
     }
+
+    private static let sxxexx = try! NSRegularExpression(pattern: #"\bS\s?(\d{1,3})\s?[ ._-]?\s?E\s?(\d{1,4})\b"#, options: .caseInsensitive)
+
+    /// "Breaking Bad - S01E03 - …And the Bag's in the River" → "…And the Bag's in the River".
+    static func episode(_ raw: String?, series: String, number: Int) -> String {
+        let fallback = "Folge \(number)"
+        guard let raw else { return fallback }
+        var s = display(raw)
+        let name = display(series).trimmed
+        if name.count >= 2, s.lowercased().hasPrefix(name.lowercased()) { s = String(s.dropFirst(name.count)) }
+        s = s.trimmingCharacters(in: separators)
+        let ns = s as NSString
+        if let m = sxxexx.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)), m.range.location <= 40 {
+            s = ns.substring(from: m.range.location + m.range.length)
+        }
+        s = s.trimmingCharacters(in: separators)
+        return s.isEmpty ? fallback : s
+    }
 }

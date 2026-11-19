@@ -48,6 +48,10 @@ final class HouseholdData: ObservableObject {
         put(file, key, ["type": "set", "value": value.sorted()])
     }
 
+    func setLong(_ file: String, _ key: String, _ value: Int64) {
+        put(file, key, ["type": "long", "value": NSNumber(value: value)])
+    }
+
     func remove(_ file: String, _ key: String) { put(file, key, nil) }
 
     private func put(_ file: String, _ key: String, _ typed: [String: Any]?) {

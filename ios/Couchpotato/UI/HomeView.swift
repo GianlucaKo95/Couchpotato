@@ -21,6 +21,9 @@ struct HomeView: View {
                         }
                     }
 
+                    let mine = model.myList
+                    if !mine.isEmpty { PosterRow(title: "Meine Liste", entries: mine) }
+
                     let favs = model.favorites
                     let recent = model.recent.filter { r in !favs.contains { $0.id == r.id } }.prefix(3)
                     let channels = favs + recent
@@ -34,7 +37,10 @@ struct HomeView: View {
                                             Text(c.name).font(.footnote).lineLimit(1).foregroundStyle(Theme.text)
                                         }
                                     }
-                                    .contextMenu { FavoriteButton(channel: c) }
+                                    .contextMenu {
+                                        FavoriteButton(channel: c)
+                                        TVMenuItems(body: model.tvBody(channel: c))
+                                    }
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -46,6 +52,9 @@ struct HomeView: View {
                 .padding(.vertical, 12)
             }
             .refreshable { await model.syncNow(quiet: false) }
+            .navigationDestination(for: Entry.self) { e in
+                if e.kind == Entry.series { SeriesDetail(entry: e) } else { MovieDetail(entry: e) }
+            }
             .background(Theme.background.ignoresSafeArea())
             .toolbar {
                 ToolbarItem(placement: .principal) { Text("Couchpotato").font(Theme.title(24)).foregroundStyle(Theme.text) }
@@ -99,6 +108,7 @@ struct ContinueCard: View {
             .frame(width: 220)
         }
         .contextMenu {
+            TVMenuItems(body: model.tvBody(progress: entry))
             Button(role: .destructive) { model.hideContinue(entry) } label: { Label("Aus „Weiterschauen“ entfernen", systemImage: "eye.slash") }
         }
     }
@@ -126,8 +136,8 @@ struct ProfileMenu: View {
 
     var body: some View {
         Menu {
-            Picker("Profil", selection: $model.profileId) {
-                ForEach(model.profiles) { p in Text(p.name).tag(p.id) }
+            Picker("Profil", selection: Binding(get: { model.profile.id }, set: { model.chooseProfile($0) })) {
+                ForEach(model.profiles) { p in Text(p.kid ? "\(p.name) (Kinder)" : p.name).tag(p.id) }
             }
         } label: {
             Circle().fill(Theme.avatarColors[model.profile.color % Theme.avatarColors.count])
@@ -135,5 +145,19 @@ struct ProfileMenu: View {
                 .overlay(Text(String(model.profile.name.prefix(1))).font(Theme.heading(16)).foregroundStyle(Theme.onAccent))
         }
         .accessibilityLabel("Profil: \(model.profile.name)")
+    }
+}
+
+/// "Auf „Fernseher“ abspielen" entries for context menus – one per TV in the Wi-Fi.
+struct TVMenuItems: View {
+    @EnvironmentObject private var model: AppModel
+    let body_: [String: Any]
+
+    init(body: [String: Any]) { body_ = body }
+
+    var body: some View {
+        ForEach(model.orderedTVs) { tv in
+            Button { model.playOnTV(body_, on: tv) } label: { Label("Auf „\(tv.name)“ abspielen", systemImage: "tv") }
+        }
     }
 }

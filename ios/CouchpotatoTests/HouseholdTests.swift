@@ -66,3 +66,37 @@ final class HouseholdTests: XCTestCase {
         XCTAssertEqual(Names.display("CSI: Miami"), "CSI: Miami")
     }
 }
+
+final class CatalogTests: XCTestCase {
+    func testTsvRoundTripLikeTheTv() {
+        let line = "m\t42\tmkv\thttp://img/x.jpg\tDE: Der Pate\tder pate\t7\t1700000000\t9.2\tDrama\t1972\t238\n"
+        let e = Catalog.parseTSV(line)
+        XCTAssertEqual(e.count, 1)
+        XCTAssertEqual(e[0].name, "Der Pate")
+        XCTAssertEqual(e[0].ext, "mkv")
+        XCTAssertEqual(e[0].tmdb, 238)
+        XCTAssertEqual(e[0].categoryKey, "m:7")
+        XCTAssertEqual(Catalog.parseTSV(Catalog.tsvLine(e[0])).first, e[0])
+    }
+
+    func testNormalizeLikeTheTv() {
+        XCTAssertEqual(Catalog.normalize("Café – Größe!"), "cafe grosse")
+    }
+
+    func testSearchRanksPrefixFirst() {
+        let c = Catalog(entries: Catalog.parseTSV("m\t1\tmp4\t\tDer Pate\tder pate\t1\t0\n m\t2\tmp4\t\tPate\tpate\t1\t0\n".replacingOccurrences(of: "\n m", with: "\nm")),
+                        categories: [:], fetchedAt: Date(), source: "")
+        XCTAssertEqual(c.search("pate", allowed: { _ in true })[Entry.movie]?.first?.itemId, 2)
+    }
+
+    func testEpisodeNames() {
+        XCTAssertEqual(Names.episode("Breaking Bad - S01E03 - Der Beutel", series: "Breaking Bad", number: 3), "Der Beutel")
+        XCTAssertEqual(Names.episode(nil, series: "X", number: 4), "Folge 4")
+    }
+
+    func testLinkKeyIsStable() {
+        let k = HouseholdKeys.derive(code: "7KQ2MX9P4T")
+        XCTAssertEqual(k.linkKey.count, 32)
+        XCTAssertEqual(HouseholdKeys.tag(k.linkKey), "dfaf2b0d5859")   // same as TvLink.kt announces
+    }
+}
