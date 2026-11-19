@@ -56,7 +56,7 @@ struct LockedView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: "moon.stars.fill").font(.system(size: 64)).foregroundStyle(Theme.accent)
+            Image(systemName: "moon.stars").font(.system(size: 56, weight: .light)).foregroundStyle(Theme.muted)
             Text(reason).font(Theme.title(28)).multilineTextAlignment(.center).foregroundStyle(Theme.text)
             Text("Morgen geht's weiter.").foregroundStyle(Theme.muted)
             Button("Eltern: 30 Minuten mehr") {

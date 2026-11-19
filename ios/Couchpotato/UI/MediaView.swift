@@ -8,7 +8,7 @@ struct MediaView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24) {
+                LazyVStack(alignment: .leading, spacing: 32) {
                     let mine = model.myList.filter { $0.kind == kind }
                     if !mine.isEmpty { PosterRow(title: "Meine Liste", entries: mine) }
                     let fresh = model.newest(kind)
@@ -24,7 +24,8 @@ struct MediaView: View {
                 .padding(.vertical, 12)
             }
             .background(Theme.background)
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle(kind == Entry.movie ? "Filme" : "Serien")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { AccountButton() } }
             .navigationDestination(for: Entry.self) { e in
                 if e.kind == Entry.series { SeriesDetail(entry: e) } else { MovieDetail(entry: e) }
             }
@@ -51,27 +52,25 @@ struct MediaView: View {
 /// Search over films, series and channels.
 struct SearchView: View {
     @State private var query = ""
-    @FocusState private var focused: Bool
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
-                    TextField("Filme, Serien, Sender", text: $query).foregroundStyle(Theme.text).autocorrectionDisabled().focused($focused)
-                    if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.muted) } }
+            ScrollView {
+                if query.isEmpty {
+                    Text("Filme, Serien und Sender – alles in einer Suche").font(.subheadline).foregroundStyle(Theme.muted)
+                        .frame(maxWidth: .infinity).padding(.top, 48)
+                } else {
+                    SearchResultsView(query: query)
                 }
-                .padding(.horizontal, 16).frame(height: 50)
-                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14))
-                .padding(.horizontal, 20).padding(.vertical, 8)
-                ScrollView { SearchResultsView(query: query) }
             }
             .background(Theme.background)
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("Suche")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Filme, Serien, Sender")
+            .autocorrectionDisabled()
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { AccountButton() } }
             .navigationDestination(for: Entry.self) { e in
                 if e.kind == Entry.series { SeriesDetail(entry: e) } else { MovieDetail(entry: e) }
             }
-            .onAppear { focused = query.isEmpty }
         }
     }
 }
@@ -107,17 +106,25 @@ struct PosterRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(title).font(Theme.title(24)).foregroundStyle(Theme.text).lineLimit(1)
+            HStack(alignment: .firstTextBaseline) {
+                if let more {
+                    NavigationLink(value: more) {
+                        HStack(spacing: 4) {
+                            Text(title).font(.title2.weight(.semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                            Image(systemName: "chevron.right").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.faint)
+                        }
+                    }
+                } else {
+                    Text(title).font(.title2.weight(.semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                }
                 Spacer()
-                if let more { NavigationLink(value: more) { Text("Alle").font(Theme.heading(16)).foregroundStyle(Theme.accent) } }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 12) {
                     ForEach(entries) { e in NavigationLink(value: e) { Poster(entry: e, width: 120) } }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             }
         }
     }
@@ -129,18 +136,20 @@ struct Poster: View {
     let width: CGFloat
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 8) {
             RemoteImage(url: entry.image) {
-                Theme.surface.overlay(Text(entry.name).font(Theme.heading(14)).multilineTextAlignment(.center).foregroundStyle(Theme.muted).padding(6))
+                Theme.panel.overlay(Text(entry.name).font(.footnote.weight(.semibold)).multilineTextAlignment(.center).foregroundStyle(Theme.muted).padding(8))
             }
             .frame(width: width, height: width * 1.5)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.hairline))
             .overlay(alignment: .topTrailing) {
                 if model.onList(entry) {
-                    Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(Theme.accent).padding(6)
+                    Image(systemName: "bookmark.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.text)
+                        .padding(6).background(.ultraThinMaterial, in: Circle()).padding(6)
                 }
             }
-            Text(entry.name).font(.caption).lineLimit(2).foregroundStyle(Theme.text).frame(width: width, alignment: .leading)
+            Text(entry.name).font(.footnote).lineLimit(2).foregroundStyle(Theme.muted).frame(width: width, alignment: .leading)
         }
     }
 }
@@ -177,16 +186,39 @@ struct PlayOnTVButton: View {
     var body: some View {
         let tvs = model.orderedTVs
         if tvs.count == 1, let tv = tvs.first {
-            Button { model.playOnTV(body_(), on: tv) } label: { Label("Auf „\(tv.name)“", systemImage: "tv") }
+            Button { model.playOnTV(body_(), on: tv) } label: { Label(tv.name, systemImage: "tv").lineLimit(1) }
                 .buttonStyle(QuietButton())
+                .accessibilityLabel("Auf „\(tv.name)“ abspielen")
         } else if tvs.count > 1 {
             Menu {
                 ForEach(tvs) { tv in Button(tv.name) { model.playOnTV(body_(), on: tv) } }
             } label: {
-                Label("Auf Fernseher", systemImage: "tv").font(Theme.heading(17)).frame(maxWidth: .infinity).padding(.vertical, 13)
-                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14)).foregroundStyle(Theme.text)
+                Label("Fernseher", systemImage: "tv").font(.system(size: 17, weight: .semibold)).frame(maxWidth: .infinity).frame(minHeight: 48)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.hairline)).foregroundStyle(Theme.text)
             }
         }
+    }
+}
+
+/// Top of a detail page: the picture edge to edge, title and facts on its dark lower part.
+struct DetailHeader: View {
+    let image: String?
+    let title: String
+    let facts: String
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            RemoteImage(url: image) { Theme.panel }
+                .frame(height: 340).frame(maxWidth: .infinity).clipped()
+            LinearGradient(stops: [.init(color: .clear, location: 0.3), .init(color: Theme.background, location: 1)], startPoint: .top, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title).font(.system(size: 30, weight: .bold)).foregroundStyle(Theme.text).lineLimit(3).minimumScaleFactor(0.7)
+                if !facts.isEmpty { Text(facts).font(.subheadline).foregroundStyle(Theme.muted) }
+            }
+            .padding(.horizontal, 20).padding(.bottom, 8)
+        }
+        .frame(height: 340)
     }
 }
 
@@ -199,45 +231,46 @@ struct MovieDetail: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                header
-                let p = model.progress("vod:\(entry.itemId)")
-                Button { model.playMovie(entry) } label: {
-                    Label(p.map { $0.position > 10 ? "Weiterschauen (\(clock($0.position)))" : "Abspielen" } ?? "Abspielen", systemImage: "play.fill")
+                DetailHeader(image: info?.backdrop ?? entry.image, title: entry.name, facts: facts)
+                VStack(alignment: .leading, spacing: 16) {
+                    let p = model.progress("vod:\(entry.itemId)")
+                    Button { model.playMovie(entry) } label: {
+                        Label(p.map { $0.position > 10 ? "Weiterschauen ab \(clock($0.position))" : "Abspielen" } ?? "Abspielen", systemImage: "play.fill")
+                    }
+                    .buttonStyle(AccentButton())
+                    HStack(spacing: 12) {
+                        ListButton(entry: entry)
+                        PlayOnTVButton { model.tvBody(movie: entry) }
+                    }
+                    if let info {
+                        if let plot = info.plot { Text(plot).font(.body).foregroundStyle(Theme.text) }
+                        credits([("Regie", info.director), ("Mit", info.cast), ("Dauer", info.duration)])
+                    } else if model.client != nil {
+                        Button(loading ? "Lädt …" : "Beschreibung laden") { Task { await loadDetails() } }
+                            .disabled(loading).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.muted)
+                    }
                 }
-                .buttonStyle(AccentButton())
-                PlayOnTVButton { model.tvBody(movie: entry) }
-                ListButton(entry: entry)
-                if let info {
-                    if let plot = info.plot { Text(plot).foregroundStyle(Theme.text) }
-                    facts([("Regie", info.director), ("Darsteller", info.cast), ("Dauer", info.duration)])
-                } else if model.client != nil {
-                    Button(loading ? "Lädt …" : "Beschreibung laden") { Task { await loadDetails() } }
-                        .disabled(loading).foregroundStyle(Theme.accent)
-                }
+                .padding(.horizontal, 20)
             }
-            .padding(20)
+            .padding(.bottom, 32)
         }
+        .ignoresSafeArea(edges: .top)
         .background(Theme.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .task { info = await model.titles.cachedMovie(entry.itemId, tv: model.orderedTVs.first) }
     }
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            RemoteImage(url: entry.image) { Theme.surface }
-                .frame(width: 120, height: 180).clipShape(RoundedRectangle(cornerRadius: 12))
-            VStack(alignment: .leading, spacing: 6) {
-                Text(entry.name).font(Theme.title(26)).foregroundStyle(Theme.text)
-                Text([entry.year, entry.genre ?? info?.genre].compactMap { $0 }.joined(separator: " · ")).font(.subheadline).foregroundStyle(Theme.muted)
-                if entry.rating > 0 { Label(String(format: "%.1f", entry.rating), systemImage: "star.fill").font(.subheadline).foregroundStyle(Theme.accent) }
-            }
-        }
+    private var facts: String {
+        var parts = [entry.year, entry.genre ?? info?.genre].compactMap { $0 }
+        if entry.rating > 0 { parts.append(String(format: "★ %.1f", entry.rating)) }
+        return parts.joined(separator: " · ")
     }
 
-    private func facts(_ rows: [(String, String?)]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func credits(_ rows: [(String, String?)]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             ForEach(rows.filter { $0.1 != nil }, id: \.0) { r in
-                (Text(r.0 + ": ").bold() + Text(r.1 ?? "")).font(.subheadline).foregroundStyle(Theme.muted)
+                (Text(r.0 + "  ").foregroundStyle(Theme.faint) + Text(r.1 ?? "").foregroundStyle(Theme.muted)).font(.subheadline)
             }
         }
     }
@@ -258,7 +291,7 @@ struct ListButton: View {
     var body: some View {
         let on = model.onList(entry)
         Button { model.toggleList(entry) } label: {
-            Label(on ? "Auf Meiner Liste" : "Zu Meiner Liste", systemImage: on ? "bookmark.fill" : "bookmark")
+            Label("Meine Liste", systemImage: on ? "checkmark" : "plus")
         }
         .buttonStyle(QuietButton())
     }
@@ -274,23 +307,19 @@ struct SeriesDetail: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top, spacing: 16) {
-                    RemoteImage(url: info?.cover ?? entry.image) { Theme.surface }
-                        .frame(width: 120, height: 180).clipShape(RoundedRectangle(cornerRadius: 12))
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(entry.name).font(Theme.title(26)).foregroundStyle(Theme.text)
-                        Text([entry.year ?? info?.year, entry.genre ?? info?.genre].compactMap { $0 }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(Theme.muted)
-                    }
-                }
+                DetailHeader(image: info?.cover ?? entry.image, title: entry.name,
+                             facts: [entry.year ?? info?.year, entry.genre ?? info?.genre].compactMap { $0 }.joined(separator: " · "))
+                VStack(alignment: .leading, spacing: 16) {
                 if let info, let next = nextEpisode(info) {
                     Button { model.playEpisode(next, of: info) } label: {
-                        Label(String(format: "S%02d E%02d abspielen", next.season, next.number), systemImage: "play.fill")
+                        Label(String(format: "Staffel %d, Folge %d", next.season, next.number), systemImage: "play.fill")
                     }
                     .buttonStyle(AccentButton())
-                    PlayOnTVButton { model.tvBody(episode: next, series: info) }
                 }
-                ListButton(entry: entry)
+                HStack(spacing: 12) {
+                    ListButton(entry: entry)
+                    if let info, let next = nextEpisode(info) { PlayOnTVButton { model.tvBody(episode: next, series: info) } }
+                }
                 if let plot = info?.plot { Text(plot).foregroundStyle(Theme.text) }
 
                 if let info {
@@ -306,11 +335,15 @@ struct SeriesDetail: View {
                 } else {
                     ProgressView().frame(maxWidth: .infinity)
                 }
+                }
+                .padding(.horizontal, 20)
             }
-            .padding(20)
+            .padding(.bottom, 32)
         }
+        .ignoresSafeArea(edges: .top)
         .background(Theme.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .task { await load() }
     }
 

@@ -1,37 +1,22 @@
 import SwiftUI
 
-/// A settings page like on the TV: big title, cards below each other.
+/// A settings page in Apple's grouped style.
 struct SettingsPage<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(title).font(Theme.title(32)).foregroundStyle(Theme.text).padding(.bottom, 6)
-                content()
-            }
-            .padding(.horizontal, 24).padding(.vertical, 12)
-            .frame(maxWidth: 900, alignment: .leading)
-            .frame(maxWidth: .infinity)
-        }
-        .background(Theme.background)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.background, for: .navigationBar)
+        List(content: content)
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.large)
+            .listRowBackground(Theme.panel)
     }
 }
 
-/// The card look of every row.
-struct SettingsCard<Content: View>: View {
-    @ViewBuilder let content: () -> Content
-    var body: some View {
-        HStack(spacing: 16, content: content)
-            .padding(.horizontal, 20).frame(minHeight: 60)
-            .background(Theme.panel, in: RoundedRectangle(cornerRadius: 16))
-            .contentShape(RoundedRectangle(cornerRadius: 16))
-    }
-}
-
+/// Title (with optional icon and explanation) and a value on the right.
 struct RowLabel: View {
     let title: String
     var icon: String? = nil
@@ -41,17 +26,19 @@ struct RowLabel: View {
     var destructive = false
 
     var body: some View {
-        SettingsCard {
-            if let icon { Image(systemName: icon).font(.system(size: 22)).frame(width: 30).foregroundStyle(Theme.text) }
+        HStack(spacing: 12) {
+            if let icon {
+                Image(systemName: icon).font(.system(size: 17, weight: .medium)).frame(width: 28).foregroundStyle(destructive ? Theme.error : Theme.muted)
+            }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 18, weight: .medium)).foregroundStyle(destructive ? Theme.error : Theme.text)
+                Text(title).foregroundStyle(destructive ? Theme.error : Theme.text)
                 if let detail { Text(detail).font(.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true) }
             }
-            .padding(.vertical, 10)
             Spacer(minLength: 8)
-            if let value { Text(value).font(.system(size: 17)).foregroundStyle(Theme.muted).multilineTextAlignment(.trailing).lineLimit(2) }
-            if chevron { Image(systemName: "chevron.right").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.muted) }
+            if let value { Text(value).foregroundStyle(Theme.muted).multilineTextAlignment(.trailing).lineLimit(2) }
+            if chevron { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.faint) }
         }
+        .listRowBackground(Theme.panel)
     }
 }
 
@@ -63,12 +50,12 @@ struct NavRow<Destination: View>: View {
     @ViewBuilder let destination: () -> Destination
 
     var body: some View {
-        NavigationLink { destination() } label: { RowLabel(title: title, icon: icon, value: value, chevron: true) }
-            .buttonStyle(.plain)
+        NavigationLink { destination() } label: { RowLabel(title: title, icon: icon, value: value) }
+            .listRowBackground(Theme.panel)
     }
 }
 
-/// Row with a choice of values (opens a menu).
+/// Row with a choice of values (a menu on the right, like in Apple's Settings).
 struct ChoiceRow<T: Hashable>: View {
     let title: String
     var detail: String? = nil
@@ -76,14 +63,17 @@ struct ChoiceRow<T: Hashable>: View {
     @Binding var value: T
 
     var body: some View {
-        Menu {
-            ForEach(options, id: \.0) { o in
-                Button { value = o.0 } label: { if o.0 == value { Label(o.1, systemImage: "checkmark") } else { Text(o.1) } }
-            }
+        Picker(selection: $value) {
+            ForEach(options, id: \.0) { o in Text(o.1).tag(o.0) }
         } label: {
-            RowLabel(title: title, value: options.first { $0.0 == value }?.1, detail: detail)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).foregroundStyle(Theme.text)
+                if let detail { Text(detail).font(.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true) }
+            }
         }
-        .buttonStyle(.plain)
+        .pickerStyle(.menu)
+        .tint(Theme.muted)
+        .listRowBackground(Theme.panel)
     }
 }
 
@@ -93,8 +83,14 @@ struct ToggleRow: View {
     @Binding var on: Bool
 
     var body: some View {
-        Button { on.toggle() } label: { RowLabel(title: title, value: on ? "an" : "aus", detail: detail) }
-            .buttonStyle(.plain)
+        Toggle(isOn: $on) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).foregroundStyle(Theme.text)
+                if let detail { Text(detail).font(.footnote).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true) }
+            }
+        }
+        .tint(Theme.accent)
+        .listRowBackground(Theme.panel)
     }
 }
 
@@ -112,16 +108,17 @@ struct ActionRow: View {
         Button { if confirm != nil { asking = true } else { action() } } label: {
             RowLabel(title: title, value: value, detail: detail, destructive: destructive)
         }
-        .buttonStyle(.plain)
+        .listRowBackground(Theme.panel)
         .confirmationDialog(confirm ?? "", isPresented: $asking, titleVisibility: .visible) {
             Button(title, role: destructive ? .destructive : nil, action: action)
         }
     }
 }
 
+/// Small heading outside lists (profile editor).
 struct SectionTitle: View {
     let text: String
-    var body: some View { Text(text).font(Theme.heading(17)).foregroundStyle(Theme.muted).padding(.top, 12) }
+    var body: some View { Text(text).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.faint).padding(.top, 12) }
 }
 
 /// Bindings onto the device settings, so pages update when they change.

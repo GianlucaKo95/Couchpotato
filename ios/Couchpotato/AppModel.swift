@@ -97,6 +97,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var vod: VodSession?
     @Published private(set) var live: LiveSession?
     @Published var liveFullscreen = false
+    @Published var showSettings = false
+    @Published var showRemote = false
     @Published var notice: String?
     @Published private(set) var loadingCatalog = false
     @Published var pendingIptv: XtreamLogin?
@@ -441,8 +443,8 @@ final class AppModel: ObservableObject {
         guard profile.kid else { return true }
         switch screenTime.state(profile) {
         case .allowed: return true
-        case .limit(let evening): lockedReason = evening ? "Gute Nacht! Für heute ist die Fernsehzeit vorbei." : "Die Fernsehzeit für heute ist aufgebraucht."
-        case .bedtime(let at): lockedReason = "Ab \(at) Uhr ist Schlafenszeit."
+        case .limit(let evening): lockedReason = evening ? "Gute Nacht – für heute ist die Fernsehzeit vorbei" : "Die Fernsehzeit für heute ist aufgebraucht"
+        case .bedtime(let at): lockedReason = "Ab \(at) Uhr ist Schlafenszeit"
         }
         return false
     }

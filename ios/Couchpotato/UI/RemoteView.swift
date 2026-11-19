@@ -27,10 +27,12 @@ struct RemoteView: View {
                 }
             }
             .background(Theme.background.ignoresSafeArea())
-            .navigationTitle("Fernseher")
+            .navigationTitle("Fernbedienung")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Fertig") { model.showRemote = false } }
                 if model.orderedTVs.count > 1 {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .topBarLeading) {
                         Menu {
                             ForEach(model.orderedTVs) { t in
                                 Button { model.preferredTV = t.name } label: { Label(t.name, systemImage: t.name == tv?.name ? "checkmark" : "tv") }
@@ -104,7 +106,7 @@ struct RemoteView: View {
                 HStack(spacing: 0) {
                     arrow(tv, "left", "chevron.left")
                     Button { send(tv, "ok") } label: {
-                        Text("OK").font(Theme.heading(22)).frame(width: 84, height: 84).background(Theme.accent, in: Circle()).foregroundStyle(Theme.onAccent)
+                        Text("OK").font(.title3.weight(.semibold)).frame(width: 84, height: 84).background(Theme.text, in: Circle()).foregroundStyle(Theme.background)
                     }
                     .accessibilityLabel("OK")
                     arrow(tv, "right", "chevron.right")

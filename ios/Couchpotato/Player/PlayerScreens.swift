@@ -70,14 +70,14 @@ struct SidePanel<Content: View>: View {
         let landscape = vertical == .compact
         let panel = VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(title).font(Theme.title(26)).foregroundStyle(Theme.text)
+                Text(title).font(.title2.weight(.bold)).foregroundStyle(Theme.text)
                 Spacer()
                 Button(action: close) { Image(systemName: "xmark").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.text).frame(width: 44, height: 44) }
             }
             .padding(.horizontal, 22).padding(.top, 14)
             ScrollView { VStack(alignment: .leading, spacing: 0, content: content).padding(.horizontal, 22).padding(.bottom, 24) }
         }
-        .background(Theme.panel.opacity(0.97))
+        .background(.regularMaterial)
         if landscape {
             HStack(spacing: 0) {
                 Color.black.opacity(0.35).onTapGesture(perform: close)
@@ -96,7 +96,7 @@ struct SidePanel<Content: View>: View {
 
 struct PanelHeading: View {
     let text: String
-    var body: some View { Text(text).font(Theme.heading(17)).foregroundStyle(Theme.muted).padding(.top, 22).padding(.bottom, 6) }
+    var body: some View { Text(text).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.faint).padding(.top, 24).padding(.bottom, 4) }
 }
 
 struct PanelRow: View {
@@ -109,11 +109,11 @@ struct PanelRow: View {
         Button(action: action) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(text).font(checked ? Theme.heading(19) : .system(size: 18)).foregroundStyle(Theme.text)
+                    Text(text).font(.body.weight(checked ? .semibold : .regular)).foregroundStyle(Theme.text)
                     if let detail { Text(detail).font(.caption).foregroundStyle(Theme.muted) }
                 }
                 Spacer()
-                if checked { Image(systemName: "checkmark").font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.accent) }
+                if checked { Image(systemName: "checkmark").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.accent) }
             }
             .padding(.vertical, 12)
             .contentShape(Rectangle())
@@ -404,13 +404,11 @@ struct EpgRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 10) {
-                Text(entry.start.formatted(date: .omitted, time: .shortened)).font(Theme.heading(18)).foregroundStyle(entry.isNow ? Theme.accent : Theme.muted)
-                if entry.isNow {
-                    Text("JETZT").font(.caption.weight(.heavy)).padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 5)).foregroundStyle(Theme.onAccent)
-                }
-                Text(entry.title).font(Theme.heading(18)).foregroundStyle(Theme.text).lineLimit(2)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(entry.isNow ? "Jetzt" : entry.start.formatted(date: .omitted, time: .shortened))
+                    .font(.subheadline.weight(.semibold).monospacedDigit()).foregroundStyle(entry.isNow ? Theme.accent : Theme.faint)
+                    .frame(width: 52, alignment: .leading)
+                Text(entry.title).font(.body.weight(entry.isNow ? .semibold : .regular)).foregroundStyle(Theme.text).lineLimit(2)
             }
             if entry.isNow { ProgressView(value: entry.progress).tint(Theme.accent) }
             if let info = entry.info { Text(info).font(.footnote).foregroundStyle(Theme.muted).lineLimit(3) }
@@ -462,13 +460,11 @@ private struct LiveChrome: View {
             HStack {
                 Spacer()
                 Button { session.goLive(); chrome.poke() } label: {
-                    HStack(spacing: 8) {
-                        Circle().fill(session.atLive ? Color.red : Color.gray).frame(width: 12, height: 12)
-                        Text("LIVE").font(Theme.heading(18))
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(Color.white.opacity(0.14), in: Capsule())
+                    LiveBadge(on: session.atLive)
+                        .padding(.horizontal, 12).frame(height: 32)
+                        .background(.ultraThinMaterial, in: Capsule())
                 }
+                .accessibilityLabel(session.atLive ? "Live" : "Zurück zu Live")
             }
             if session.canRewind {
                 let span = max(session.span, 1)

@@ -2,19 +2,26 @@ import CryptoKit
 import SwiftUI
 import UIKit
 
-/// Couchpotato's colours, the same as on the TVs (ui/Theme.kt).
+/// The living room in the evening: a dark room with a hint of Couchpotato's petrol, the colour comes from
+/// the pictures. Gold is the signature – the primary action, progress and the current selection, nothing else.
 enum Theme {
-    static let background = Color(hex: 0x0E3E44)
-    static let surface = Color(hex: 0x165A61)
-    static let panel = Color(hex: 0x0B3236)
-    static let accent = Color(hex: 0xE8B86D)
+    static let background = Color(hex: 0x0B0F10)   // the room
+    static let panel = Color(hex: 0x151A1B)        // raised one step (rows, cards)
+    static let surface = Color(hex: 0x20272A)      // raised two steps (selected, controls)
+    static let hairline = Color.white.opacity(0.08)
+    static let accent = Color(hex: 0xE8B86D)       // Couchpotato gold
     static let onAccent = Color(hex: 0x1B1408)
-    static let text = Color(hex: 0xF4F1EC)
-    static let muted = Color(hex: 0xC3D6D7)
-    static let error = Color(hex: 0xFFA197)
+    static let text = Color(hex: 0xF2F2F0)
+    static let muted = Color(hex: 0x9EA7A9)        // secondary text
+    static let faint = Color(hex: 0x6B7476)        // tertiary text
+    static let live = Color(hex: 0xE5484D)         // the live dot
+    static let error = Color(hex: 0xFF8A80)
 
-    static func title(_ size: CGFloat) -> Font { .custom("Baloo2-ExtraBold", size: size, relativeTo: .title) }
-    static func heading(_ size: CGFloat) -> Font { .custom("Baloo2-Bold", size: size, relativeTo: .headline) }
+    /// San Francisco, like Apple's apps; the size follows the iPhone's text size setting.
+    static func title(_ size: CGFloat) -> Font { .system(size: size, weight: .bold) }
+    static func heading(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold) }
+    /// Only for the wordmark – Couchpotato's own rounded face.
+    static func logo(_ size: CGFloat) -> Font { .custom("Baloo2-ExtraBold", size: size) }
 
     /// Soft backgrounds for the avatar animals – the same as on the TVs.
     static let avatarColors: [Color] = [0xF6D9A8, 0xF7C1C1, 0xBFD9F2, 0xC8E6C0, 0xDCC7EE, 0xFBE3B5, 0xBDE9EE, 0xF8C9DE].map { Color(hex: $0) }
@@ -26,25 +33,45 @@ extension Color {
     }
 }
 
+/// The one primary action of a screen: off-white with dark text, like "Play" in Apple's TV app.
 struct AccentButton: ButtonStyle {
+    var wide = true
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Theme.heading(18))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(Theme.accent.opacity(configuration.isPressed ? 0.75 : 1), in: RoundedRectangle(cornerRadius: 14))
-            .foregroundStyle(Theme.onAccent)
+            .font(.system(size: 17, weight: .semibold))
+            .frame(maxWidth: wide ? .infinity : nil)
+            .padding(.horizontal, 24).frame(minHeight: 48)
+            .background(Theme.text, in: RoundedRectangle(cornerRadius: 12))
+            .foregroundStyle(Theme.background)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
+/// Secondary actions: grey glass.
 struct QuietButton: ButtonStyle {
+    var wide = true
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Theme.heading(17))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
-            .background(Theme.surface.opacity(configuration.isPressed ? 0.7 : 1), in: RoundedRectangle(cornerRadius: 14))
+            .font(.system(size: 17, weight: .semibold))
+            .frame(maxWidth: wide ? .infinity : nil)
+            .padding(.horizontal, 20).frame(minHeight: 48)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.hairline))
             .foregroundStyle(Theme.text)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+/// A small text line under a title: "Live" with a red dot, "Jetzt" in gold.
+struct LiveBadge: View {
+    var on = true
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(on ? Theme.live : Theme.faint).frame(width: 8, height: 8)
+            Text("Live").font(.system(size: 13, weight: .semibold))
+        }
     }
 }
 

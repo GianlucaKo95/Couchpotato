@@ -11,7 +11,7 @@ struct CouchpotatoApp: App {
             RootView()
                 .environmentObject(model)
                 .preferredColorScheme(.dark)
-                .tint(Theme.accent)
+                .tint(Theme.text)
                 .onChange(of: phase) { _, p in
                     if p == .active { Task { await model.becameActive() } }
                     if p == .background { Task { await model.syncNow(quiet: true) } }

@@ -11,6 +11,7 @@ struct SettingsView: View {
                 KidLockView()
             } else {
                 SettingsPage(title: "Einstellungen") {
+            Section {
                     NavRow(title: "IPTV-Zugang", icon: "key.fill", value: model.login == nil ? "nicht eingetragen" : model.login?.user) { AccountPage() }
                     NavRow(title: "Profile", icon: "person.2.fill", value: model.profile.name) { ProfilesPage() }
                     NavRow(title: "Darstellung", icon: "paintpalette.fill") { DisplayPage(prefs: prefs) }
@@ -19,10 +20,12 @@ struct SettingsView: View {
                     NavRow(title: "Kindersicherung", icon: "lock.fill") { ParentalPage() }
                     NavRow(title: "Geräte & Daten", icon: "laptopcomputer.and.iphone") { DevicesPage(prefs: prefs) }
                     NavRow(title: "System-Info", icon: "info.circle.fill") { SystemInfoPage() }
-                }
-                .toolbar(.hidden, for: .navigationBar)
             }
         }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { model.showSettings = false } } }
+            }
+        }
+        .tint(Theme.text)
     }
 }
 
@@ -61,6 +64,7 @@ struct AccountPage: View {
 
     var body: some View {
         SettingsPage(title: "IPTV-Zugang") {
+            Section {
             if let l = model.login {
                 RowLabel(title: "Server", value: l.base)
                 RowLabel(title: "Benutzer", value: l.user)
@@ -72,21 +76,23 @@ struct AccountPage: View {
                         await count()
                     }
                 }
-                Button { login = true } label: { RowLabel(title: "Zugang ändern", chevron: true) }.buttonStyle(.plain)
+                Button { login = true } label: { RowLabel(title: "Zugang ändern") }.listRowBackground(Theme.panel)
                 ActionRow(title: "Zugang entfernen", confirm: "Der Zugang wird von diesem iPhone gelöscht. Der Katalog bleibt, solange ein Fernseher im WLAN ihn liefert.", destructive: true) {
                     Task { _ = await model.setLogin(nil) }
                 }
             } else {
-                Button { login = true } label: { RowLabel(title: "IPTV-Zugang eingeben", icon: "plus.circle.fill", chevron: true) }.buttonStyle(.plain)
+                Button { login = true } label: { RowLabel(title: "IPTV-Zugang eingeben", icon: "plus.circle") }.listRowBackground(Theme.panel)
                 if let share = model.household.linked ? "Teilt dein Hauptfernseher seinen Zugang mit dem Haushalt, kannst du ihn unter „Geräte & Daten → Jetzt abgleichen“ übernehmen." : nil {
-                    Text(share).font(.footnote).foregroundStyle(Theme.muted)
+                    Text(share).font(.footnote).foregroundStyle(Theme.muted).listRowBackground(Color.clear)
                 }
             }
-            SectionTitle(text: "Anfrage-Bremse")
+            }
+            Section("Anfrage-Bremse") {
             RowLabel(title: "Anfragen in der letzten Stunde", value: "\(requests) von \(RequestGate.maxPerHour)",
                      detail: "Couchpotato fragt höchstens alle 2,5 Sekunden und höchstens 40-mal pro Stunde – so sperrt der Anbieter dein Konto nicht.")
             if let blockedUntil, blockedUntil > Date() {
                 RowLabel(title: "Pause wegen Sperre bis", value: blockedUntil.formatted(date: .omitted, time: .shortened))
+            }
             }
         }
         .sheet(isPresented: $login) { LoginSheet() }
@@ -109,7 +115,7 @@ struct ProfilesPage: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 30) {
-                Text("Wer schaut?").font(Theme.title(36)).foregroundStyle(Theme.text).padding(.top, 10)
+                Text("Wer schaut?").font(.largeTitle.bold()).foregroundStyle(Theme.text).padding(.top, 8)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 24)], spacing: 24) {
                     ForEach(model.profiles) { p in
                         Button {
@@ -121,8 +127,8 @@ struct ProfilesPage: View {
                                     .overlay(alignment: .bottomTrailing) {
                                         if manage { Image(systemName: "pencil.circle.fill").font(.system(size: 30)).foregroundStyle(Theme.text, Theme.surface).offset(x: 6, y: 6) }
                                     }
-                                Text(p.name).font(Theme.heading(18)).foregroundStyle(Theme.text).lineLimit(1)
-                                if p.kid { Text("Kinder").font(.caption.weight(.bold)).foregroundStyle(Theme.accent) }
+                                Text(p.name).font(.headline).foregroundStyle(Theme.text).lineLimit(1)
+                                if p.kid { Text("Kinder").font(.caption).foregroundStyle(Theme.muted) }
                             }
                         }
                     }
@@ -137,17 +143,14 @@ struct ProfilesPage: View {
                 .padding(.horizontal, 24)
                 Button { manage.toggle() } label: {
                     Label(manage ? "Fertig" : "Profile verwalten", systemImage: manage ? "checkmark" : "pencil")
-                        .font(Theme.heading(18)).padding(.horizontal, 26).padding(.vertical, 12)
-                        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.surface))
-                        .foregroundStyle(Theme.text)
                 }
+                .buttonStyle(QuietButton(wide: false))
                 Text("Profile gelten im ganzen Haushalt – auch auf deinen Fernsehern.").font(.footnote).foregroundStyle(Theme.muted)
             }
             .padding(.bottom, 30)
             .frame(maxWidth: .infinity)
         }
-        .background(LinearGradient(colors: [Theme.surface, Theme.background], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        .background(Theme.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { e in ProfileEditor(profile: e, isNew: !model.profiles.contains { $0.id == e.id }) }
     }
@@ -167,41 +170,48 @@ struct ProfileEditor: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    HStack(spacing: 22) {
-                        Avatar(profile: profile, size: 100, rounded: true)
-                        TextField("Name", text: $profile.name).font(Theme.title(30)).foregroundStyle(Theme.text)
-                            .padding(.horizontal, 14).frame(height: 56)
-                            .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14))
+            List {
+                Section {
+                    HStack(spacing: 16) {
+                        Avatar(profile: profile, size: 72, rounded: true)
+                        TextField("Name", text: $profile.name).font(.title2.weight(.semibold)).foregroundStyle(Theme.text)
                     }
-                    SectionTitle(text: "Farbe")
+                    .padding(.vertical, 4)
+                    .listRowBackground(Theme.panel)
+                }
+                Section("Farbe") {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 14) {
+                        HStack(spacing: 12) {
                             ForEach(0..<8, id: \.self) { i in
                                 Button { profile.color = i } label: {
-                                    Circle().fill(Theme.avatarColors[i]).frame(width: 52, height: 52)
-                                        .overlay(Circle().stroke(Theme.text, lineWidth: profile.color == i ? 4 : 0))
+                                    Circle().fill(Theme.avatarColors[i]).frame(width: 40, height: 40)
+                                        .overlay(Circle().stroke(Theme.text, lineWidth: profile.color == i ? 3 : 0).padding(-4))
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .padding(4)
+                        .padding(8)
                     }
-                    SectionTitle(text: "Tier")
+                    .listRowBackground(Theme.panel)
+                }
+                Section("Tier") {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 14) {
+                        HStack(spacing: 12) {
                             ForEach(0..<Profile.animals, id: \.self) { i in
                                 Button { profile.animal = i } label: {
-                                    Avatar(profile: withAnimal(i), size: 70, rounded: true)
-                                        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Theme.text, lineWidth: profile.animalIndex == i ? 4 : 0))
+                                    Avatar(profile: withAnimal(i), size: 56, rounded: true)
+                                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.text, lineWidth: profile.animalIndex == i ? 3 : 0).padding(-3))
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .padding(4)
+                        .padding(6)
                     }
-                    if profile.id != "main" {
-                        SectionTitle(text: "Kinder")
-                        ToggleRow(title: "Kinderprofil", detail: "Sieht nur die freigegebenen Kategorien (Kindersicherung). Verlassen nur mit Eltern-PIN.", on: $profile.kid)
+                    .listRowBackground(Theme.panel)
+                }
+                if profile.id != "main" {
+                    Section {
+                        ToggleRow(title: "Kinderprofil", on: $profile.kid)
                         if profile.kid {
                             ChoiceRow(title: "Fernsehzeit pro Tag",
                                       options: [(0, "Unbegrenzt"), (30, "30 Min."), (45, "45 Min."), (60, "1 Std."), (90, "1,5 Std."), (120, "2 Std."), (180, "3 Std.")],
@@ -210,17 +220,21 @@ struct ProfileEditor: View {
                                       options: [(-1, "Keine")] + stride(from: 17 * 60, through: 22 * 60, by: 30).map { ($0, String(format: "%d:%02d Uhr", $0 / 60, $0 % 60)) },
                                       value: $profile.bedtime)
                         }
+                    } footer: {
+                        Text("Kinderprofile sehen nur die freigegebenen Kategorien (Kindersicherung) und lassen sich nur mit der Eltern-PIN verlassen.")
                     }
-                    if !isNew && profile.id != "main" {
+                }
+                if !isNew && profile.id != "main" {
+                    Section {
                         ActionRow(title: "Profil löschen", confirm: "„\(profile.name)“ mit Merkliste und Verlauf auf allen Geräten löschen?", destructive: true) {
                             model.deleteProfile(profile.id)
                             dismiss()
                         }
-                        .padding(.top, 10)
                     }
                 }
-                .padding(24)
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
             .background(Theme.background)
             .navigationTitle(isNew ? "Profil hinzufügen" : "Profil bearbeiten")
             .navigationBarTitleDisplayMode(.inline)
@@ -252,11 +266,13 @@ struct DisplayPage: View {
 
     var body: some View {
         SettingsPage(title: "Darstellung") {
+            Section {
             ChoiceRow(title: "Ausrichtung", detail: "Quer sieht aus wie am Fernseher.",
                       options: Prefs.Orientation.allCases.map { ($0, $0.label) }, value: $prefs.orientation)
             ChoiceRow(title: "Bildformat", detail: "Gilt für alle Videos; im Player änderbar.",
                       options: PictureFit.allCases.map { ($0, $0.label) }, value: $prefs.fit)
             ChoiceRow(title: "Untertitel-Darstellung", options: SubtitleSize.allCases.map { ($0, $0.label) }, value: $prefs.subtitles)
+            }
         }
     }
 }
@@ -268,6 +284,7 @@ struct LiveSettingsPage: View {
 
     var body: some View {
         SettingsPage(title: "Live TV") {
+            Section {
             ChoiceRow(title: "Live pausieren & zurückspulen",
                       detail: "Couchpotato nimmt den laufenden Sender auf dem iPhone mit – über nur eine Verbindung zum Anbieter.",
                       options: [(0, "Aus"), (5, "5 Minuten"), (10, "10 Minuten"), (15, "15 Minuten")], value: $prefs.timeshift)
@@ -277,6 +294,7 @@ struct LiveSettingsPage: View {
             ToggleRow(title: "Programm (EPG) laden",
                       detail: "Kommt vom Fernseher im WLAN; sonst eine Anfrage pro Sender beim Anbieter, nur solange die Stunde noch Luft hat.",
                       on: $prefs.epg)
+            }
         }
     }
 }
@@ -286,13 +304,15 @@ struct LiveSettingsPage: View {
 struct CategoriesPage: View {
     var body: some View {
         SettingsPage(title: "Kategorien") {
+            Section {
             NavRow(title: "Live-Kategorien ausblenden") { CategoryToggles(kind: Entry.live, mode: .hide) }
             NavRow(title: "Film-Kategorien ausblenden") { CategoryToggles(kind: Entry.movie, mode: .hide) }
             NavRow(title: "Serien-Kategorien ausblenden") { CategoryToggles(kind: Entry.series, mode: .hide) }
             NavRow(title: "Kategorien sortieren – Sender") { CategoryOrder(kind: Entry.live) }
             NavRow(title: "Kategorien sortieren – Filme") { CategoryOrder(kind: Entry.movie) }
             NavRow(title: "Kategorien sortieren – Serien") { CategoryOrder(kind: Entry.series) }
-            Text("Gilt im ganzen Haushalt – auch auf deinen Fernsehern.").font(.footnote).foregroundStyle(Theme.muted)
+            Text("Gilt im ganzen Haushalt – auch auf deinen Fernsehern.").font(.footnote).foregroundStyle(Theme.muted).listRowBackground(Color.clear)
+            }
         }
     }
 }
@@ -401,6 +421,7 @@ struct ParentalPage: View {
 
     var body: some View {
         SettingsPage(title: "Kindersicherung") {
+            Section {
             ActionRow(title: ParentPin.isSet ? "Eltern-PIN ändern" : "Eltern-PIN festlegen",
                       detail: "Zum Verlassen eines Kinderprofils und für „30 Minuten mehr“. Gilt nur auf diesem iPhone.",
                       value: ParentPin.isSet ? "gesetzt" : "aus") {
@@ -411,7 +432,8 @@ struct ParentalPage: View {
             NavRow(title: "Kinderprofil – Serien") { CategoryToggles(kind: Entry.series, mode: .kids) }
             let kids = model.profiles.filter(\.kid)
             if !kids.isEmpty {
-                SectionTitle(text: "Fernsehzeit")
+            }
+            Section("Fernsehzeit") {
                 ForEach(kids) { p in
                     RowLabel(title: p.name,
                              value: [p.dailyMinutes > 0 ? "\(p.dailyMinutes) Min./Tag" : "unbegrenzt",
@@ -419,7 +441,8 @@ struct ParentalPage: View {
                              detail: "Ändern unter Profile → Profile verwalten")
                 }
             } else {
-                Text("Ein Kinderprofil legst du unter Profile an.").font(.footnote).foregroundStyle(Theme.muted)
+                Text("Ein Kinderprofil legst du unter Profile an.").font(.footnote).foregroundStyle(Theme.muted).listRowBackground(Color.clear)
+            }
             }
         }
     }
@@ -434,6 +457,7 @@ struct DevicesPage: View {
 
     var body: some View {
         SettingsPage(title: "Geräte & Daten") {
+            Section {
             if HouseholdSync.configured {
                 if model.household.linked {
                     RowLabel(title: "Geräte synchronisieren", value: model.household.code,
@@ -445,23 +469,26 @@ struct DevicesPage: View {
                               destructive: true) { model.leaveHousehold() }
                 } else {
                     Button { join = true } label: {
-                        RowLabel(title: "Mit meinen Fernsehern verbinden", icon: "tv.and.mediabox", detail: "Haushalts-Code vom Fernseher eingeben", chevron: true)
+                        RowLabel(title: "Mit meinen Fernsehern verbinden", icon: "tv.and.mediabox", detail: "Haushalts-Code vom Fernseher eingeben")
                     }
-                    .buttonStyle(.plain)
+                    .listRowBackground(Theme.panel)
                 }
             }
-            SectionTitle(text: "Katalog")
+            }
+            Section("Katalog") {
             ChoiceRow(title: "Listen-Aktualisierung",
                       detail: "Wie oft das iPhone den Anbieter selbst fragt (6 Anfragen), wenn kein Fernseher im WLAN den Katalog liefert.",
                       options: [(12, "Alle 12 Stunden"), (24, "Alle 24 Stunden"), (48, "Alle 2 Tage")], value: $prefs.catalogHours)
             ActionRow(title: model.loadingCatalog ? "Lädt …" : "Katalog jetzt aktualisieren", value: model.catalog.entries.isEmpty ? nil : model.catalog.source) {
                 Task { await model.refreshCatalog(force: true, background: false) }
             }
-            SectionTitle(text: "Verlauf (Profil „\(model.profile.name)“)")
+            }
+            Section("Verlauf (Profil „\(model.profile.name)“)") {
             ActionRow(title: "Live-Verlauf löschen", confirm: "Die zuletzt gesehenen Sender löschen?", destructive: true) { model.clearLiveHistory() }
             ActionRow(title: "Film-Verlauf löschen", confirm: "Alle Filme aus „Weiterschauen“ löschen – auf allen Geräten?", destructive: true) { model.clearProgress(prefix: "vod:") }
             ActionRow(title: "Serien-Verlauf löschen", confirm: "Alle Serien aus „Weiterschauen“ löschen – auf allen Geräten?", destructive: true) { model.clearProgress(prefix: "ep:") }
             ActionRow(title: "Meine Liste leeren", confirm: "Meine Liste leeren – auf allen Geräten?", destructive: true) { model.clearMyList() }
+            }
         }
         .sheet(isPresented: $join) { JoinSheet() }
     }
@@ -477,6 +504,7 @@ struct SystemInfoPage: View {
 
     var body: some View {
         SettingsPage(title: "System-Info") {
+            Section {
             RowLabel(title: "Version", value: Self.version)
             RowLabel(title: "Gerät", value: "\(Self.deviceModel) · iOS \(UIDevice.current.systemVersion) · \(Self.free) frei")
             let e = model.catalog.entries
@@ -491,6 +519,7 @@ struct SystemInfoPage: View {
             NavRow(title: "Lizenzen") { LicensesView() }
             Text("Couchpotato enthält keine Sender, Filme oder Serien. Nutze nur Quellen, für die du selbst berechtigt bist.")
                 .font(.footnote).foregroundStyle(Theme.muted).padding(.top, 6)
+            }
         }
         .task { await measure() }
     }

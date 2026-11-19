@@ -13,7 +13,7 @@ struct WelcomeView: View {
             VStack(spacing: 18) {
                 Spacer()
                 Image("Logo").resizable().frame(width: 132, height: 132).clipShape(RoundedRectangle(cornerRadius: 30))
-                Text("Couchpotato").font(Theme.title(40)).foregroundStyle(Theme.text)
+                Text("Couchpotato").font(Theme.logo(40)).foregroundStyle(Theme.text)
                 Text("Deine Sender, deine Favoriten und „Weiterschauen“ – auf dem iPhone und im Takt mit deinen Fernsehern.")
                     .multilineTextAlignment(.center).foregroundStyle(Theme.muted).padding(.horizontal, 12)
                 Spacer()

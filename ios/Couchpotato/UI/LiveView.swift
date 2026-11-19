@@ -8,7 +8,7 @@ struct LiveView: View {
     @State private var query = ""
     @State private var categoryId: String?
 
-    private static let favs = LiveCategory(id: "_favs", name: "★ Favoriten")
+    private static let favs = LiveCategory(id: "_favs", name: "Favoriten")
     private static let recentCat = LiveCategory(id: "_recent", name: "Zuletzt gesehen")
 
     private var categories: [LiveCategory] {
@@ -35,6 +35,15 @@ struct LiveView: View {
     }
 
     var body: some View {
+        NavigationStack {
+            content
+                .navigationTitle("Live TV")
+                .navigationBarTitleDisplayMode(vertical == .compact ? .inline : .large)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { AccountButton() } }
+        }
+    }
+
+    private var content: some View {
         Group {
             if categories.isEmpty && query.isEmpty {
                 empty
@@ -60,32 +69,31 @@ struct LiveView: View {
 
     private var list: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
-                TextField("Kanäle suchen", text: $query).foregroundStyle(Theme.text).autocorrectionDisabled()
-                if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.muted) } }
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(Theme.faint)
+                TextField("Sender suchen", text: $query).foregroundStyle(Theme.text).autocorrectionDisabled()
+                if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.faint) } }
             }
-            .padding(.horizontal, 16).frame(height: 48)
-            .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 12).frame(height: 40)
+            .background(Theme.panel, in: RoundedRectangle(cornerRadius: 10))
 
             if query.isEmpty, let category {
                 Menu {
                     ForEach(categories) { c in Button(c.name) { categoryId = c.id } }
                 } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "chevron.down").font(.system(size: 15, weight: .bold))
-                        Text(category.name).font(Theme.heading(19)).lineLimit(1)
+                    HStack(spacing: 8) {
+                        Text(category.name).font(.title3.weight(.semibold)).lineLimit(1)
+                        Image(systemName: "chevron.down").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.faint)
                         Spacer()
                     }
                     .foregroundStyle(Theme.text)
-                    .padding(.horizontal, 16).frame(height: 50)
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.surface, lineWidth: 2))
+                    .frame(height: 40)
                 }
             }
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 8) {
+                    LazyVStack(spacing: 2) {
                         let list = channels
                         ForEach(Array(list.enumerated()), id: \.element.id) { i, c in
                             row(c, number: i + 1, in: list).id(c.id)
@@ -108,16 +116,18 @@ struct LiveView: View {
                 model.startLive(list, at: c, category: query.isEmpty ? (category?.name ?? "Live-TV") : "Suche", fullscreen: false)
             }
         } label: {
-            HStack(spacing: 14) {
-                ChannelLogo(channel: c, size: 52)
-                Text("\(number)").font(.system(size: 15, weight: .medium, design: .monospaced)).foregroundStyle(Theme.muted).frame(minWidth: 26, alignment: .trailing)
-                Text(c.name).font(playing ? Theme.heading(18) : .system(size: 17, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
+            HStack(spacing: 12) {
+                Text("\(number)").font(.footnote.monospacedDigit()).foregroundStyle(Theme.faint).frame(minWidth: 28, alignment: .trailing)
+                ChannelLogo(channel: c, size: 44)
+                Text(c.name).font(.body.weight(playing ? .semibold : .regular)).foregroundStyle(Theme.text).lineLimit(1)
                 Spacer()
-                if model.isFavorite(c) { Image(systemName: "star.fill").font(.footnote).foregroundStyle(Theme.accent) }
+                if playing { LiveBadge().foregroundStyle(Theme.muted) }
+                else if model.isFavorite(c) { Image(systemName: "star.fill").font(.caption).foregroundStyle(Theme.faint) }
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(playing ? Theme.surface : Theme.panel, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(playing ? Theme.accent : .clear, lineWidth: 2))
+            .padding(.horizontal, 12).frame(height: 60)
+            .background(playing ? Theme.surface : .clear, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(playing ? Theme.hairline : .clear))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .contextMenu {
             FavoriteButton(channel: c)
@@ -134,7 +144,7 @@ struct LiveView: View {
                 PreviewOverlay(engine: live.engine)
             }
             .aspectRatio(16 / 9, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
             .contentShape(Rectangle())
             .onTapGesture { model.liveFullscreen = true }
             .overlay(alignment: .topTrailing) {
@@ -143,12 +153,12 @@ struct LiveView: View {
                     .allowsHitTesting(false)
             }
         } else {
-            RoundedRectangle(cornerRadius: 14).fill(Theme.panel)
+            RoundedRectangle(cornerRadius: 16).fill(Theme.panel)
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .overlay {
                     VStack(spacing: 8) {
-                        Image(systemName: "play.tv").font(.system(size: 36)).foregroundStyle(Theme.accent)
-                        Text("Sender antippen").foregroundStyle(Theme.muted)
+                        Image(systemName: "play.tv").font(.system(size: 32, weight: .light)).foregroundStyle(Theme.faint)
+                        Text("Sender antippen").font(.subheadline).foregroundStyle(Theme.muted)
                     }
                 }
         }
@@ -165,8 +175,8 @@ struct LiveView: View {
             if model.loadingCatalog {
                 ProgressView("Senderliste wird geladen …").tint(Theme.accent)
             } else {
-                Image(systemName: "tv").font(.system(size: 44)).foregroundStyle(Theme.accent)
-                Text("Keine Senderliste").font(Theme.heading(22)).foregroundStyle(Theme.text)
+                Image(systemName: "tv").font(.system(size: 44, weight: .light)).foregroundStyle(Theme.faint)
+                Text("Keine Senderliste").font(.title3.weight(.semibold)).foregroundStyle(Theme.text)
                 Text(model.login == nil
                      ? "Die Senderliste kommt von einem Couchpotato-Fernseher im selben WLAN – oder gib in den Einstellungen deinen IPTV-Zugang ein."
                      : "Gleich geht's los – oder in den Einstellungen „Katalog jetzt aktualisieren“.")
@@ -183,8 +193,8 @@ private struct PreviewOverlay: View {
     var body: some View {
         if engine.failed {
             VStack(spacing: 6) {
-                Image(systemName: "info.circle").font(.system(size: 30)).foregroundStyle(Theme.accent)
-                Text("Sender derzeit nicht verfügbar").font(Theme.heading(16)).foregroundStyle(Theme.text)
+                Image(systemName: "exclamationmark.circle").font(.system(size: 28, weight: .light)).foregroundStyle(Theme.muted)
+                Text("Sender gerade nicht verfügbar").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.text)
             }
         } else if engine.buffering {
             ProgressView().tint(.white)
@@ -202,39 +212,41 @@ struct LiveInfoCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 Button { model.toggleFavorite(c) } label: {
-                    Image(systemName: model.isFavorite(c) ? "star.fill" : "star").font(.system(size: 22))
-                        .frame(width: 48, height: 48).background(Theme.surface, in: Circle()).foregroundStyle(Theme.accent)
+                    Image(systemName: model.isFavorite(c) ? "star.fill" : "star").font(.system(size: 18, weight: .medium))
+                        .frame(width: 44, height: 44).background(Theme.surface, in: Circle())
+                        .foregroundStyle(model.isFavorite(c) ? Theme.accent : Theme.text)
                 }
                 .accessibilityLabel(model.isFavorite(c) ? "Aus Favoriten entfernen" : "Zu Favoriten")
                 ForEach(model.orderedTVs.prefix(1)) { tv in
                     Button { model.playOnTV(model.tvBody(channel: c), on: tv) } label: {
-                        Image(systemName: "tv").font(.system(size: 20))
-                            .frame(width: 48, height: 48).background(Theme.surface, in: Circle()).foregroundStyle(Theme.text)
+                        Image(systemName: "tv").font(.system(size: 17, weight: .medium))
+                            .frame(width: 44, height: 44).background(Theme.surface, in: Circle()).foregroundStyle(Theme.text)
                     }
                     .accessibilityLabel("Auf „\(tv.name)“ abspielen")
                 }
-                Text(c.name).font(Theme.heading(21)).foregroundStyle(Theme.text).lineLimit(2)
+                Text(c.name).font(.title3.weight(.semibold)).foregroundStyle(Theme.text).lineLimit(2)
             }
             let shown = Array(session.epg.prefix(2))
             if shown.isEmpty {
                 Text(c.id < 0 ? "Demo-Stream" : "Programm wird geladen …").font(.subheadline).foregroundStyle(Theme.muted)
             }
             ForEach(shown) { p in
-                HStack(spacing: 10) {
-                    Text(p.start.formatted(date: .omitted, time: .shortened)).font(Theme.heading(18)).foregroundStyle(p.isNow ? Theme.accent : Theme.muted)
-                    if p.isNow {
-                        Text("JETZT").font(.caption.weight(.heavy)).padding(.horizontal, 7).padding(.vertical, 3)
-                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 5)).foregroundStyle(Theme.onAccent)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(p.isNow ? "Jetzt" : p.start.formatted(date: .omitted, time: .shortened))
+                            .font(.subheadline.weight(.semibold).monospacedDigit()).foregroundStyle(p.isNow ? Theme.accent : Theme.faint)
+                            .frame(width: 52, alignment: .leading)
+                        Text(p.title).font(.subheadline.weight(p.isNow ? .semibold : .regular)).foregroundStyle(p.isNow ? Theme.text : Theme.muted).lineLimit(1)
                     }
-                    Text(p.title).font(p.isNow ? Theme.heading(18) : .system(size: 16)).foregroundStyle(Theme.text).lineLimit(1)
+                    if p.isNow {
+                        ProgressView(value: p.progress).tint(Theme.accent).padding(.leading, 60)
+                    }
                 }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 12).stroke(p.isNow ? Theme.accent : .clear, lineWidth: 2))
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 18))
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
