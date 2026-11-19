@@ -380,8 +380,9 @@ struct ParentalPage: View {
 
     var body: some View {
         SettingsPage(title: "Kindersicherung") {
-            ActionRow(title: ParentPin.isSet ? "Eltern-PIN ändern" : "Eltern-PIN festlegen", value: ParentPin.isSet ? "gesetzt" : "aus",
-                      detail: "Zum Verlassen eines Kinderprofils und für „30 Minuten mehr“. Gilt nur auf diesem iPhone.") {
+            ActionRow(title: ParentPin.isSet ? "Eltern-PIN ändern" : "Eltern-PIN festlegen",
+                      detail: "Zum Verlassen eines Kinderprofils und für „30 Minuten mehr“. Gilt nur auf diesem iPhone.",
+                      value: ParentPin.isSet ? "gesetzt" : "aus") {
                 model.pinRequest = PinRequest(title: "Neue Eltern-PIN", setNew: true) {}
             }
             NavRow(title: "Kinderprofil – Sender") { CategoryToggles(kind: Entry.live, mode: .kids) }
