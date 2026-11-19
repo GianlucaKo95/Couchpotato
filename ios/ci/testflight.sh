@@ -35,7 +35,16 @@ mkdir -p build
 WORK="$PWD/build/signing"
 PROFILE_NAME="Couchpotato CI ${GITHUB_RUN_NUMBER:-0}-$(date +%s)"
 KC="$PWD/build/ci.keychain-db"
-trap 'security delete-keychain "$KC" >/dev/null 2>&1' EXIT
+UPLOADED=0
+# a run that fails before the upload gives its certificate back at once – the team has only room for two
+on_exit() {
+  security delete-keychain "$KC" >/dev/null 2>&1
+  if [ "$UPLOADED" != 1 ] && [ -f "$WORK/ids.json" ]; then
+    log "== Zertifikat dieses Laufs wieder freigeben =="
+    python3 ci/asc.py cleanup "$WORK" 2>&1 | tee -a "$REPORT"
+  fi
+}
+trap on_exit EXIT
 
 log "== Zertifikat und Profil =="
 python3 ci/asc.py purge 2>&1 | tee -a "$REPORT"
@@ -110,4 +119,5 @@ xcrun altool --upload-app -f "$IPA" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$
 RES=$?
 tail -20 upload.log | tee -a "$REPORT"
 [ $RES -eq 0 ] || { log "!! Upload fehlgeschlagen ($RES)"; exit 32; }
+UPLOADED=1
 log "Hochgeladen: Version $(grep MARKETING_VERSION project.yml | head -1 | sed 's/.*: *//; s/\"//g') Build ${GITHUB_RUN_NUMBER:-1}"
