@@ -40,7 +40,12 @@ trap 'security delete-keychain "$KC" >/dev/null 2>&1' EXIT
 log "== Zertifikat und Profil =="
 python3 ci/asc.py purge 2>&1 | tee -a "$REPORT"
 python3 ci/asc.py create "$WORK" de.koeven.couchpotato "$PROFILE_NAME" 2>&1 | tee -a "$REPORT"
-[ -f "$WORK/ids.json" ] || { log "!! Zertifikat/Profil konnten nicht erzeugt werden (App-ID de.koeven.couchpotato angelegt?)"; exit 33; }
+if [ ! -f "$WORK/ids.json" ]; then
+  log "!! Zertifikat/Profil konnten nicht erzeugt werden (App-ID de.koeven.couchpotato angelegt?)"
+  log "== Vorhandene Distributionszertifikate =="
+  python3 ci/asc.py certs 2>&1 | tee -a "$REPORT"
+  exit 33
+fi
 PROFILE_UUID=$(python3 -c "import json;print(json.load(open('$WORK/ids.json'))['uuid'])")
 
 openssl x509 -inform DER -in "$WORK/cert.der" -out "$WORK/cert.pem"

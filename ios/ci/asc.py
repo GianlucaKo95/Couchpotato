@@ -125,7 +125,8 @@ def purge(max_age_seconds=7200):
     now = time.time()
     for prof in api("GET", "/v1/profiles?limit=200").get("data", []):
         name = prof["attributes"].get("name", "")
-        if not name.startswith("Couchpotato CI "):
+        # Meeterz and Couchpotato share the team's few distribution certificates – leftovers of both CI's count
+        if not name.startswith(("Couchpotato CI ", "Meeterz CI ")):
             continue
         try:
             created = int(name.rsplit("-", 1)[1])
