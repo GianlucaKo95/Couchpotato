@@ -430,25 +430,22 @@ struct ParentalPage: View {
             NavRow(title: "Kinderprofil – Sender") { CategoryToggles(kind: Entry.live, mode: .kids) }
             NavRow(title: "Kinderprofil – Filme") { CategoryToggles(kind: Entry.movie, mode: .kids) }
             NavRow(title: "Kinderprofil – Serien") { CategoryToggles(kind: Entry.series, mode: .kids) }
-            let kids = model.profiles.filter(\.kid)
-            if !kids.isEmpty {
             }
             Section("Fernsehzeit") {
+                let kids = model.profiles.filter(\.kid)
+                if kids.isEmpty {
+                    Text("Ein Kinderprofil legst du unter Profile an.").foregroundStyle(Theme.muted).listRowBackground(Theme.panel)
+                }
                 ForEach(kids) { p in
                     RowLabel(title: p.name,
                              value: [p.dailyMinutes > 0 ? "\(p.dailyMinutes) Min./Tag" : "unbegrenzt",
                                      p.bedtime >= 0 ? String(format: "bis %d:%02d", p.bedtime / 60, p.bedtime % 60) : nil].compactMap { $0 }.joined(separator: " · "),
                              detail: "Ändern unter Profile → Profile verwalten")
                 }
-            } else {
-                Text("Ein Kinderprofil legst du unter Profile an.").font(.footnote).foregroundStyle(Theme.muted).listRowBackground(Color.clear)
-            }
             }
         }
     }
 }
-
-// MARK: Geräte & Daten
 
 struct DevicesPage: View {
     @EnvironmentObject private var model: AppModel
