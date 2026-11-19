@@ -49,6 +49,8 @@ final class LiveSession: ObservableObject {
         epg = []
         if c.id < 0 {
             if let url = DemoSource.url(c.id) { engine.open(url) }
+        } else if Prefs.timeshiftMinutes == 0, let ts = model.client?.liveTSURL(c.id) {
+            engine.open(ts)   // timeshift switched off: straight from the provider
         } else if let ts = model.client?.liveTSURL(c.id) {
             let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("timeshift", isDirectory: true)
             let b = TimeshiftBuffer(url: ts, directory: dir).start()
@@ -107,7 +109,7 @@ final class LiveSession: ObservableObject {
     private func loadEpg() {
         epgTask?.cancel()
         let id = current.id
-        guard id > 0, let model else { return }
+        guard id > 0, Prefs.loadEpg, let model else { return }
         epgTask = Task {
             // a moment of patience while zapping: only the channel you stay on costs a request
             try? await Task.sleep(nanoseconds: 1_200_000_000)

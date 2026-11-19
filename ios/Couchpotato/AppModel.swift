@@ -3,14 +3,25 @@ import Foundation
 import SwiftUI
 
 struct Profile: Identifiable, Hashable {
-    let id: String
-    let name: String
-    let color: Int
-    let kid: Bool
-    let dailyMinutes: Int   // kids: screen time per day, 0 = no limit
-    let bedtime: Int        // kids: minute of the day from which the profile is locked, -1 = none
+    var id: String
+    var name: String
+    var color: Int
+    var kid: Bool
+    var dailyMinutes: Int   // kids: screen time per day, 0 = no limit
+    var bedtime: Int        // kids: minute of the day from which the profile is locked, -1 = none
+    var animal: Int = -1    // avatar animal, -1 = picked from the id (like on the TVs)
+    var maxFsk: Int = 6
     /// Data suffix like on the TVs: "" for the first profile, "_<id>" for the others.
     var suffix: String { id == "main" ? "" : "_\(id)" }
+
+    static let animals = 12
+    /// Same as on the TVs: Math.floorMod(id.hashCode(), 12) for profiles without a chosen animal.
+    var animalIndex: Int {
+        if animal >= 0 { return animal % Self.animals }
+        var h: Int32 = 0
+        for u in id.utf16 { h = h &* 31 &+ Int32(u) }
+        return Int(((Int(h) % Self.animals) + Self.animals) % Self.animals)
+    }
 }
 
 /// Something to play – the same unit the TVs store for "Weiterschauen".
@@ -153,9 +164,94 @@ final class AppModel: ObservableObject {
         let list = (data.json("profiles", "list") as? [[String: Any]] ?? []).compactMap { o -> Profile? in
             guard let id = o["id"] as? String, let name = o["name"] as? String else { return nil }
             return Profile(id: id, name: name, color: (o["color"] as? Int) ?? 0, kid: (o["kid"] as? Bool) ?? false,
-                           dailyMinutes: (o["limit"] as? Int) ?? 0, bedtime: (o["bed"] as? Int) ?? -1)
+                           dailyMinutes: (o["limit"] as? Int) ?? 0, bedtime: (o["bed"] as? Int) ?? -1,
+                           animal: (o["animal"] as? Int) ?? -1, maxFsk: (o["maxFsk"] as? Int) ?? 6)
         }
         return list.isEmpty ? [Profile(id: "main", name: "Ich", color: 0, kid: false, dailyMinutes: 0, bedtime: -1)] : list
+    }
+
+    /// Adds or changes a profile – same format as the TVs, so they show it too.
+    func saveProfile(_ p: Profile) {
+        var raw = data.json("profiles", "list") as? [[String: Any]] ?? []
+        if raw.isEmpty { raw = [["id": "main", "name": "Ich", "color": 0, "kid": false]] }
+        var o = raw.first { ($0["id"] as? String) == p.id } ?? [:]
+        o["id"] = p.id; o["name"] = p.name; o["color"] = p.color; o["kid"] = p.kid
+        o["maxFsk"] = p.maxFsk; o["animal"] = p.animal; o["limit"] = p.dailyMinutes; o["bed"] = p.bedtime
+        if let i = raw.firstIndex(where: { ($0["id"] as? String) == p.id }) { raw[i] = o } else { raw.append(o) }
+        data.setJSON("profiles", "list", raw)
+        syncSoon()
+    }
+
+    func deleteProfile(_ id: String) {
+        guard id != "main" else { return }
+        let raw = (data.json("profiles", "list") as? [[String: Any]] ?? []).filter { ($0["id"] as? String) != id }
+        data.setJSON("profiles", "list", raw)
+        if profileId == id { profileId = "main" }
+        syncSoon()
+    }
+
+    func newProfile() -> Profile {
+        let used = Set(profiles.map(\.animalIndex))
+        return Profile(id: String(UUID().uuidString.prefix(8)).lowercased(), name: "", color: profiles.count % 8, kid: false,
+                       dailyMinutes: 0, bedtime: -1, animal: (0..<Profile.animals).first { !used.contains($0) } ?? 0)
+    }
+
+    // MARK: clearing history (current profile)
+
+    func clearLiveHistory() {
+        data.remove("couchpotato", "liveRecent" + profile.suffix)
+        syncSoon()
+    }
+
+    /// prefix "vod:" for films, "ep:" for series.
+    func clearProgress(prefix: String) {
+        let file = "progress" + profile.suffix
+        for key in data.keys(file) where key.hasPrefix(prefix) { data.remove(file, key) }
+        syncSoon()
+    }
+
+    func clearMyList() {
+        let file = "watchlist" + profile.suffix
+        for key in data.keys(file) { data.remove(file, key) }
+        syncSoon()
+    }
+
+    // MARK: categories (hidden, order, kids) – shared with the TVs
+
+    func isHidden(_ kind: Character, _ c: LiveCategory) -> Bool { data.stringSet("couchpotato", "hiddenCats").contains("\(kind):\(c.id)") }
+
+    func setHidden(_ kind: Character, _ c: LiveCategory, _ hidden: Bool) {
+        var set = data.stringSet("couchpotato", "hiddenCats")
+        if hidden { set.insert("\(kind):\(c.id)") } else { set.remove("\(kind):\(c.id)") }
+        data.setStringSet("couchpotato", "hiddenCats", set)
+        syncSoon()
+    }
+
+    /// All categories of a kind in the user's order (hidden ones included).
+    func orderedCategories(_ kind: Character) -> [LiveCategory] {
+        let all = catalog.categories[kind] ?? []
+        let order = data.json("couchpotato", "catOrder_\(kind)") as? [String] ?? []
+        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        return all.enumerated().sorted { (rank[$0.element.id] ?? Int.max, $0.offset) < (rank[$1.element.id] ?? Int.max, $1.offset) }.map(\.element)
+    }
+
+    func saveOrder(_ kind: Character, _ list: [LiveCategory]) {
+        data.setJSON("couchpotato", "catOrder_\(kind)", list.map(\.id))
+        syncSoon()
+    }
+
+    func resetOrder(_ kind: Character) {
+        data.remove("couchpotato", "catOrder_\(kind)")
+        syncSoon()
+    }
+
+    func isKidCategory(_ kind: Character, _ c: LiveCategory) -> Bool { data.stringSet("profiles", "kidCats").contains("\(kind):\(c.id)") }
+
+    func setKidCategory(_ kind: Character, _ c: LiveCategory, _ on: Bool) {
+        var set = data.stringSet("profiles", "kidCats")
+        if on { set.insert("\(kind):\(c.id)") } else { set.remove("\(kind):\(c.id)") }
+        data.setStringSet("profiles", "kidCats", set)
+        syncSoon()
     }
 
     var profile: Profile { profiles.first { $0.id == profileId } ?? profiles[0] }
@@ -316,7 +412,7 @@ final class AppModel: ObservableObject {
             if force && !background { notice = "Kein Fernseher im WLAN gefunden und kein eigener IPTV-Zugang eingetragen." }
             return
         }
-        if !force, !catalog.entries.isEmpty, Date().timeIntervalSince(catalog.fetchedAt) < 24 * 3600 { return }
+        if !force, !catalog.entries.isEmpty, Date().timeIntervalSince(catalog.fetchedAt) < Double(Prefs.catalogHours) * 3600 { return }
         do {
             catalog = try await catalogStore.download(XtreamClient(login: login, background: background))
         } catch {

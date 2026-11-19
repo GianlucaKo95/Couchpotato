@@ -5,9 +5,9 @@ import Network
 /// small files, the player always reads from there. So you can pause and rewind up to [keep] seconds –
 /// and the provider still only sees a single viewer.
 final class TimeshiftBuffer: NSObject, URLSessionDataDelegate, @unchecked Sendable {
-    static let keep: TimeInterval = 5 * 60
+    static var keep: TimeInterval { TimeInterval(max(Prefs.timeshiftMinutes, 1) * 60) }
     private static let chunk: Int64 = 4 * 1024 * 1024
-    private static let maxBytes: Int64 = 600 * 1024 * 1024
+    private static var maxBytes: Int64 { Int64(max(Prefs.timeshiftMinutes, 1)) * 130 * 1024 * 1024 }
 
     private let url: URL
     private let dir: URL

@@ -194,9 +194,7 @@ struct ProfileMenu: View {
                 ForEach(model.profiles) { p in Text(p.kid ? "\(p.name) (Kinder)" : p.name).tag(p.id) }
             }
         } label: {
-            RoundedRectangle(cornerRadius: 10).fill(Theme.avatarColors[model.profile.color % Theme.avatarColors.count])
-                .frame(width: 38, height: 38)
-                .overlay(Text(String(model.profile.name.prefix(1))).font(Theme.heading(18)).foregroundStyle(Theme.onAccent))
+            Avatar(profile: model.profile, size: 38, rounded: true)
         }
         .accessibilityLabel("Profil: \(model.profile.name)")
     }

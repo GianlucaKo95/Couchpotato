@@ -76,7 +76,7 @@ final class PlayerEngine: NSObject, ObservableObject {
 
     func open(_ url: URL, at start: Double = 0) {
         let media = VLCMedia(url: url)
-        media?.addOption(":network-caching=1500")
+        media?.addOption(":network-caching=\(Prefs.liveBuffer)")
         media?.addOption(":http-user-agent=\(XtreamClient.userAgent)")
         started = false
         failed = false

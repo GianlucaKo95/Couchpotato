@@ -16,7 +16,8 @@ enum Theme {
     static func title(_ size: CGFloat) -> Font { .custom("Baloo2-ExtraBold", size: size, relativeTo: .title) }
     static func heading(_ size: CGFloat) -> Font { .custom("Baloo2-Bold", size: size, relativeTo: .headline) }
 
-    static let avatarColors: [Color] = [0xE8B86D, 0xEE8C72, 0x8FD3C1, 0x9DB7F5, 0xD99BE0, 0xF2D16B, 0x7FC77F, 0xF29E9E].map { Color(hex: $0) }
+    /// Soft backgrounds for the avatar animals – the same as on the TVs.
+    static let avatarColors: [Color] = [0xF6D9A8, 0xF7C1C1, 0xBFD9F2, 0xC8E6C0, 0xDCC7EE, 0xFBE3B5, 0xBDE9EE, 0xF8C9DE].map { Color(hex: $0) }
 }
 
 extension Color {
@@ -128,5 +129,21 @@ struct ChannelLogo: View {
     private var initials: String {
         let words = channel.name.split(separator: " ").prefix(2)
         return words.map { String($0.prefix(1)) }.joined().uppercased()
+    }
+}
+
+/// A profile's animal on its colour, like on the TVs.
+struct Avatar: View {
+    let profile: Profile
+    var size: CGFloat = 40
+    var rounded = false
+
+    var body: some View {
+        let bg = Theme.avatarColors[((profile.color % 8) + 8) % 8]
+        Image("Animal\(profile.animalIndex)").resizable().scaledToFit()
+            .padding(size * 0.06)
+            .frame(width: size, height: size)
+            .background(bg, in: RoundedRectangle(cornerRadius: rounded ? size * 0.24 : size / 2))
+            .accessibilityLabel(profile.name)
     }
 }

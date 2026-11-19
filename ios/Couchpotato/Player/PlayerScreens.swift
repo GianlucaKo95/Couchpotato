@@ -330,7 +330,7 @@ struct LivePlayerScreen: View {
                 .onTapGesture { chrome.toggle() }
                 .gesture(DragGesture(minimumDistance: 40).onEnded { d in
                     // swipe left/right: next/previous channel
-                    if abs(d.translation.width) > abs(d.translation.height) { session.zap(d.translation.width < 0 ? 1 : -1); chrome.poke() }
+                    if Prefs.swipeToZap, abs(d.translation.width) > abs(d.translation.height) { session.zap(d.translation.width < 0 ? 1 : -1); chrome.poke() }
                 })
             LiveChrome(session: session, engine: e, chrome: chrome, panel: $panel)
                 .opacity(chrome.shown ? 1 : 0)
