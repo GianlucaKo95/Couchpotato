@@ -219,12 +219,13 @@ extension PlayerEngine: VLCDrawable, VLCPictureInPictureDrawable, VLCPictureInPi
         onMain { container?.bounds ?? UIScreen.main.bounds }
     }
 
-    nonisolated func mediaController() -> any VLCPictureInPictureMediaControlling { self }
+    nonisolated func mediaController() -> (any VLCPictureInPictureMediaControlling)! { self }
 
-    nonisolated func pictureInPictureReady() -> ((any VLCPictureInPictureWindowControlling) -> Void) {
+    // the header has no nullability annotations, so the block's argument comes in as optional
+    nonisolated func pictureInPictureReady() -> (((any VLCPictureInPictureWindowControlling)?) -> Void)! {
         { [weak self] controller in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, let controller else { return }
                 self.pip = controller
                 controller.stateChangeEventHandler = { [weak self] on in
                     Task { @MainActor in self?.pipActive = on }

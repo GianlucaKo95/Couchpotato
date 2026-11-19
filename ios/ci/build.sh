@@ -30,7 +30,7 @@ xcodebuild test \
   CP_SUPABASE_URL="${SUPABASE_URL}" CP_SUPABASE_KEY="${SUPABASE_PUBLISHABLE_KEY}" > build.log 2>&1
 RC=$?
 log "xcodebuild: $RC"
-grep -E "error:|Test Case .*(passed|failed)|Executed [0-9]+ test" build.log | sed 's#/Users/runner/work/[^/]*/[^/]*/##' | awk '!seen[$0]++' | head -120 | tee -a "$REPORT"
+grep -E "error:|note:|Test Case .*(passed|failed)|Executed [0-9]+ test" build.log | sed 's#/Users/runner/work/[^/]*/[^/]*/##' | awk '!seen[$0]++' | head -120 | tee -a "$REPORT"
 [ $RC -eq 0 ] || { log "== Letzte Zeilen =="; tail -25 build.log | tee -a "$REPORT"; }
 log ""
 log "== Warnungen (Auswahl) =="
