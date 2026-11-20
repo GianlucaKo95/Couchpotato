@@ -17,12 +17,11 @@ struct MainShell: View {
             Tab("Filme", systemImage: "film", value: AppSection.movies) { MediaView(kind: Entry.movie) }
             Tab("Serien", systemImage: "play.rectangle.on.rectangle", value: AppSection.series) { MediaView(kind: Entry.series) }
             Tab("Einstellungen", systemImage: "gearshape", value: AppSection.settings) { SettingsView() }
-            // the search gets its own round glass button next to the tab bar, like in Apple's apps
-            Tab(value: AppSection.search, role: .search) { SearchView() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .tint(Theme.text)
         .sheet(isPresented: $model.showProfiles) { WhoIsWatchingSheet() }
+        .sheet(isPresented: $model.showSearch) { SearchView(inSheet: true) }
         .onChange(of: model.openSettings) { _, open in if open { section = .settings; model.openSettings = false } }
         .sheet(isPresented: $model.showRemote) { RemoteView().presentationDetents([.large]) }
         .onChange(of: model.liveFullscreen) { _, full in
@@ -32,6 +31,21 @@ struct MainShell: View {
         .onChange(of: section) { _, s in
             // the live preview only runs on the live tab
             if s != .live, !model.liveFullscreen, !(model.live?.engine.pipActive ?? false) { model.stopLive() }
+        }
+    }
+}
+
+/// Top right on every page: search and the avatar – the tab bar keeps its five places for the sections.
+struct TopButtons: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Button { model.showSearch = true } label: {
+                Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
+            }
+            .accessibilityLabel("Suche")
+            AccountButton()
         }
     }
 }

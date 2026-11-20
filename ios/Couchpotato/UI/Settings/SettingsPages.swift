@@ -26,7 +26,7 @@ struct SettingsView: View {
                     NavRow(title: "System-Info", icon: "info.circle.fill") { SystemInfoPage() }
             }
         }
-                .toolbar { ToolbarItem(placement: .topBarTrailing) { AccountButton() } }
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { TopButtons() } }
             }
         }
         .tint(Theme.text)

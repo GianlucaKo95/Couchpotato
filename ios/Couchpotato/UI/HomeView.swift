@@ -25,7 +25,7 @@ struct HomeView: View {
                 }
                 .ignoresSafeArea(edges: .top)
                 .overlay(alignment: .topTrailing) {
-                    AccountButton().padding(6).glassEffect(.regular.interactive(), in: Circle())
+                    TopButtons().padding(.leading, 14).padding(.trailing, 6).padding(.vertical, 6).glassEffect(.regular.interactive(), in: Capsule())
                         .padding(.trailing, 16).padding(.top, 4)
                 }
             }

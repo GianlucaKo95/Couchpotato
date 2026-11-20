@@ -111,6 +111,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var live: LiveSession?
     @Published var liveFullscreen = false
     @Published var showProfiles = false
+    @Published var showSearch = false
     @Published var openSettings = false
     @Published var showRemote = false
     @Published var notice: String?

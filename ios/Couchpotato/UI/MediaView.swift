@@ -25,7 +25,7 @@ struct MediaView: View {
             }
             .background(Theme.background)
             .navigationTitle(kind == Entry.movie ? "Filme" : "Serien")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { AccountButton() } }
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { TopButtons() } }
             .navigationDestination(for: Entry.self) { e in
                 if e.kind == Entry.series { SeriesDetail(entry: e) } else { MovieDetail(entry: e) }
             }
@@ -51,6 +51,8 @@ struct MediaView: View {
 
 /// Search over films, series and channels.
 struct SearchView: View {
+    var inSheet = false
+    @Environment(\.dismiss) private var dismiss
     @State private var query = ""
 
     var body: some View {
@@ -67,7 +69,7 @@ struct SearchView: View {
             .navigationTitle("Suche")
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Filme, Serien, Sender")
             .autocorrectionDisabled()
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { AccountButton() } }
+            .toolbar { if inSheet { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() } } } }
             .navigationDestination(for: Entry.self) { e in
                 if e.kind == Entry.series { SeriesDetail(entry: e) } else { MovieDetail(entry: e) }
             }

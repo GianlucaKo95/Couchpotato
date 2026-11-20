@@ -39,7 +39,7 @@ struct LiveView: View {
             content
                 .navigationTitle("Live TV")
                 .navigationBarTitleDisplayMode(vertical == .compact ? .inline : .large)
-                .toolbar { ToolbarItem(placement: .topBarTrailing) { AccountButton() } }
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { TopButtons() } }
         }
     }
 
