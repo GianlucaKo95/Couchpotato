@@ -231,14 +231,15 @@ object TvLink {
 
     /**
      * Programme of a channel for the phone: kept 20 minutes, so several phones (and zapping back and forth)
-     * cost the provider at most one request per channel and 20 minutes – through the TV's brake.
+     * cost the provider at most one request per channel and 20 minutes – through the TV's brake, with the smaller
+     * background budget, so a phone can never use up the hour of the person in front of the TV.
      */
     private fun epg(out: OutputStream, id: Long) {
         val dir = File(app.cacheDir, "epg").apply { mkdirs() }
         val f = File(dir, "$id.json")
         if (!f.exists() || System.currentTimeMillis() - f.lastModified() > 20 * 60_000L) {
             val text = runCatching {
-                kotlinx.coroutines.runBlocking { de.koeven.couchpotato.data.XtreamClient(SettingsStore(app).config()).shortEpgRaw(id) }
+                kotlinx.coroutines.runBlocking { de.koeven.couchpotato.data.XtreamClient(SettingsStore(app).config(), background = true).shortEpgRaw(id) }
             }.getOrNull()
             if (text != null) f.writeText(text)
         }

@@ -128,6 +128,7 @@ final class DevicePrefs: ObservableObject {
     @Published var buffer = Prefs.liveBuffer { didSet { Prefs.liveBuffer = buffer } }
     @Published var swipe = Prefs.swipeToZap { didSet { Prefs.swipeToZap = swipe } }
     @Published var epg = Prefs.loadEpg { didSet { Prefs.loadEpg = epg } }
+    @Published var providerImages = Prefs.loadProviderImages { didSet { Prefs.loadProviderImages = providerImages } }
     @Published var catalogHours = Prefs.catalogHours { didSet { Prefs.catalogHours = catalogHours } }
     @Published var orientation = Prefs.orientation { didSet { Prefs.orientation = orientation } }
     @Published var fit = PictureFit(rawValue: UserDefaults.standard.string(forKey: "cp.fit") ?? "") ?? .fit {

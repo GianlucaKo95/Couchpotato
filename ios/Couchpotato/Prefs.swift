@@ -22,6 +22,12 @@ enum Prefs {
         set { d.set(newValue, forKey: "cp.swipe") }
     }
 
+    /// Pictures that lie on the provider's own server: load them (throttled, 60 per hour) or not at all.
+    static var loadProviderImages: Bool {
+        get { d.object(forKey: "cp.providerimages") as? Bool ?? true }
+        set { d.set(newValue, forKey: "cp.providerimages") }
+    }
+
     static var loadEpg: Bool {
         get { d.object(forKey: "cp.epg") as? Bool ?? true }
         set { d.set(newValue, forKey: "cp.epg") }

@@ -267,6 +267,11 @@ actor RequestGate {
         persist()
     }
 
+    func imagesLastHour() -> Int {
+        prune(Date())
+        return images.count
+    }
+
     func requestsLastHour() -> Int {
         prune(Date())
         return requests.count

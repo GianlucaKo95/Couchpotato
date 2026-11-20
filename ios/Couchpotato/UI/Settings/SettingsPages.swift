@@ -12,7 +12,7 @@ struct SettingsView: View {
             } else {
                 SettingsPage(title: "Einstellungen") {
             Section {
-                    NavRow(title: "IPTV-Zugang", icon: "key.fill", value: model.login == nil ? "nicht eingetragen" : model.login?.user) { AccountPage() }
+                    NavRow(title: "IPTV-Zugang", icon: "key.fill", value: model.login == nil ? "nicht eingetragen" : model.login?.user) { AccountPage(prefs: prefs) }
                     NavRow(title: "Profile", icon: "person.2.fill", value: model.profile.name) { ProfilesPage() }
                     NavRow(title: "Darstellung", icon: "paintpalette.fill") { DisplayPage(prefs: prefs) }
                     NavRow(title: "Live TV", icon: "play.tv.fill") { LiveSettingsPage(prefs: prefs) }
@@ -56,6 +56,8 @@ struct KidLockView: View {
 
 struct AccountPage: View {
     @EnvironmentObject private var model: AppModel
+    @ObservedObject var prefs: DevicePrefs
+    @State private var images = 0
     @State private var login = false
     @State private var status: String?
     @State private var checking = false
@@ -90,6 +92,9 @@ struct AccountPage: View {
             Section("Anfrage-Bremse") {
             RowLabel(title: "Anfragen in der letzten Stunde", value: "\(requests) von \(RequestGate.maxPerHour)",
                      detail: "Couchpotato fragt höchstens alle 2,5 Sekunden und höchstens 40-mal pro Stunde – so sperrt der Anbieter dein Konto nicht.")
+            ToggleRow(title: "Bilder vom Anbieter-Server",
+                      detail: "Senderlogos und Cover, die direkt beim Anbieter liegen: höchstens 60 pro Stunde, einzeln nacheinander – oder gar nicht laden. In der letzten Stunde: \(images).",
+                      on: $prefs.providerImages)
             if let blockedUntil, blockedUntil > Date() {
                 RowLabel(title: "Pause wegen Sperre bis", value: blockedUntil.formatted(date: .omitted, time: .shortened))
             }
@@ -101,6 +106,7 @@ struct AccountPage: View {
 
     private func count() async {
         requests = await RequestGate.shared.requestsLastHour()
+        images = await RequestGate.shared.imagesLastHour()
         blockedUntil = await RequestGate.shared.blockedUntil
     }
 }

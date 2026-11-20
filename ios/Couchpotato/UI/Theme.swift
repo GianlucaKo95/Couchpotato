@@ -106,6 +106,7 @@ final class ImageStore {
             return d
         }
         let fromProvider = url.host?.lowercased() == providerHost
+        if fromProvider && !Prefs.loadProviderImages { return nil }
         guard let d = try? await (fromProvider ? RequestGate.shared.runImage(fetch) : fetch()),
               let img = UIImage(data: d) else { return nil }
         try? d.write(to: file, options: .atomic)
