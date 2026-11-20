@@ -227,6 +227,14 @@ final class AppModel: ObservableObject {
         syncSoon()
     }
 
+    /// What "Für dich" learned from (history and watched episodes).
+    func clearWatchHistory() {
+        for file in ["history" + profile.suffix, "watched" + profile.suffix] {
+            for key in data.keys(file) { data.remove(file, key) }
+        }
+        syncSoon()
+    }
+
     func clearMyList() {
         let file = "watchlist" + profile.suffix
         for key in data.keys(file) { data.remove(file, key) }
@@ -616,6 +624,7 @@ final class AppModel: ObservableObject {
                    (i["seriesId"] as? NSNumber)?.int64Value == sid { data.remove(file, key) }
             }
         }
+        addHistory(item, finished: finished)
         if finished {
             data.remove(file, item.key)
             if let next {
@@ -628,6 +637,53 @@ final class AppModel: ObservableObject {
             ] as [String: Any])
         }
         syncSoon()
+    }
+
+    // MARK: Für dich (same files as the TVs, so it syncs both ways)
+
+    private var historyFile: String { "history" + profile.suffix }
+
+    /// "m:<film>" / "s:<series>" → last watched (ms), max 400 – like WatchHistory on the TVs.
+    private func addHistory(_ item: PlayItem, finished: Bool) {
+        let key: String
+        if item.kind == "movie" { key = "m:\(item.streamId)" } else if let sid = item.seriesId { key = "s:\(sid)" } else { return }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        // progress is saved every 10 s – the day is what counts for "Für dich", so don't churn the sync
+        let last = (data.value(historyFile, key) as? NSNumber)?.int64Value ?? 0
+        if now - last > 3_600_000 {
+            data.setLong(historyFile, key, now)
+            let keys = data.keys(historyFile)
+            if keys.count > 400 {
+                let old = keys.map { ($0, (data.value(historyFile, $0) as? NSNumber)?.int64Value ?? 0) }.sorted { $0.1 < $1.1 }
+                for (k, _) in old.prefix(keys.count - 400) { data.remove(historyFile, k) }
+            }
+        }
+        if finished, item.kind == "episode", let sid = item.seriesId {
+            let file = "watched" + profile.suffix, wkey = "s:\(sid)"
+            let set = data.stringSet(file, wkey)
+            if !set.contains(String(item.streamId)) { data.setStringSet(file, wkey, set.union([String(item.streamId)])) }
+        }
+    }
+
+    private func longMap(_ file: String) -> [String: Int64] {
+        Dictionary(data.keys(file).map { ($0, (data.value(file, $0) as? NSNumber)?.int64Value ?? 0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    private var recCache: (sig: Int, items: [Entry], personal: Bool)?
+
+    /// "Für dich" – recomputed only when history, list, hidden categories, profile or catalogue change.
+    var forYou: (items: [Entry], personal: Bool) {
+        memoized("foryou") {
+            let history = longMap(historyFile), list = longMap(watchlistFile)
+            var h = Hasher()
+            h.combine(profile.id); h.combine(catalog.entries.count); h.combine(catalog.fetchedAt)
+            h.combine(hiddenSet); h.combine(kidAllowed); h.combine(history); h.combine(list)
+            let sig = h.finalize()
+            if let c = recCache, c.sig == sig { return (c.items, c.personal) }
+            let r = Recommender.recommend(catalog.entries, allowed: allowed, history: history, watchlist: list)
+            recCache = (sig, r.items, r.personal)
+            return r
+        }
     }
 
     func hideContinue(_ e: ProgressEntry) {

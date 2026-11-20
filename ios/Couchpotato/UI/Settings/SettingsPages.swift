@@ -496,6 +496,7 @@ struct DevicesPage: View {
             ActionRow(title: "Live-Verlauf löschen", confirm: "Die zuletzt gesehenen Sender löschen?", destructive: true) { model.clearLiveHistory() }
             ActionRow(title: "Film-Verlauf löschen", confirm: "Alle Filme aus „Weiterschauen“ löschen – auf allen Geräten?", destructive: true) { model.clearProgress(prefix: "vod:") }
             ActionRow(title: "Serien-Verlauf löschen", confirm: "Alle Serien aus „Weiterschauen“ löschen – auf allen Geräten?", destructive: true) { model.clearProgress(prefix: "ep:") }
+            ActionRow(title: "„Für dich“ zurücksetzen", confirm: "Den Verlauf löschen, aus dem „Für dich“ lernt – auf allen Geräten?", destructive: true) { model.clearWatchHistory() }
             ActionRow(title: "Meine Liste leeren", confirm: "Meine Liste leeren – auf allen Geräten?", destructive: true) { model.clearMyList() }
             }
         }

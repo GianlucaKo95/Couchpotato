@@ -82,6 +82,8 @@ struct HomeView: View {
                 }
             }
         }
+        let forYou = model.forYou
+        if !forYou.items.isEmpty { PosterRow(title: "Für dich", entries: forYou.items) }
         let mine = model.myList
         if !mine.isEmpty { PosterRow(title: "Meine Liste", entries: mine) }
         let films = model.newest(Entry.movie)
