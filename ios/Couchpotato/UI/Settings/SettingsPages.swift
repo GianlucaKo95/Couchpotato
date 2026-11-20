@@ -12,6 +12,10 @@ struct SettingsView: View {
             } else {
                 SettingsPage(title: "Einstellungen") {
             Section {
+                    if model.household.linked {
+                        Button { model.showRemote = true } label: { RowLabel(title: "Fernbedienung", icon: "appletvremote.gen4", value: model.orderedTVs.first?.name ?? "kein Fernseher im WLAN") }
+                            .listRowBackground(Theme.panel)
+                    }
                     NavRow(title: "IPTV-Zugang", icon: "key.fill", value: model.login == nil ? "nicht eingetragen" : model.login?.user) { AccountPage(prefs: prefs) }
                     NavRow(title: "Profile", icon: "person.2.fill", value: model.profile.name) { ProfilesPage() }
                     NavRow(title: "Darstellung", icon: "paintpalette.fill") { DisplayPage(prefs: prefs) }
@@ -22,7 +26,7 @@ struct SettingsView: View {
                     NavRow(title: "System-Info", icon: "info.circle.fill") { SystemInfoPage() }
             }
         }
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { model.showSettings = false } } }
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { AccountButton() } }
             }
         }
         .tint(Theme.text)
@@ -115,6 +119,8 @@ struct AccountPage: View {
 
 struct ProfilesPage: View {
     @EnvironmentObject private var model: AppModel
+    /// Set when shown as "Wer schaut?" sheet: picking closes it.
+    var onPick: ((String) -> Void)? = nil
     @State private var editing: Profile?
     @State private var manage = false
 
@@ -125,7 +131,7 @@ struct ProfilesPage: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 24)], spacing: 24) {
                     ForEach(model.profiles) { p in
                         Button {
-                            if manage { editing = p } else { model.chooseProfile(p.id) }
+                            if manage { editing = p } else if let onPick { onPick(p.id) } else { model.chooseProfile(p.id) }
                         } label: {
                             VStack(spacing: 10) {
                                 Avatar(profile: p, size: 104, rounded: true)

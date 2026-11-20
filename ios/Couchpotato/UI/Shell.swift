@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AppSection: Hashable {
-    case start, live, movies, series, search
+    case start, live, movies, series, settings, search
 }
 
 /// Apple's own tab bar (Liquid Glass), upright and sideways. Profile, TV remote and settings sit behind
@@ -16,12 +16,14 @@ struct MainShell: View {
             Tab("Live TV", systemImage: "dot.radiowaves.left.and.right", value: AppSection.live) { LiveView() }
             Tab("Filme", systemImage: "film", value: AppSection.movies) { MediaView(kind: Entry.movie) }
             Tab("Serien", systemImage: "play.rectangle.on.rectangle", value: AppSection.series) { MediaView(kind: Entry.series) }
+            Tab("Einstellungen", systemImage: "gearshape", value: AppSection.settings) { SettingsView() }
             // the search gets its own round glass button next to the tab bar, like in Apple's apps
             Tab(value: AppSection.search, role: .search) { SearchView() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .tint(Theme.text)
-        .sheet(isPresented: $model.showSettings) { SettingsView() }
+        .sheet(isPresented: $model.showProfiles) { WhoIsWatchingSheet() }
+        .onChange(of: model.openSettings) { _, open in if open { section = .settings; model.openSettings = false } }
         .sheet(isPresented: $model.showRemote) { RemoteView().presentationDetents([.large]) }
         .onChange(of: model.liveFullscreen) { _, full in
             // full screen closed somewhere else than on the live tab: nothing shows the picture any more
@@ -34,26 +36,33 @@ struct MainShell: View {
     }
 }
 
-/// The avatar top right: switch profile, open the TV remote or the settings.
+/// The avatar top right: opens "Wer schaut?" – pick a profile, or manage them from there.
 struct AccountButton: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        Menu {
-            Section("Wer schaut?") {
-                ForEach(model.profiles) { p in
-                    Button { model.chooseProfile(p.id) } label: {
-                        if p.id == model.profile.id { Label(p.name, systemImage: "checkmark") } else { Text(p.kid ? "\(p.name) (Kinder)" : p.name) }
-                    }
+        Button { model.showProfiles = true } label: { Avatar(profile: model.profile, size: 32) }
+            .accessibilityLabel("Profil \(model.profile.name) – wechseln oder verwalten")
+    }
+}
+
+/// "Wer schaut?" as a sheet: tap a profile to switch, "Profile verwalten" to edit, add or delete.
+struct WhoIsWatchingSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ProfilesPage { id in
+                dismiss()
+                // a PIN prompt (leaving a kids profile) can only appear once this sheet is gone
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 450_000_000)
+                    model.chooseProfile(id)
                 }
             }
-            if model.household.linked {
-                Button { model.showRemote = true } label: { Label("Fernbedienung", systemImage: "appletvremote.gen4") }
-            }
-            Button { model.showSettings = true } label: { Label("Einstellungen", systemImage: "gearshape") }
-        } label: {
-            Avatar(profile: model.profile, size: 32)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() } } }
         }
-        .accessibilityLabel("Profil \(model.profile.name), Fernbedienung und Einstellungen")
+        .presentationDetents([.large])
     }
 }

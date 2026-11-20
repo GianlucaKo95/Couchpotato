@@ -108,7 +108,7 @@ struct HomeView: View {
                  : "Trag in den Einstellungen deinen IPTV-Zugang ein – oder verbinde das iPhone mit deinen Fernsehern.")
                 .multilineTextAlignment(.center).foregroundStyle(Theme.muted)
             if !model.household.linked && model.login == nil {
-                Button("Zu den Einstellungen") { model.showSettings = true }.buttonStyle(QuietButton(wide: false)).padding(.top, 8)
+                Button("Zu den Einstellungen") { section = .settings }.buttonStyle(QuietButton(wide: false)).padding(.top, 8)
             }
         }
         .frame(maxWidth: .infinity).padding(40)

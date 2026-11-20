@@ -110,7 +110,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var vod: VodSession?
     @Published private(set) var live: LiveSession?
     @Published var liveFullscreen = false
-    @Published var showSettings = false
+    @Published var showProfiles = false
+    @Published var openSettings = false
     @Published var showRemote = false
     @Published var notice: String?
     @Published private(set) var loadingCatalog = false
