@@ -92,8 +92,21 @@ final class AppModel: ObservableObject {
 
     @Published var login: XtreamLogin?
     @Published var demo: Bool { didSet { UserDefaults.standard.set(demo, forKey: "cp.demo") } }
-    @Published private(set) var catalog: Catalog = .empty
-    @Published private(set) var profileId: String { didSet { UserDefaults.standard.set(profileId, forKey: "cp.profile") } }
+    @Published private(set) var catalog: Catalog = .empty {
+        didSet { index = CatalogIndex(catalog); memo = [:] }
+    }
+    /// Lookups over the catalogue, built once per catalogue (tens of thousands of titles).
+    private(set) var index = CatalogIndex(.empty)
+    /// Results derived from household data and catalogue, thrown away whenever either changes.
+    private var memo: [String: Any] = [:]
+
+    private func memoized<T>(_ key: String, _ make: () -> T) -> T {
+        if let v = memo[key] as? T { return v }
+        let v = make()
+        memo[key] = v
+        return v
+    }
+    @Published private(set) var profileId: String { didSet { UserDefaults.standard.set(profileId, forKey: "cp.profile"); memo = [:] } }
     @Published private(set) var vod: VodSession?
     @Published private(set) var live: LiveSession?
     @Published var liveFullscreen = false
@@ -129,7 +142,7 @@ final class AppModel: ObservableObject {
         preferredTV = UserDefaults.standard.string(forKey: "cp.tv")
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("live.json"))   // catalogue of the first test build
         forward = [
-            data.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() },
+            data.objectWillChange.sink { [weak self] _ in self?.memo = [:]; self?.objectWillChange.send() },
             household.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() },
             tvBrowser.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() },
             // a TV turned up in the Wi-Fi: maybe it has a newer catalogue – costs the provider nothing
@@ -286,11 +299,16 @@ final class AppModel: ObservableObject {
     }
 
     /// Categories a kids profile may see ("m:<id>", "s:<id>", "l:<id>"); nil = everything.
-    private var kidAllowed: Set<String>? { profile.kid ? data.stringSet("profiles", "kidCats") : nil }
+    private var kidAllowed: Set<String>? {
+        memoized("kidAllowed") { profile.kid ? data.stringSet("profiles", "kidCats") : nil }
+    }
+
+    private var hiddenSet: Set<String> { memoized("hidden") { data.stringSet("couchpotato", "hiddenCats") } }
 
     func allowed(_ e: Entry) -> Bool {
-        if data.stringSet("couchpotato", "hiddenCats").contains(e.categoryKey) { return false }
-        if let kid = kidAllowed { return kid.contains(e.categoryKey) }
+        let key = e.categoryKey
+        if hiddenSet.contains(key) { return false }
+        if let kid = kidAllowed { return kid.contains(key) }
         return true
     }
 
@@ -298,52 +316,67 @@ final class AppModel: ObservableObject {
 
     func categories(_ kind: Character) -> [LiveCategory] {
         if kind == Entry.live && demoOnly { return DemoSource.categories }
-        let all = catalog.categories[kind] ?? []
-        let hidden = data.stringSet("couchpotato", "hiddenCats")
-        let kid = kidAllowed
-        let order = data.json("couchpotato", "catOrder_\(kind)") as? [String] ?? []
-        let used = Set(catalog.entries.lazy.filter { $0.kind == kind }.compactMap(\.cat))
-        let visible = all.filter { c in
-            let key = "\(kind):\(c.id)"
-            return !hidden.contains(key) && (kid?.contains(key) ?? true) && used.contains(c.id)
+        return memoized("cats\(kind)") {
+            let hidden = hiddenSet
+            let kid = kidAllowed
+            let order = data.json("couchpotato", "catOrder_\(kind)") as? [String] ?? []
+            let used = index.byCategory[kind] ?? [:]
+            let visible = (catalog.categories[kind] ?? []).filter { c in
+                let key = "\(kind):\(c.id)"
+                return !hidden.contains(key) && (kid?.contains(key) ?? true) && used[c.id] != nil
+            }
+            guard !order.isEmpty else { return visible }
+            let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+            return visible.enumerated().sorted { a, b in
+                (rank[a.element.id] ?? Int.max, a.offset) < (rank[b.element.id] ?? Int.max, b.offset)
+            }.map(\.element)
         }
-        guard !order.isEmpty else { return visible }
-        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
-        return visible.enumerated().sorted { a, b in
-            (rank[a.element.id] ?? Int.max, a.offset) < (rank[b.element.id] ?? Int.max, b.offset)
-        }.map(\.element)
     }
 
     func titles(_ kind: Character, in category: LiveCategory) -> [Entry] {
-        catalog.entries.filter { $0.kind == kind && $0.cat == category.id }.sorted { $0.added > $1.added }
+        index.byCategory[kind]?[category.id] ?? []
     }
 
     func newest(_ kind: Character, limit: Int = 30) -> [Entry] {
-        Array(catalog.entries.filter { $0.kind == kind && allowed($0) }.sorted { $0.added > $1.added }.prefix(limit))
+        memoized("new\(kind)\(limit)") {
+            var out: [Entry] = []
+            for e in index.newest[kind] ?? [] where allowed(e) {
+                out.append(e)
+                if out.count == limit { break }
+            }
+            return out
+        }
     }
 
-    func entry(_ kind: Character, _ id: Int64) -> Entry? {
-        catalog.entries.first { $0.kind == kind && $0.itemId == id }
-    }
+    func entry(_ kind: Character, _ id: Int64) -> Entry? { index.byId["\(kind):\(id)"] }
 
-    func search(_ q: String) -> [Character: [Entry]] { catalog.search(q, allowed: allowed) }
+    /// The same filter as [allowed], but usable off the main thread (for search).
+    func searchFilter() -> @Sendable (Entry) -> Bool {
+        let hidden = hiddenSet, kid = kidAllowed
+        return { e in
+            let key = e.categoryKey
+            if hidden.contains(key) { return false }
+            if let kid { return kid.contains(key) }
+            return true
+        }
+    }
 
     // MARK: live TV
 
     func channels(in category: LiveCategory) -> [LiveChannel] {
         if demoOnly { return DemoSource.channels }
-        return catalog.entries.filter { $0.kind == Entry.live && $0.cat == category.id }.map(\.channel)
+        return memoized("ch\(category.id)") { titles(Entry.live, in: category).map(\.channel) }
     }
 
     var allChannels: [LiveChannel] {
         if demoOnly { return DemoSource.channels }
-        return catalog.entries.filter { $0.kind == Entry.live && allowed($0) }.map(\.channel)
+        return memoized("allch") { (index.newest[Entry.live] ?? []).filter(allowed).map(\.channel) }
     }
 
-    var favorites: [LiveChannel] { channelList("liveFavs") }
-    var recent: [LiveChannel] { channelList("liveRecent") }
+    var favorites: [LiveChannel] { memoized("favs") { channelList("liveFavs") } }
+    var recent: [LiveChannel] { memoized("recent") { channelList("liveRecent") } }
 
-    func isFavorite(_ c: LiveChannel) -> Bool { favorites.contains { $0.id == c.id } }
+    func isFavorite(_ c: LiveChannel) -> Bool { memoized("favIds") { Set(favorites.map(\.id)) }.contains(c.id) }
 
     func toggleFavorite(_ c: LiveChannel) {
         var list = favorites
@@ -393,12 +426,11 @@ final class AppModel: ObservableObject {
     }
 
     var myList: [Entry] {
-        let keys = data.keys(watchlistFile)
-        guard !keys.isEmpty else { return [] }
-        let added = Dictionary(keys.map { ($0, (data.value(watchlistFile, $0) as? NSNumber)?.int64Value ?? 0) }, uniquingKeysWith: { a, _ in a })
-        var found: [String: Entry] = [:]
-        for e in catalog.entries where e.kind != Entry.live && added[e.id] != nil && found[e.id] == nil && allowed(e) { found[e.id] = e }
-        return found.values.sorted { (added[$0.id] ?? 0) > (added[$1.id] ?? 0) }
+        memoized("mylist") {
+            let keys = data.keys(watchlistFile)
+            let added = Dictionary(keys.map { ($0, (data.value(watchlistFile, $0) as? NSNumber)?.int64Value ?? 0) }, uniquingKeysWith: { a, _ in a })
+            return keys.compactMap { index.byId[$0] }.filter(allowed).sorted { (added[$0.id] ?? 0) > (added[$1.id] ?? 0) }
+        }
     }
 
     // MARK: catalogue
@@ -551,7 +583,9 @@ final class AppModel: ObservableObject {
         )
     }
 
-    var continueWatching: [ProgressEntry] {
+    var continueWatching: [ProgressEntry] { memoized("continue") { computeContinue() } }
+
+    private func computeContinue() -> [ProgressEntry] {
         let file = "progress" + profile.suffix
         let hidden = data.stringSet("couchpotato", "hiddenContinue" + profile.suffix)
         return data.keys(file).compactMap { key -> ProgressEntry? in

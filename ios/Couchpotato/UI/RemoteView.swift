@@ -95,12 +95,12 @@ struct RemoteView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private func dpad(_ tv: TvDevice) -> some View {
         ZStack {
-            Circle().fill(Theme.surface).frame(width: 230, height: 230)
+            Circle().fill(.clear).frame(width: 230, height: 230).glassEffect(.regular, in: Circle())
             VStack(spacing: 0) {
                 arrow(tv, "up", "chevron.up")
                 HStack(spacing: 0) {
@@ -126,10 +126,8 @@ struct RemoteView: View {
     private func key(_ tv: TvDevice, _ k: String, _ icon: String, _ label: String, big: Bool = false) -> some View {
         Button { send(tv, k) } label: {
             Image(systemName: icon).font(.system(size: big ? 26 : 20, weight: .semibold))
-                .frame(width: big ? 76 : 60, height: big ? 76 : 60)
-                .background(Theme.surface, in: Circle())
-                .foregroundStyle(Theme.text)
         }
+        .buttonStyle(GlassCircle(size: big ? 76 : 60))
         .accessibilityLabel(label)
     }
 

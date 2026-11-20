@@ -74,8 +74,8 @@ struct LiveView: View {
                 TextField("Sender suchen", text: $query).foregroundStyle(Theme.text).autocorrectionDisabled()
                 if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.faint) } }
             }
-            .padding(.horizontal, 12).frame(height: 40)
-            .background(Theme.panel, in: RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, 14).frame(height: 44)
+            .glassEffect(.regular.interactive(), in: Capsule())
 
             if query.isEmpty, let category {
                 Menu {
@@ -87,7 +87,9 @@ struct LiveView: View {
                         Spacer()
                     }
                     .foregroundStyle(Theme.text)
-                    .frame(height: 40)
+                    .padding(.horizontal, 16).frame(height: 44)
+                    .glassEffect(.regular.interactive(), in: Capsule())
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -148,8 +150,8 @@ struct LiveView: View {
             .contentShape(Rectangle())
             .onTapGesture { model.liveFullscreen = true }
             .overlay(alignment: .topTrailing) {
-                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 15, weight: .bold))
-                    .padding(8).background(.black.opacity(0.45), in: Circle()).foregroundStyle(.white).padding(8)
+                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 14, weight: .semibold))
+                    .frame(width: 34, height: 34).glassEffect(.regular, in: Circle()).foregroundStyle(.white).padding(10)
                     .allowsHitTesting(false)
             }
         } else {
@@ -213,15 +215,15 @@ struct LiveInfoCard: View {
             HStack(spacing: 12) {
                 Button { model.toggleFavorite(c) } label: {
                     Image(systemName: model.isFavorite(c) ? "star.fill" : "star").font(.system(size: 18, weight: .medium))
-                        .frame(width: 44, height: 44).background(Theme.surface, in: Circle())
                         .foregroundStyle(model.isFavorite(c) ? Theme.accent : Theme.text)
                 }
+                .buttonStyle(GlassCircle(size: 44))
                 .accessibilityLabel(model.isFavorite(c) ? "Aus Favoriten entfernen" : "Zu Favoriten")
                 ForEach(model.orderedTVs.prefix(1)) { tv in
                     Button { model.playOnTV(model.tvBody(channel: c), on: tv) } label: {
                         Image(systemName: "tv").font(.system(size: 17, weight: .medium))
-                            .frame(width: 44, height: 44).background(Theme.surface, in: Circle()).foregroundStyle(Theme.text)
                     }
+                    .buttonStyle(GlassCircle(size: 44))
                     .accessibilityLabel("Auf „\(tv.name)“ abspielen")
                 }
                 Text(c.name).font(.title3.weight(.semibold)).foregroundStyle(Theme.text).lineLimit(2)

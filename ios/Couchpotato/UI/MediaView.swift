@@ -157,22 +157,36 @@ struct Poster: View {
 struct SearchResultsView: View {
     @EnvironmentObject private var model: AppModel
     let query: String
+    @State private var hits: [Character: [Entry]] = [:]
+    @State private var searching = false
 
     var body: some View {
-        let hits = model.search(query)
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 24) {
             if let m = hits[Entry.movie], !m.isEmpty { PosterRow(title: "Filme", entries: m) }
             if let s = hits[Entry.series], !s.isEmpty { PosterRow(title: "Serien", entries: s) }
             if let l = hits[Entry.live], !l.isEmpty {
-                Text("Sender").font(Theme.heading(22)).foregroundStyle(Theme.text).padding(.horizontal, 20)
+                Text("Sender").font(.title2.weight(.semibold)).foregroundStyle(Theme.text).padding(.horizontal, 20)
                 let channels = l.map(\.channel)
                 ForEach(channels) { c in ChannelRow(channel: c, list: channels).padding(.horizontal, 20) }
             }
-            if hits.values.allSatisfy(\.isEmpty) {
+            if hits.values.allSatisfy(\.isEmpty) && !searching {
                 Text(query.count < 2 ? "" : "Nichts gefunden für „\(query)“").foregroundStyle(Theme.muted).frame(maxWidth: .infinity).padding(40)
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
+        // typing stays smooth: wait for a short pause, then search tens of thousands of titles off the main thread
+        .task(id: query) {
+            searching = true
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            guard !Task.isCancelled else { return }
+            let catalog = model.catalog
+            let allowed = model.searchFilter()
+            let q = query
+            let result = await Task.detached(priority: .userInitiated) { catalog.search(q, allowed: allowed) }.value
+            guard !Task.isCancelled else { return }
+            hits = result
+            searching = false
+        }
     }
 }
 

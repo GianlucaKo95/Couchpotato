@@ -12,13 +12,9 @@ struct RingButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: size * 0.42, weight: .regular))
-                .frame(width: size, height: size)
-                .overlay(Circle().stroke(Color.white.opacity(0.35), lineWidth: 1.5))
-                .foregroundStyle(.white)
-                .contentShape(Circle())
+            Image(systemName: icon).font(.system(size: size * 0.4, weight: .medium))
         }
+        .buttonStyle(GlassCircle(size: size))
     }
 }
 
@@ -72,24 +68,25 @@ struct SidePanel<Content: View>: View {
             HStack {
                 Text(title).font(.title2.weight(.bold)).foregroundStyle(Theme.text)
                 Spacer()
-                Button(action: close) { Image(systemName: "xmark").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.text).frame(width: 44, height: 44) }
+                Button(action: close) { Image(systemName: "xmark").font(.system(size: 16, weight: .semibold)) }
+                    .buttonStyle(GlassCircle(size: 40))
             }
             .padding(.horizontal, 22).padding(.top, 14)
             ScrollView { VStack(alignment: .leading, spacing: 0, content: content).padding(.horizontal, 22).padding(.bottom, 24) }
         }
-        .background(.regularMaterial)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
         if landscape {
             HStack(spacing: 0) {
-                Color.black.opacity(0.35).onTapGesture(perform: close)
-                panel.frame(width: 420).ignoresSafeArea(edges: .vertical)
+                Color.black.opacity(0.3).onTapGesture(perform: close)
+                panel.frame(width: 400).padding(12)
             }
-            .transition(.move(edge: .trailing))
+            .transition(.move(edge: .trailing).combined(with: .opacity))
         } else {
             VStack(spacing: 0) {
-                Color.black.opacity(0.35).onTapGesture(perform: close)
-                panel.frame(maxHeight: 460).clipShape(UnevenRoundedRectangle(topLeadingRadius: 22, topTrailingRadius: 22))
+                Color.black.opacity(0.3).onTapGesture(perform: close)
+                panel.frame(maxHeight: 460).padding(8)
             }
-            .transition(.move(edge: .bottom))
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 }
@@ -217,7 +214,9 @@ struct VodPlayerScreen: View {
         let e = session.engine
         ZStack {
             Color.black.ignoresSafeArea()
-            PlayerSurface(engine: e).ignoresSafeArea()
+            PlayerSurface(engine: e).ignoresSafeArea().allowsHitTesting(false)
+            // VLC's own video view swallows touches – a clear layer above it takes the taps
+            Color.clear.contentShape(Rectangle()).ignoresSafeArea()
                 .onTapGesture { chrome.toggle() }
             VodChrome(session: session, engine: e, chrome: chrome, scrub: $scrub, panel: $panel)
                 .opacity(chrome.shown ? 1 : 0)
@@ -259,7 +258,8 @@ private struct VodChrome: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                Button { model.closeVod() } label: { Image(systemName: "chevron.left").font(.system(size: 26, weight: .medium)).frame(width: 44, height: 44) }
+                Button { model.closeVod() } label: { Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold)) }
+                    .buttonStyle(GlassCircle(size: 44))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.item.title).font(Theme.heading(24)).lineLimit(1)
                     if let s = session.item.subtitle { Text(s).font(.subheadline).foregroundStyle(Theme.muted).lineLimit(1) }
@@ -287,14 +287,18 @@ private struct VodChrome: View {
             }
             HStack(spacing: 22) {
                 Button { open(.tracks) } label: { Label("Audio & Untertitel", systemImage: "captions.bubble") }
+                    .buttonStyle(.glass)
                 Spacer()
                 if let next = session.next {
                     Button { session.playNext() } label: { Label("Nächste Folge", systemImage: "forward.end") }
+                        .buttonStyle(.glass)
                         .accessibilityHint(next.subtitle ?? next.title)
                 }
                 Button { open(.fit) } label: { Label("Bildformat", systemImage: "aspectratio") }
+                    .buttonStyle(.glass)
                 if engine.pipPossible {
-                    Button { engine.togglePictureInPicture() } label: { Image(systemName: "pip.enter").font(.system(size: 22)) }
+                    Button { engine.togglePictureInPicture() } label: { Image(systemName: "pip.enter").font(.system(size: 17, weight: .medium)) }
+                        .buttonStyle(GlassCircle(size: 44))
                         .accessibilityLabel("Bild-in-Bild")
                 }
             }
@@ -326,7 +330,8 @@ struct LivePlayerScreen: View {
         let e = session.engine
         ZStack {
             Color.black.ignoresSafeArea()
-            PlayerSurface(engine: e).ignoresSafeArea()
+            PlayerSurface(engine: e).ignoresSafeArea().allowsHitTesting(false)
+            Color.clear.contentShape(Rectangle()).ignoresSafeArea()
                 .onTapGesture { chrome.toggle() }
                 .gesture(DragGesture(minimumDistance: 40).onEnded { d in
                     // swipe left/right: next/previous channel
@@ -428,20 +433,23 @@ private struct LiveChrome: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                Button { model.liveFullscreen = false } label: { Image(systemName: "chevron.left").font(.system(size: 26, weight: .medium)).frame(width: 44, height: 44) }
+                Button { model.liveFullscreen = false } label: { Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold)) }
+                    .buttonStyle(GlassCircle(size: 44))
                 Text(session.categoryName).font(Theme.heading(24)).lineLimit(1)
                 Spacer()
                 ChannelLogo(channel: session.current, size: 44)
                 Menu {
                     Button { open(.tracks) } label: { Label("Audio & Untertitel", systemImage: "captions.bubble") }
+                    .buttonStyle(.glass)
                     Button { open(.fit) } label: { Label("Bildformat", systemImage: "aspectratio") }
+                    .buttonStyle(.glass)
                     if session.previous != nil {
                         Button { session.backToPrevious() } label: { Label("Letzter Sender", systemImage: "arrow.uturn.backward") }
                     }
                     Button { model.toggleFavorite(session.current) } label: {
                         Label(model.isFavorite(session.current) ? "Aus Favoriten entfernen" : "Zu Favoriten", systemImage: "star")
                     }
-                } label: { Image(systemName: "ellipsis").rotationEffect(.degrees(90)).font(.system(size: 22, weight: .bold)).frame(width: 44, height: 44) }
+                } label: { Image(systemName: "ellipsis").font(.system(size: 17, weight: .semibold)).frame(width: 44, height: 44).glassEffect(.regular.interactive(), in: Circle()) }
             }
             Spacer()
             ZStack {
@@ -461,8 +469,8 @@ private struct LiveChrome: View {
                 Spacer()
                 Button { session.goLive(); chrome.poke() } label: {
                     LiveBadge(on: session.atLive)
-                        .padding(.horizontal, 12).frame(height: 32)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(.horizontal, 14).frame(height: 36)
+                        .glassEffect(.regular.interactive(), in: Capsule())
                 }
                 .accessibilityLabel(session.atLive ? "Live" : "Zurück zu Live")
             }
@@ -488,9 +496,12 @@ private struct LiveChrome: View {
                 }
                 Spacer()
                 Button { open(.channels) } label: { Label("Sender", systemImage: "list.bullet") }
+                    .buttonStyle(.glass)
                 Button { open(.epg) } label: { Label("EPG", systemImage: "calendar") }
+                    .buttonStyle(.glass)
                 if engine.pipPossible {
-                    Button { engine.togglePictureInPicture() } label: { Image(systemName: "pip.enter").font(.system(size: 22)) }
+                    Button { engine.togglePictureInPicture() } label: { Image(systemName: "pip.enter").font(.system(size: 17, weight: .medium)) }
+                        .buttonStyle(GlassCircle(size: 44))
                         .accessibilityLabel("Bild-in-Bild")
                 }
             }
@@ -513,7 +524,7 @@ private struct LiveChrome: View {
                 Text(c.name).font(.caption.weight(.semibold)).lineLimit(1).frame(maxWidth: 110)
             }
             .padding(10)
-            .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 20))
         }
     }
 

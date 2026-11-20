@@ -97,6 +97,7 @@ final class PlayerEngine: NSObject, ObservableObject {
     /// Shows the video in [view] (moves it over from where it was).
     func attach(_ view: UIView) {
         container = view
+        view.isUserInteractionEnabled = false
         for v in videoViews {
             v.removeFromSuperview()
             v.frame = view.bounds
@@ -207,6 +208,7 @@ extension PlayerEngine: VLCDrawable, VLCPictureInPictureDrawable, VLCPictureInPi
     nonisolated func addSubview(_ view: UIView) {
         onMain {
             videoViews.append(view)
+            view.isUserInteractionEnabled = false   // taps belong to our controls
             if let container {
                 view.frame = container.bounds
                 view.autoresizingMask = [.flexibleWidth, .flexibleHeight]

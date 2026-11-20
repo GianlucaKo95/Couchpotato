@@ -33,34 +33,40 @@ extension Color {
     }
 }
 
-/// The one primary action of a screen: off-white with dark text, like "Play" in Apple's TV app.
+/// The one primary action of a screen: bright Liquid Glass with dark text, like "Play" in Apple's TV app.
 struct AccentButton: ButtonStyle {
     var wide = true
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 17, weight: .semibold))
             .frame(maxWidth: wide ? .infinity : nil)
-            .padding(.horizontal, 24).frame(minHeight: 48)
-            .background(Theme.text, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 24).frame(minHeight: 50)
             .foregroundStyle(Theme.background)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .glassEffect(.regular.tint(Theme.text).interactive(), in: Capsule())
     }
 }
 
-/// Secondary actions: grey glass.
+/// Secondary actions: clear Liquid Glass.
 struct QuietButton: ButtonStyle {
     var wide = true
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 17, weight: .semibold))
             .frame(maxWidth: wide ? .infinity : nil)
-            .padding(.horizontal, 20).frame(minHeight: 48)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.hairline))
+            .padding(.horizontal, 20).frame(minHeight: 50)
             .foregroundStyle(Theme.text)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .glassEffect(.regular.interactive(), in: Capsule())
+    }
+}
+
+/// Round glass control (player, remote).
+struct GlassCircle: ButtonStyle {
+    var size: CGFloat = 52
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: size, height: size)
+            .foregroundStyle(Theme.text)
+            .glassEffect(.regular.interactive(), in: Circle())
     }
 }
 

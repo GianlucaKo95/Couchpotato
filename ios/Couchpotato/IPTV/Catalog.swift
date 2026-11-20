@@ -181,3 +181,29 @@ actor CatalogStore {
         for f in [tsv, cats, meta] { try? FileManager.default.removeItem(at: f) }
     }
 }
+
+/// Lookups over a catalogue, built once: per kind and category (newest first), newest per kind, by id.
+struct CatalogIndex {
+    let byCategory: [Character: [String: [Entry]]]
+    let newest: [Character: [Entry]]
+    let byId: [String: Entry]
+
+    init(_ c: Catalog) {
+        var cats: [Character: [String: [Entry]]] = [:]
+        var kinds: [Character: [Entry]] = [:]
+        var ids: [String: Entry] = [:]
+        ids.reserveCapacity(c.entries.count)
+        for e in c.entries {
+            cats[e.kind, default: [:]][e.cat ?? "", default: []].append(e)
+            kinds[e.kind, default: []].append(e)
+            ids[e.id] = e
+        }
+        // films and series newest first; channels keep the provider's order
+        for (k, v) in cats where k != Entry.live { cats[k] = v.mapValues { $0.sorted { $0.added > $1.added } } }
+        byCategory = cats
+        var newestByKind = kinds
+        for (k, v) in kinds where k != Entry.live { newestByKind[k] = v.sorted { $0.added > $1.added } }
+        newest = newestByKind
+        byId = ids
+    }
+}

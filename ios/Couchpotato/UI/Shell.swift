@@ -12,17 +12,14 @@ struct MainShell: View {
 
     var body: some View {
         TabView(selection: $section) {
-            HomeView(section: $section)
-                .tabItem { Label("Start", systemImage: "house") }.tag(AppSection.start)
-            LiveView()
-                .tabItem { Label("Live TV", systemImage: "dot.radiowaves.left.and.right") }.tag(AppSection.live)
-            MediaView(kind: Entry.movie)
-                .tabItem { Label("Filme", systemImage: "film") }.tag(AppSection.movies)
-            MediaView(kind: Entry.series)
-                .tabItem { Label("Serien", systemImage: "play.rectangle.on.rectangle") }.tag(AppSection.series)
-            SearchView()
-                .tabItem { Label("Suche", systemImage: "magnifyingglass") }.tag(AppSection.search)
+            Tab("Start", systemImage: "house", value: AppSection.start) { HomeView(section: $section) }
+            Tab("Live TV", systemImage: "dot.radiowaves.left.and.right", value: AppSection.live) { LiveView() }
+            Tab("Filme", systemImage: "film", value: AppSection.movies) { MediaView(kind: Entry.movie) }
+            Tab("Serien", systemImage: "play.rectangle.on.rectangle", value: AppSection.series) { MediaView(kind: Entry.series) }
+            // the search gets its own round glass button next to the tab bar, like in Apple's apps
+            Tab(value: AppSection.search, role: .search) { SearchView() }
         }
+        .tabBarMinimizeBehavior(.onScrollDown)
         .tint(Theme.text)
         .sheet(isPresented: $model.showSettings) { SettingsView() }
         .sheet(isPresented: $model.showRemote) { RemoteView().presentationDetents([.large]) }
