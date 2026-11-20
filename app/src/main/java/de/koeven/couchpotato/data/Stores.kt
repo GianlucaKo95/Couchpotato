@@ -269,9 +269,7 @@ class ProgressStore(context: Context) {
     fun remove(key: String) = p.edit().remove(key).apply()
 
     fun continueWatching(): List<ProgressEntry> = all()
-        .filter { e ->
-            e.upNext || (e.positionMs > 10_000 && (e.durationMs <= 0 || e.positionMs < e.durationMs * 0.95))
-        }
+        .filter { e -> e.upNext || (e.positionMs > 10_000 && !isFinished(e.positionMs, e.durationMs)) }
         .sortedByDescending { it.updatedAt }
         .take(30)
 
@@ -289,6 +287,15 @@ class ProgressStore(context: Context) {
             .put("at", e.updatedAt)
             .put("upNext", e.upNext)
         edit.putString(e.item.key, json.toString()).apply()
+    }
+
+    companion object {
+        /**
+         * Watched to the end: the last 10 % (end credits) or the last 2 minutes – nobody sits through
+         * the credits, and "Weiterschauen" should not keep a film you just finished. Same rule on the iPhone.
+         */
+        fun isFinished(positionMs: Long, durationMs: Long): Boolean =
+            durationMs > 0 && (positionMs >= durationMs * 0.9 || (durationMs >= 600_000 && durationMs - positionMs <= 120_000))
     }
 
     private fun parse(s: String): ProgressEntry? = runCatching {

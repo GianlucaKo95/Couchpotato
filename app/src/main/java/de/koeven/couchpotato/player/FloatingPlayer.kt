@@ -1,5 +1,6 @@
 package de.koeven.couchpotato.player
 
+import de.koeven.couchpotato.data.ProgressStore
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -135,7 +136,7 @@ class FloatingPlayer : Service() {
         val pos = p.currentPosition
         val dur = p.duration.takeIf { it > 0 } ?: 0L
         when {
-            dur > 0 && pos >= dur * 0.95 -> progress.finished(item, items.getOrNull(index + 1))
+            ProgressStore.isFinished(pos, dur) -> progress.finished(item, items.getOrNull(index + 1))
             pos > 5_000 -> progress.save(item, pos, dur)
         }
     }
@@ -143,7 +144,7 @@ class FloatingPlayer : Service() {
     private fun startPositionFor(item: de.koeven.couchpotato.data.PlayItem): Long {
         val e = progress.get(item.key) ?: return 0L
         if (e.upNext) return 0L
-        if (e.durationMs > 0 && e.positionMs >= e.durationMs * 0.95) return 0L
+        if (ProgressStore.isFinished(e.positionMs, e.durationMs)) return 0L
         return e.positionMs
     }
 

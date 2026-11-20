@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import de.koeven.couchpotato.data.AppsRepository
 import de.koeven.couchpotato.data.MediaPlays
 import de.koeven.couchpotato.data.PlayItem
+import de.koeven.couchpotato.data.ProgressStore
 import de.koeven.couchpotato.data.Profiles
 import de.koeven.couchpotato.data.ProgressEntry
 import de.koeven.couchpotato.data.SearchEntry
@@ -135,7 +136,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val inProgress = iptv.mapNotNull { it.entry.item.seriesId }.toSet()
             val newOnly = fresh.filterKeys { it !in inProgress }.values.map { ContinueItem.NewEpisodes(it, 0L) }
             val media = MediaPlays.all(app)
-                .filter { it.packageName != app.packageName }
+                .filter { it.packageName != app.packageName && !ProgressStore.isFinished(it.positionMs, it.durationMs) }
                 .map { ContinueItem.Media(it, labels[it.packageName]) }
             val external = watchNextCache.merge(WatchNextSource.load(app)) { pkg -> settings.lastLaunched(pkg) }
                 .filter { it.packageName != app.packageName }

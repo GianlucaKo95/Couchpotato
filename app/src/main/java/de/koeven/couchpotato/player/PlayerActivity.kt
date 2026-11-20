@@ -231,7 +231,7 @@ class PlayerActivity : Activity() {
         if (item.kind == PlayItem.KIND_LIVE) return C.TIME_UNSET   // live edge
         val e = progress.get(item.key) ?: return 0L
         if (e.upNext) return 0L
-        if (e.durationMs > 0 && e.positionMs >= e.durationMs * 0.95) return 0L
+        if (ProgressStore.isFinished(e.positionMs, e.durationMs)) return 0L
         return e.positionMs
     }
 
@@ -287,7 +287,7 @@ class PlayerActivity : Activity() {
         val pos = player.currentPosition
         val dur = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
         when {
-            dur > 0 && pos >= dur * 0.95 -> progress.finished(item, items.getOrNull(i + 1))
+            ProgressStore.isFinished(pos, dur) -> progress.finished(item, items.getOrNull(i + 1))
             pos > 5_000 -> progress.save(item, pos, dur)
         }
     }

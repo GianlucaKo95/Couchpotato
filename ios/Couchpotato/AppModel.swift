@@ -554,14 +554,19 @@ final class AppModel: ObservableObject {
 
     func playMovie(_ e: Entry) {
         let item = PlayItem.movie(e)
-        play(item, from: progress(item.key)?.position ?? 0)
+        play(item, from: startPosition(item.key))
+    }
+
+    /// Where to start: the saved position, or from the beginning when it was finished (or is "up next").
+    private func startPosition(_ key: String) -> Double {
+        guard let p = progress(key), !p.upNext, !Self.isFinished(p.position, p.duration) else { return 0 }
+        return p.position
     }
 
     func playEpisode(_ e: Episode, of s: SeriesInfo) {
         let item = s.item(e)
         let rest = s.episodes.drop { $0.id != e.id }.dropFirst().prefix(40).map { s.item($0) }
-        let p = progress(item.key)
-        play(item, from: p?.upNext == true ? 0 : (p?.position ?? 0), queue: Array(rest))
+        play(item, from: startPosition(item.key), queue: Array(rest))
     }
 
     func resume(_ e: ProgressEntry) {
@@ -600,7 +605,7 @@ final class AppModel: ObservableObject {
         let hidden = data.stringSet("couchpotato", "hiddenContinue" + profile.suffix)
         return data.keys(file).compactMap { key -> ProgressEntry? in
             guard !hidden.contains(key), let e = progress(key) else { return nil }
-            guard e.upNext || (e.position > 10 && (e.duration <= 0 || e.position < e.duration * 0.95)) else { return nil }
+            guard e.upNext || (e.position > 10 && !Self.isFinished(e.position, e.duration)) else { return nil }
             if profile.kid, !kidMayWatch(e.item) { return nil }
             return e
         }
@@ -613,11 +618,16 @@ final class AppModel: ObservableObject {
         return e.map(allowed) ?? false
     }
 
+    /// Watched to the end – the last 10 % (end credits) or the last 2 minutes. Same rule as on the TVs.
+    nonisolated static func isFinished(_ position: Double, _ duration: Double) -> Bool {
+        duration > 0 && (position >= duration * 0.9 || (duration >= 600 && duration - position <= 120))
+    }
+
     /// Same rules as on the TVs: keep only the latest episode per series; finished = gone (next episode queued).
     func saveProgress(_ item: PlayItem, position: Double, duration: Double, next: PlayItem? = nil) {
         guard item.kind != "live", position > 0 else { return }
         let file = "progress" + profile.suffix
-        let finished = duration > 0 && position >= duration * 0.95
+        let finished = Self.isFinished(position, duration)
         if let sid = item.seriesId {
             for key in data.keys(file) where key != item.key {
                 if let o = data.json(file, key) as? [String: Any], let i = o["item"] as? [String: Any],

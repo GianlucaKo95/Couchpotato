@@ -52,8 +52,20 @@ class MediaWatcher : NotificationListenerService() {
         }
     }
 
+    /** While something plays: note the position every 30 s, so the end of a film is seen even without a callback. */
+    private val positionPoll = object : Runnable {
+        override fun run() {
+            controllers.values.forEach { (c, _) ->
+                if (c.playbackState?.state == PlaybackState.STATE_PLAYING) record(c)
+            }
+            handler.postDelayed(this, 30_000L)
+        }
+    }
+
     override fun onListenerConnected() {
         super.onListenerConnected()
+        handler.removeCallbacks(positionPoll)
+        handler.postDelayed(positionPoll, 30_000L)
         handler.removeCallbacks(screenTimeCheck)
         handler.postDelayed(screenTimeCheck, 60_000L)
         val msm = getSystemService(MediaSessionManager::class.java) ?: return
@@ -66,6 +78,7 @@ class MediaWatcher : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        handler.removeCallbacks(positionPoll)
         handler.removeCallbacks(screenTimeCheck)
         runCatching { sessionManager?.removeOnActiveSessionsChangedListener(sessionsListener) }
         controllers.values.forEach { (c, cb) -> runCatching { c.unregisterCallback(cb) } }
@@ -138,7 +151,7 @@ class MediaWatcher : NotificationListenerService() {
         val merged = if (known != null) item.copy(
             title = known.title, subtitle = known.subtitle, image = known.image, seriesId = known.seriesId,
         ) else item
-        if (dur > 0 && pos >= dur * 0.95) progress.finished(merged, null)
+        if (ProgressStore.isFinished(pos, dur)) progress.finished(merged, null)
         else progress.save(merged, pos, dur)
     }
 
@@ -164,6 +177,10 @@ class MediaWatcher : NotificationListenerService() {
         // one entry per show: episodes of the same series replace each other
         val show = (subtitle ?: title).lowercase()
         val key = "media:${c.packageName}:${show.hashCode().toUInt()}"
+        if (ProgressStore.isFinished(pos, dur)) {      // watched to the end: out of "Weiterschauen"
+            MediaPlays.remove(this, key)
+            return
+        }
         MediaPlays.save(
             this,
             MediaPlay(key, c.packageName, title, subtitle, imageUrl, pos.coerceAtLeast(0), dur, System.currentTimeMillis()),
