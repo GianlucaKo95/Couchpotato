@@ -89,9 +89,15 @@ object Updater {
         }
     }
 
-    /** Downloads, verifies and starts the installation (Android then asks once to confirm). */
+    private fun updateFile(c: Context) = File(File(c.cacheDir, "updates").apply { mkdirs() }, "couchpotato.apk")
+
+    /**
+     * Downloads, verifies and starts the installation (Android then asks once to confirm).
+     * Call with the visible activity as [c]: the installer screen is opened straight from it.
+     */
     suspend fun install(c: Context, r: Release, onProgress: (Int) -> Unit = {}) = withContext(Dispatchers.IO) {
-        val file = File(c.cacheDir, "update.apk")
+        File(c.cacheDir, "update.apk").delete()          // left over from older builds
+        val file = updateFile(c)
         val api = (URL(r.url).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = false
             connectTimeout = 15_000; readTimeout = 30_000
@@ -131,6 +137,27 @@ object Updater {
             file.delete(); throw IOException("Download beschädigt – bitte noch einmal")
         }
 
+        // 1. Fire TV's own installer screen, opened from the visible launcher – works on every Fire OS.
+        //    (The PackageInstaller session below needs a confirmation started from a broadcast, which
+        //    newer Fire OS versions silently block as a "background activity start".)
+        val opened = withContext(Dispatchers.Main) {
+            runCatching {
+                val uri = androidx.core.content.FileProvider.getUriForFile(c, "${c.packageName}.updates", file)
+                @Suppress("DEPRECATION")
+                val view = Intent(Intent.ACTION_INSTALL_PACKAGE)
+                    .setDataAndType(uri, "application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    .putExtra(Intent.EXTRA_RETURN_RESULT, false)
+                if (c !is android.app.Activity) view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                c.startActivity(view)
+            }.isSuccess
+        }
+        if (opened) {
+            setProblem(c, null)
+            return@withContext                            // the file stays until the next update
+        }
+
+        // 2. fallback: installer session
         val installer = c.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(c.packageName)
