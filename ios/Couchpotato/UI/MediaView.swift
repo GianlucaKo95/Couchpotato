@@ -225,8 +225,9 @@ struct DetailHeader: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            RemoteImage(url: image) { Theme.panel }
-                .frame(height: 340).frame(maxWidth: .infinity).clipped()
+            Color.clear.frame(maxWidth: .infinity).frame(height: 340)
+                .overlay { RemoteImage(url: image) { Theme.panel } }
+                .clipped()
             LinearGradient(stops: [.init(color: .clear, location: 0.3), .init(color: Theme.background, location: 1)], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 6) {
                 Text(title).font(.system(size: 30, weight: .bold)).foregroundStyle(Theme.text).lineLimit(3).minimumScaleFactor(0.7)

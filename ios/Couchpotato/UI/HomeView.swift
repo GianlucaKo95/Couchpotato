@@ -127,8 +127,9 @@ struct HeroView: View {
     var body: some View {
         let e = hero.entry
         ZStack(alignment: .bottomLeading) {
-            RemoteImage(url: hero.image) { Theme.panel }
-                .frame(height: height).frame(maxWidth: .infinity).clipped()
+            Color.clear.frame(maxWidth: .infinity).frame(height: height)
+                .overlay { RemoteImage(url: hero.image) { Theme.panel } }
+                .clipped()
             // scrims in the room's own colour – the picture fades into the page, nothing glows
             LinearGradient(stops: [.init(color: .clear, location: 0.35), .init(color: Theme.background.opacity(0.85), location: 0.8), .init(color: Theme.background, location: 1)],
                            startPoint: .top, endPoint: .bottom)
