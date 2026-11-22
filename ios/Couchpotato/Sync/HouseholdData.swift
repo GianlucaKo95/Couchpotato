@@ -54,9 +54,13 @@ final class HouseholdData: ObservableObject {
 
     func remove(_ file: String, _ key: String) { put(file, key, nil) }
 
+    /// The file the latest change was in; nil = several or all (a sync replaced everything).
+    private(set) var lastChanged: String?
+
     private func put(_ file: String, _ key: String, _ typed: [String: Any]?) {
         var f = files[file] ?? [:]
         f[key] = typed
+        lastChanged = file
         files[file] = f
         save()
     }
@@ -66,13 +70,17 @@ final class HouseholdData: ObservableObject {
     var snapshot: [String: Any] { ["version": 1, "preferences": files] }
 
     func replace(with snapshot: [String: Any]) {
+        lastChanged = nil
         files = Self.filesOf(snapshot)
         save()
     }
 
     func clear() {
+        pendingSave?.cancel(); pendingSave = nil
+        lastChanged = nil
         files = [:]
-        try? FileManager.default.removeItem(at: url)
+        let url = url
+        Self.writer.async { try? FileManager.default.removeItem(at: url) }
     }
 
     nonisolated static func filesOf(_ snapshot: [String: Any]) -> Files {
@@ -86,9 +94,26 @@ final class HouseholdData: ObservableObject {
         return out
     }
 
+    // Saving: many small changes (progress every 10 s, history, favourites) are collected for a second and
+    // written in the background – not the whole file on the main thread for every key.
+    private var pendingSave: DispatchWorkItem?
+    private static let writer = DispatchQueue(label: "household.save", qos: .utility)
+
     private func save() {
-        guard let d = try? JSONSerialization.data(withJSONObject: snapshot) else { return }
-        try? d.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        pendingSave?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.flush() }
+        pendingSave = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
+    /// Writes now (also called when the app goes to the background).
+    func flush() {
+        pendingSave?.cancel(); pendingSave = nil
+        let snap = snapshot, url = url
+        Self.writer.async {
+            guard let d = try? JSONSerialization.data(withJSONObject: snap) else { return }
+            try? d.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }
     }
 }
 

@@ -14,7 +14,7 @@ struct CouchpotatoApp: App {
                 .tint(Theme.text)
                 .onChange(of: phase) { _, p in
                     if p == .active { Task { await model.becameActive() } }
-                    if p == .background { Task { await model.syncNow(quiet: true) } }
+                    if p == .background { model.data.flush(); Task { await model.syncNow(quiet: true) } }
                 }
                 .onAppear { ImageStore.shared.providerHost = model.login?.host }
                 .onChange(of: model.login) { _, l in ImageStore.shared.providerHost = l?.host }

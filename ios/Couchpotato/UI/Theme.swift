@@ -1,5 +1,6 @@
 import CryptoKit
 import SwiftUI
+import ImageIO
 import UIKit
 
 /// The living room in the evening: a dark room with a hint of Couchpotato's petrol, the colour comes from
@@ -83,40 +84,89 @@ struct LiveBadge: View {
 
 /// Pictures with a disk cache. Pictures on the provider's own server go through the request brake
 /// (one at a time, limited per hour) – a list of channel logos must not hammer the provider.
-@MainActor
-final class ImageStore {
+/// Pictures: disk cache + memory cache. Reading, decoding and shrinking to the size on screen happen off the
+/// main thread – a poster 120 pt wide no longer decodes a 1000-pixel original while scrolling.
+final class ImageStore: @unchecked Sendable {
     static let shared = ImageStore()
-    private let memory = NSCache<NSURL, UIImage>()
+    private let memory: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.totalCostLimit = 120 * 1024 * 1024          // decoded bytes
+        return c
+    }()
     private let folder: URL = {
         let f = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("images", isDirectory: true)
         try? FileManager.default.createDirectory(at: f, withIntermediateDirectories: true)
         return f
     }()
-    var providerHost: String?
+    @MainActor var providerHost: String?
 
-    func cached(_ url: URL) -> UIImage? { memory.object(forKey: url as NSURL) }
+    /// Sizes are rounded up to 64-pixel steps, so a row of equal posters shares one cache entry each.
+    private static func bucket(_ px: CGSize) -> CGSize {
+        func r(_ v: CGFloat) -> CGFloat { min(max(ceil(v / 64) * 64, 64), 2400) }
+        return CGSize(width: r(px.width), height: r(px.height))
+    }
+    private static func key(_ url: URL, _ px: CGSize, _ fill: Bool) -> NSString {
+        "\(url.absoluteString)|\(Int(px.width))x\(Int(px.height))\(fill ? "f" : "t")" as NSString
+    }
 
-    func load(_ url: URL) async -> UIImage? {
-        if let m = memory.object(forKey: url as NSURL) { return m }
-        let name = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
-        let file = folder.appendingPathComponent(name)
-        if let d = try? Data(contentsOf: file), let img = UIImage(data: d) {
-            memory.setObject(img, forKey: url as NSURL)
+    func cached(_ url: URL, pixels: CGSize, fill: Bool) -> UIImage? {
+        memory.object(forKey: Self.key(url, Self.bucket(pixels), fill))
+    }
+
+    @MainActor
+    func load(_ url: URL, pixels: CGSize, fill: Bool) async -> UIImage? {
+        let px = Self.bucket(pixels), key = Self.key(url, px, fill)
+        if let m = memory.object(forKey: key) { return m }
+        let fromProvider = url.host?.lowercased() == providerHost
+        if fromProvider && !Prefs.loadProviderImages {
+            return await Task.detached(priority: .userInitiated) { self.fromDisk(url, px, fill, key) }.value
+        }
+        if let img = await Task.detached(priority: .userInitiated, operation: { self.fromDisk(url, px, fill, key) }).value {
             return img
         }
-        let fetch: () async throws -> Data = {
+        let fetch: @Sendable () async throws -> Data = {
             var req = URLRequest(url: url, timeoutInterval: 20)
             req.setValue(XtreamClient.userAgent, forHTTPHeaderField: "User-Agent")
             let (d, r) = try await URLSession.shared.data(for: req)
             guard ((r as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { throw URLError(.badServerResponse) }
             return d
         }
-        let fromProvider = url.host?.lowercased() == providerHost
-        if fromProvider && !Prefs.loadProviderImages { return nil }
-        guard let d = try? await (fromProvider ? RequestGate.shared.runImage(fetch) : fetch()),
-              let img = UIImage(data: d) else { return nil }
-        try? d.write(to: file, options: .atomic)
-        memory.setObject(img, forKey: url as NSURL)
+        guard let d = try? await (fromProvider ? RequestGate.shared.runImage(fetch) : fetch()) else { return nil }
+        return await Task.detached(priority: .userInitiated) {
+            try? d.write(to: self.file(url), options: .atomic)
+            return self.decode(d, px, fill, key)
+        }.value
+    }
+
+    private func file(_ url: URL) -> URL {
+        folder.appendingPathComponent(SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined())
+    }
+
+    private func fromDisk(_ url: URL, _ px: CGSize, _ fill: Bool, _ key: NSString) -> UIImage? {
+        guard let d = try? Data(contentsOf: file(url)) else { return nil }
+        return decode(d, px, fill, key)
+    }
+
+    /// Decodes straight at the needed size (ImageIO thumbnail) – fully decoded here, not later on the main thread.
+    private func decode(_ d: Data, _ px: CGSize, _ fill: Bool, _ key: NSString) -> UIImage? {
+        guard let src = CGImageSourceCreateWithData(d as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let iw = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue,
+              let ih = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.doubleValue, iw > 0, ih > 0 else {
+            return UIImage(data: d)?.preparingForDisplay()
+        }
+        let sx = px.width / iw, sy = px.height / ih
+        let scale = min(fill ? max(sx, sy) : min(sx, sy), 1)
+        let maxPixel = max(iw, ih) * scale
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(Int(maxPixel.rounded(.up)), 1),
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        let img = UIImage(cgImage: cg)
+        memory.setObject(img, forKey: key, cost: cg.bytesPerRow * cg.height)
         return img
     }
 }
@@ -126,6 +176,8 @@ struct RemoteImage<Placeholder: View>: View {
     var mode: ContentMode = .fill
     @ViewBuilder let placeholder: () -> Placeholder
     @State private var image: UIImage?
+    @State private var size: CGSize = .zero
+    @Environment(\.displayScale) private var scale
 
     var body: some View {
         Group {
@@ -135,12 +187,17 @@ struct RemoteImage<Placeholder: View>: View {
                 placeholder()
             }
         }
-        .task(id: url) {
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+        .task(id: LoadKey(url: url, w: Int(size.width), h: Int(size.height))) {
             guard let s = url, let u = URL(string: s), s.hasPrefix("http") else { image = nil; return }
-            image = ImageStore.shared.cached(u)
-            if image == nil { image = await ImageStore.shared.load(u) }
+            guard size.width > 0, size.height > 0 else { return }
+            let px = CGSize(width: size.width * scale, height: size.height * scale)
+            if let c = ImageStore.shared.cached(u, pixels: px, fill: mode == .fill) { image = c; return }
+            if let img = await ImageStore.shared.load(u, pixels: px, fill: mode == .fill), !Task.isCancelled { image = img }
         }
     }
+
+    private struct LoadKey: Equatable { let url: String?; let w: Int; let h: Int }
 }
 
 /// Channel logo on a light tile (logos are made for light backgrounds), or the initials.

@@ -138,7 +138,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
     val progressMap = remember(state.tick, loaded) {
         loaded?.episodes?.associate { it.id to vm.titles.progressFor("ep:${it.id}") }.orEmpty()
     }
-    val resumeEp = loaded?.episodes?.firstOrNull { it.id == resume?.item?.streamId }
+    val resumeEp = remember(loaded, resume) { loaded?.episodes?.firstOrNull { it.id == resume?.item?.streamId } }
     val episodeWidth = ContentWidth
 
     // the series' wide TMDB picture on the right, like on the home screen (not in the kids' sky theme)
@@ -286,7 +286,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
 
             // ---------------- episodes ----------------
             item {
-                val episodes = loaded.episodes.filter { it.season == season }
+                val episodes = remember(loaded, season) { loaded.episodes.filter { it.season == season } }
                 val rowState = rememberLazyListState()
                 LaunchedEffect(season) {
                     val idx = episodes.indexOfFirst { it.id == resumeEp?.id }

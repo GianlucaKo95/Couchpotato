@@ -82,6 +82,9 @@ dependencies {
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.15.0")
+    // installs the libraries' baseline profiles (Compose, Media3) on a sideloaded APK: precompiled hot paths,
+    // faster start and smoother scrolling right after an update instead of only after days of JIT
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")

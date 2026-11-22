@@ -144,7 +144,7 @@ final class AppModel: ObservableObject {
         preferredTV = UserDefaults.standard.string(forKey: "cp.tv")
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("live.json"))   // catalogue of the first test build
         forward = [
-            data.objectWillChange.sink { [weak self] _ in self?.memo = [:]; self?.objectWillChange.send() },
+            data.objectWillChange.sink { [weak self] _ in self?.householdChanged() },
             household.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() },
             tvBrowser.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() },
             // a TV turned up in the Wi-Fi: maybe it has a newer catalogue – costs the provider nothing
@@ -550,6 +550,28 @@ final class AppModel: ObservableObject {
     func closeVod() {
         vod?.stop()
         vod = nil
+        if quietChanges { quietChanges = false; objectWillChange.send() }
+    }
+
+    private var quietChanges = false
+
+    /// Only what depends on the changed file is recomputed. Progress during playback (every 10 s)
+    /// doesn't redraw the whole app behind the player – the rows update when it closes.
+    private func householdChanged() {
+        guard let file = data.lastChanged else { memo = [:]; objectWillChange.send(); return }
+        let s = profile.suffix
+        switch file {
+        case "progress" + s, "history" + s, "watched" + s:
+            memo["continue"] = nil; memo["foryou"] = nil
+            if vod != nil { quietChanges = true; return }
+        case "watchlist" + s:
+            memo["mylist"] = nil; memo["foryou"] = nil
+        case _ where file.hasPrefix("progress") || file.hasPrefix("history") || file.hasPrefix("watched") || file.hasPrefix("watchlist"):
+            return                                       // another profile's data – nothing on screen changes
+        default:
+            memo = [:]
+        }
+        objectWillChange.send()
     }
 
     func playMovie(_ e: Entry) {
@@ -690,11 +712,30 @@ final class AppModel: ObservableObject {
             h.combine(hiddenSet); h.combine(kidAllowed); h.combine(history); h.combine(list)
             let sig = h.finalize()
             if let c = recCache, c.sig == sig { return (c.items, c.personal) }
-            let r = Recommender.recommend(catalog.entries, allowed: allowed, history: history, watchlist: list)
-            recCache = (sig, r.items, r.personal)
-            return r
+            // the whole catalogue is scored in the background; until then the last result stays on screen
+            if recRunning != sig {
+                recRunning = sig
+                let entries = catalog.entries, hidden = hiddenSet, kid = kidAllowed
+                Task.detached(priority: .utility) { [weak self] in
+                    let r = Recommender.recommend(entries, allowed: { e in
+                        let key = e.categoryKey
+                        if hidden.contains(key) { return false }
+                        if let kid { return kid.contains(key) }
+                        return true
+                    }, history: history, watchlist: list)
+                    await MainActor.run {
+                        guard let self, self.recRunning == sig else { return }
+                        self.recRunning = nil
+                        self.recCache = (sig, r.items, r.personal)
+                        self.memo["foryou"] = nil
+                        self.objectWillChange.send()
+                    }
+                }
+            }
+            return recCache.map { ($0.items, $0.personal) } ?? ([], false)
         }
     }
+    private var recRunning: Int?
 
     func hideContinue(_ e: ProgressEntry) {
         let key = "hiddenContinue" + profile.suffix
