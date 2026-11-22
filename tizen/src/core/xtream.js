@@ -55,26 +55,21 @@ export class XtreamClient {
     return `${this.base}/player_api.php?${q}`;
   }
 
-  async get(url) {
+  async get(url, timeout = 45000) {
     const text = await gate.run(async () => {
-      let res;
-      try {
-        res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
-      } catch (e) {
-        throw new Error('Server nicht erreichbar – Adresse und Internet prüfen');
-      }
+      const res = await httpGet(url, timeout);
       if (LOCK_CODES.includes(res.status)) {
         const until = gate.blockNow();
         const t = new Date(until);
         throw new GateError(`Anbieter sperrt gerade (HTTP ${res.status}) – vermutlich wegen zu vieler Anfragen. Couchpotato pausiert und versucht es ab ${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')} Uhr wieder.`, 'blocked', until);
       }
-      if (!res.ok) throw new Error(`Server antwortet mit HTTP ${res.status}`);
-      return res.text();
+      if (res.status < 200 || res.status >= 300) throw new Error(`Server antwortet mit HTTP ${res.status}`);
+      return res.text;
     }, { background: this.background });
     try {
       return JSON.parse(text);
     } catch (e) {
-      throw new Error('Keine gültige Antwort – Server-Adresse prüfen');
+      throw new Error('Keine gültige Antwort vom Anbieter (' + describe(text) + ') – Server-Adresse prüfen');
     }
   }
 
@@ -96,7 +91,7 @@ export class XtreamClient {
   }
 
   async list(action) {
-    const list = await this.get(this.api(action));
+    const list = await this.get(this.api(action), 180000); // big catalogues are several MB
     if (!Array.isArray(list)) throw new Error('Liste konnte nicht geladen werden');
     return list;
   }
@@ -123,4 +118,27 @@ export class XtreamClient {
   liveTSURL(id) { return this.stream('live', id, 'ts'); }
   movieURL(id, ext) { return this.stream('movie', id, ext || 'mp4'); }
   episodeURL(id, ext) { return this.stream('series', id, ext || 'mp4'); }
+}
+
+/**
+ * One GET with a time limit. XMLHttpRequest instead of fetch: on Samsung TVs it follows the app's
+ * network permission (config.xml <access>) for any server, also ones that send no CORS headers.
+ */
+export function httpGet(url, timeout) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', url, true);
+    x.timeout = timeout;
+    x.onload = () => resolve({ status: x.status, text: x.responseText || '' });
+    x.ontimeout = () => reject(new Error('Der Anbieter antwortet nicht (keine Antwort nach ' + Math.round(timeout / 1000) + ' Sekunden)'));
+    x.onerror = () => reject(new Error('Server nicht erreichbar – Adresse, Port und Internet prüfen'));
+    try { x.send(); } catch (e) { reject(new Error('Anfrage nicht möglich: ' + (e && e.message ? e.message : e))); }
+  });
+}
+
+function describe(text) {
+  const t = String(text || '').trim();
+  if (!t) return 'leer';
+  if (/^<!doctype|^<html/i.test(t)) return 'eine Webseite statt Daten';
+  return t.slice(0, 60);
 }
