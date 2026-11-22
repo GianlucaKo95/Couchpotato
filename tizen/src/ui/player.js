@@ -31,13 +31,23 @@ class Player {
     this.load(url, start);
   }
 
-  playLive(list, channel, category) {
+  playLive(list, channel, category, { reuseCurrent = false } = {}) {
     const reason = model.lockReason();
     if (reason) { app.toast(reason); return; }
     if (!model.streamURL(liveItem(channel))) { app.toast('Zum Abspielen braucht es den IPTV-Zugang (Einstellungen).'); return; }
     this.begin('live');
     this.list = list.length ? list : [channel];
     this.category = category || 'Live TV';
+    if (reuseCurrent) {
+      // The preview already owns the AVPlay instance; promote it instead of closing and reopening it.
+      this.channel = channel;
+      this.retried = false;
+      model.rememberWatched(channel);
+      this.renderLive();
+      engine.setRect(null);
+      this.loadEpg();
+      return;
+    }
     this.tune(channel);
   }
 
