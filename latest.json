@@ -1,0 +1,8 @@
+{
+ "version": "1.0.5",
+ "build": 5,
+ "js": "app.js",
+ "css": "style.css",
+ "jsSha256": "edc0eb0f950e8e3b987b7204a1277d4840522e571216767676c6145e743369bf",
+ "cssSha256": "9ff3ae64fa8836b66057463e3f4acc94017d44e0c05525076b51aca9b8f2f280"
+}
