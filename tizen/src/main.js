@@ -1,5 +1,6 @@
 // Couchpotato for Samsung TVs.
 import './polyfills.js';
+import { checkForUpdate, markHealthy } from './core/update.js';
 import { app } from './ui/app.js';
 import { registerKeys } from './ui/keys.js';
 import { model } from './core/model.js';
@@ -58,8 +59,25 @@ try {
   });
 } catch (e) { /* not on a TV */ }
 
+// self-update: look for a newer version shortly after start and then every 6 hours
+let offered = false;
+async function lookForUpdate() {
+  const r = await checkForUpdate();
+  if (r.state !== 'ready' || offered) return;
+  if (app.player && app.player.active) { setTimeout(lookForUpdate, 5 * 60e3); return; } // never interrupt watching
+  offered = true;
+  if (await app.confirm('Update bereit', `Version ${r.version} ist geladen. Jetzt neu starten?`, 'Neu starten', 'Später')) {
+    model.data.flush();
+    location.reload();
+  }
+}
+
 model.start().then(() => {
+  setTimeout(lookForUpdate, 20e3);
+  setInterval(lookForUpdate, 6 * 3600e3);
   // more than one profile: ask who is watching, like on the TVs
   if (model.login && model.profiles.length > 1) app.openTab('home'), app.push(new ProfilesScreen());
 });
 app.openTab('home');
+// got this far: the running code works (boot.js keeps a downloaded version only after this)
+markHealthy();

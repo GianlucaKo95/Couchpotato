@@ -19,7 +19,14 @@ Startbildschirm), und „Weiterschauen“ aus anderen Apps gibt es nicht.
 4. Couchpotato starten → **Haushalt beitreten** (Code vom Fire TV unter Einstellungen → Haushalt)
    oder den IPTV-Zugang direkt eintragen.
 
-Updates: neue `.wgt` genauso aufspielen; Einstellungen und Katalog bleiben erhalten.
+Updates kommen ab Version 1.0.5 über die App selbst (wie beim Fire TV): Beim Start und alle
+6 Stunden schaut sie auf dem Branch `tizen-update` nach, lädt neuen Code (SHA-256 geprüft) und fragt
+„Jetzt neu starten?“ – nie während der Wiedergabe. Startet eine geladene Version nicht sauber, nimmt
+der nächste Start automatisch wieder die installierte und überspringt diese Version. Manuell:
+Einstellungen → Info → *Nach Updates suchen* bzw. *Zur installierten Version zurück*.
+Eine neue `.wgt` muss nur noch aufgespielt werden, wenn sich das Paket selbst ändert
+(Berechtigungen, Icon, Schriften/Bilder). Store-Builds: `CP_SELF_UPDATE=0` schaltet das ab –
+dort aktualisiert Samsung über den Seller Office.
 
 ## Fernbedienung
 

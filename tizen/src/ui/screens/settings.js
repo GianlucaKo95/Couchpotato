@@ -1,4 +1,5 @@
 // Settings: IPTV access, household, profiles, categories, playback, parents' PIN, info.
+import { SELF_UPDATE, checkForUpdate, runningBuild, resetToInstalled } from '../../core/update.js';
 import { h, clear, icon } from '../dom.js';
 import { app, avatar } from '../app.js';
 import * as F from '../focus.js';
@@ -267,6 +268,23 @@ export class SettingsScreen {
   about() {
     return section('Info',
       h('p', null, `Couchpotato für Samsung · Version ${CONFIG.version}`),
+      SELF_UPDATE ? action('Nach Updates suchen', async () => {
+        app.toast('Suche nach Updates …');
+        const r = await checkForUpdate();
+        if (r.state === 'current') app.toast('Du hast die neueste Version');
+        else if (r.state === 'error') app.toast('Update fehlgeschlagen: ' + r.message, 6000);
+        else if (r.state === 'ready' && await app.confirm('Update bereit', `Version ${r.version} ist geladen. Jetzt neu starten?`, 'Neu starten', 'Später')) {
+          model.data.flush();
+          location.reload();
+        }
+      }, { fid: 'update' }) : null,
+      SELF_UPDATE && runningBuild() > (window.__cpBoot || {}).bundled ? action('Zur installierten Version zurück', async () => {
+        if (!(await app.confirm('Zurück zur installierten Version?', 'Die geladene Version wird gelöscht. Die App startet neu.', 'Zurücksetzen'))) return;
+        resetToInstalled();
+        model.data.flush();
+        location.reload();
+      }, { fid: 'reset-code' }) : null,
+      h('p.muted', null, 'Updates kommen automatisch: Die App sucht beim Start und alle 6 Stunden nach einer neuen Version und fragt vor dem Neustart.'),
       h('p.muted', null, `Anfragen an den Anbieter in der letzten Stunde: ${gate.requestsLastHour()} von 40 · Bilder: ${gate.imagesLastHour()} von 60`),
       h('p.muted', null, 'Couchpotato bremst alle Anfragen an deinen Anbieter (höchstens eine alle 2,5 Sekunden, 40 pro Stunde, nach einer Sperre 15 Minuten Pause), damit dein Zugang nicht gesperrt wird.'),
       h('p.muted', null, 'Schrift: Inter und Baloo 2 (SIL Open Font License).'));
