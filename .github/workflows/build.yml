@@ -3,8 +3,8 @@ name: Build APK
 on:
   push:
     branches: [main]
-    # the iPhone app has its own workflow (ios.yml) – no new TV release for it
-    paths-ignore: ["ios/**", ".github/workflows/ios.yml"]
+    # the iPhone and Samsung apps have their own workflows – no new Fire TV release for them
+    paths-ignore: ["ios/**", ".github/workflows/ios.yml", "tizen/**", ".github/workflows/tizen.yml"]
   workflow_dispatch:
 
 permissions:
@@ -88,6 +88,6 @@ jobs:
         run: |
           gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" -q '.[] | "\(.id) \(.tag_name)"' |
           while read -r id tag; do
-            [ "$tag" = "$KEEP" ] && continue
+            case "$tag" in "$KEEP"|tizen-*) continue ;; esac   # the Samsung app keeps its own release
             gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/$id" >/dev/null && echo "entfernt: $tag"
           done

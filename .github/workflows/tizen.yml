@@ -1,0 +1,54 @@
+# Samsung TV app (tizen/). Every push that touches tizen/ tests and builds it; on main the
+# widget (couchpotato.wgt) is published as release "tizen-<n>" – only the newest one stays.
+name: Samsung TV
+
+on:
+  push:
+    branches: [main]
+    paths: ["tizen/**", ".github/workflows/tizen.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tizen
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tizen/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+
+      - name: Build widget
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          CP_VERSION: 1.0.${{ github.run_number }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then echo "::warning::SUPABASE_URL not set – household sync off in this build"; fi
+          npm run build
+
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: tizen-${{ github.run_number }}
+        run: |
+          cp dist/couchpotato.wgt "dist/couchpotato-samsung-1.0.${{ github.run_number }}.wgt"
+          gh release create "$TAG" "dist/couchpotato-samsung-1.0.${{ github.run_number }}.wgt" \
+            --title "Couchpotato für Samsung 1.0.${{ github.run_number }}" --latest=false \
+            --notes "Samsung-TV-App (Tizen). Installation: siehe tizen/README.md"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" -q '.[] | "\(.id) \(.tag_name)"' |
+          while read -r id tag; do
+            case "$tag" in tizen-*) [ "$tag" = "$TAG" ] || { gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/$id" >/dev/null && echo "entfernt: $tag"; } ;; esac
+          done

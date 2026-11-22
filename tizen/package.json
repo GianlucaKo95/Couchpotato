@@ -1,0 +1,19 @@
+{
+  "name": "couchpotato-tizen",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Couchpotato for Samsung TVs (Tizen web app)",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^1.2.1",
+    "@noble/hashes": "^1.7.1",
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
+  }
+}
