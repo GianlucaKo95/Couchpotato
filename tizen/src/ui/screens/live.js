@@ -102,8 +102,10 @@ export class LiveScreen {
 
   choose(c, list) {
     if (this.preview && this.preview.id === c.id) {
-      this.stopPreview();
-      player.playLive(list, c, (this.categories.find((x) => x.id === this.cat) || {}).name);
+      // Keep the preview stream alive and expand its display rectangle to full screen.
+      this.preview = null;
+      document.body.classList.remove('previewing');
+      player.playLive(list, c, (this.categories.find((x) => x.id === this.cat) || {}).name, { reuseCurrent: true });
       return;
     }
     const reason = model.lockReason();
