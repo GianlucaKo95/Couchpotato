@@ -85,7 +85,7 @@ class Player {
     this.el = null;
     if (item) model.handOver(item, pos, dur);
     if (!silent) {
-      F.setLayer(app.main);
+      F.setLayer(app.root);
       app.refresh();
     }
   }

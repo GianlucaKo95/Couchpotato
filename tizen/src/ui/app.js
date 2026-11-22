@@ -60,8 +60,9 @@ class App {
     this.main.appendChild(screen.el);
     screen.render();
     this.renderTopbar(screen);
-    F.setLayer(this.main);
-    if (!this.dialogs.length) F.restore(fid || screen.lastFid || screen.defaultFid);
+    // the top bar belongs to the focus area too (up from the content reaches the tabs)
+    F.setLayer(this.root);
+    if (!this.dialogs.length) F.restore(fid || screen.lastFid || screen.defaultFid, this.main);
     if (typeof screen.onShown === 'function') screen.onShown();
   }
 
@@ -78,8 +79,8 @@ class App {
   refresh(force = true) {
     const s = this.screen;
     if (!s || (this.player && this.player.active)) return;
-    if (!force && s.live === false) { this.renderTopbar(s); return; }
     const fid = F.focused() && F.focused().dataset.fid;
+    if (!force && s.live === false) { this.renderTopbar(s); this.refocusBar(fid); return; }
     const scroll = Array.from(s.el.querySelectorAll('.vscroll, .hscroll')).map((x) => [x.dataset.sid, x.scrollTop, x.scrollLeft]);
     s.render();
     for (const [sid, top, left] of scroll) {
@@ -89,8 +90,17 @@ class App {
     this.renderTopbar(s);
     if (!this.dialogs.length) {
       const el = fid && F.candidates(this.main).find((c) => c.dataset.fid === fid);
-      if (el) F.focus(el, { noScroll: true }); else F.restore(null);
+      const inBar = F.focused() && this.topbar.contains(F.focused());
+      if (el) F.focus(el, { noScroll: true });
+      else if (fid && fid.startsWith('tab-')) this.refocusBar(fid);
+      else if (!inBar) F.restore(null, this.main);
     }
+  }
+
+  refocusBar(fid) {
+    if (!fid || !fid.startsWith('tab-')) return;
+    const t = F.candidates(this.topbar).find((c) => c.dataset.fid === fid);
+    if (t) F.focus(t, { noScroll: true });
   }
 
   renderTopbar(screen) {
@@ -137,9 +147,9 @@ class App {
     const top = this.dialogs[this.dialogs.length - 1];
     if (top) { F.setLayer(top.box); F.restore(null, top.box); return; }
     if (this.player && this.player.active) { F.setLayer(this.player.el); this.player.refocus && this.player.refocus(); return; }
-    F.setLayer(this.main);
-    const el = d.prevFid && F.candidates(this.main).find((c) => c.dataset.fid === d.prevFid);
-    if (el) F.focus(el); else F.restore(null);
+    F.setLayer(this.root);
+    const el = d.prevFid && F.candidates(this.root).find((c) => c.dataset.fid === d.prevFid);
+    if (el) F.focus(el); else F.restore(null, this.main);
   }
 
   confirm(title, text, yes = 'OK', no = 'Abbrechen') {
