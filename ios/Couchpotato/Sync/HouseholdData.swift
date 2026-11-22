@@ -96,14 +96,16 @@ final class HouseholdData: ObservableObject {
 
     // Saving: many small changes (progress every 10 s, history, favourites) are collected for a second and
     // written in the background – not the whole file on the main thread for every key.
-    private var pendingSave: DispatchWorkItem?
+    private var pendingSave: Task<Void, Never>?
     private static let writer = DispatchQueue(label: "household.save", qos: .utility)
 
     private func save() {
         pendingSave?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.flush() }
-        pendingSave = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+        pendingSave = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.flush()
+        }
     }
 
     /// Writes now (also called when the app goes to the background).
