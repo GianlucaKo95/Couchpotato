@@ -31,7 +31,7 @@ object Updater {
     private const val CHECK_GAP_MS = 1 * 3600_000L      // GitHub only, never the IPTV provider
     private const val API = "https://api.github.com/repos/GianlucaKo95/Couchpotato"
 
-    val configured: Boolean get() = BuildConfig.UPDATE_TOKEN.isNotBlank()
+    val configured: Boolean get() = true          // the repo is public: releases need no key
     val currentBuild: Int get() = BuildConfig.VERSION_CODE
 
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -101,7 +101,7 @@ object Updater {
         val api = (URL(r.url).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = false
             connectTimeout = 15_000; readTimeout = 30_000
-            setRequestProperty("Authorization", "Bearer ${BuildConfig.UPDATE_TOKEN}")
+            if (BuildConfig.UPDATE_TOKEN.isNotBlank()) setRequestProperty("Authorization", "Bearer ${BuildConfig.UPDATE_TOKEN}")
             setRequestProperty("Accept", "application/octet-stream")
             setRequestProperty("User-Agent", "Couchpotato-Updater")
         }
@@ -177,7 +177,7 @@ object Updater {
     private fun get(url: String): String {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000; conn.readTimeout = 20_000
-        conn.setRequestProperty("Authorization", "Bearer ${BuildConfig.UPDATE_TOKEN}")
+        if (BuildConfig.UPDATE_TOKEN.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer ${BuildConfig.UPDATE_TOKEN}")
         conn.setRequestProperty("Accept", "application/vnd.github+json")
         conn.setRequestProperty("User-Agent", "Couchpotato-Updater")
         try {
