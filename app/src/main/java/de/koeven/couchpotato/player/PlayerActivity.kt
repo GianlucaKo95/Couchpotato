@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import de.koeven.couchpotato.R
+import de.koeven.couchpotato.data.Handoff
 import de.koeven.couchpotato.data.PlayItem
 import de.koeven.couchpotato.data.ProgressStore
 import de.koeven.couchpotato.data.ScreenTime
@@ -292,6 +293,25 @@ class PlayerActivity : Activity() {
         }
     }
 
+    /** What was playing goes into the household right away, so the iPhone can continue from here. */
+    private fun handOver() {
+        if (!::player.isInitialized) return
+        runCatching {
+            if (isLive) {
+                if (!::live.isInitialized) return
+                items.getOrNull(live.index)?.let { Handoff.record(this, it, 0, 0) }
+            } else {
+                val item = items.getOrNull(player.currentMediaItemIndex) ?: return
+                val pos = player.currentPosition
+                val dur = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
+                if (ended || ProgressStore.isFinished(pos, dur)) Handoff.clear(this)
+                else if (pos > 5_000) Handoff.record(this, item, pos, dur)
+                else return
+            }
+            Handoff.pushNow(this)
+        }
+    }
+
     // saved here too: onPause runs before the launcher comes back, onStop only afterwards
     override fun onPause() {
         saveCurrent()
@@ -307,6 +327,7 @@ class PlayerActivity : Activity() {
     override fun onStop() {
         handler.removeCallbacks(saveTask)
         saveCurrent()
+        handOver()
         if (::player.isInitialized) player.playWhenReady = false
         // live in the background: close the provider connection (most allow only one or two)
         if (isLive && ::live.isInitialized) live.pause()

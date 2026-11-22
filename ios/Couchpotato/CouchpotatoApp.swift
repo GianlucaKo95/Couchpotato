@@ -17,6 +17,19 @@ struct CouchpotatoApp: App {
                     if p == .background { model.data.flush(); Task { await model.syncNow(quiet: true) } }
                 }
                 .onAppear { ImageStore.shared.providerHost = model.login?.host }
+                .task(id: phase) {
+                    // while the app is open: every 30 s ask the TVs in the Wi-Fi (local, no provider request)
+                    // and every 2 minutes the household, so a TV switched off meanwhile shows up too
+                    guard phase == .active else { return }
+                    var round = 0
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(30))
+                        guard !Task.isCancelled, model.vod == nil, !model.liveFullscreen else { continue }
+                        round += 1
+                        if round % 4 == 0 { await model.syncNow(quiet: true) }
+                        await model.checkHandoff()
+                    }
+                }
                 .onChange(of: model.login) { _, l in ImageStore.shared.providerHost = l?.host }
         }
     }

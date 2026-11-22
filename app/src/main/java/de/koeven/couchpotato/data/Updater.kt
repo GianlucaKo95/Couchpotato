@@ -31,7 +31,7 @@ object Updater {
     private const val CHECK_GAP_MS = 1 * 3600_000L      // GitHub only, never the IPTV provider
     private const val API = "https://api.github.com/repos/GianlucaKo95/Couchpotato"
 
-    val configured: Boolean get() = true          // the repo is public: releases need no key
+    val configured: Boolean get() = true          // with the key while the repo is private, without once it is public
     val currentBuild: Int get() = BuildConfig.VERSION_CODE
 
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

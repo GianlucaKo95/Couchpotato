@@ -20,6 +20,14 @@ struct MainShell: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .tint(Theme.text)
+        .overlay(alignment: .bottom) {
+            if let h = model.handoff {
+                HandoffCard(offer: h)
+                    .padding(.horizontal, 12).padding(.bottom, 64)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.35), value: model.handoff?.item.key)
         .sheet(isPresented: $model.showProfiles) { WhoIsWatchingSheet() }
         .sheet(isPresented: $model.showSearch) { SearchView(inSheet: true) }
         .onChange(of: model.openSettings) { _, open in if open { section = .settings; model.openSettings = false } }
@@ -78,5 +86,56 @@ struct WhoIsWatchingSheet: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() } } }
         }
         .presentationDetents([.large])
+    }
+}
+
+
+/// "Weiterschauen vom Fernseher": what a linked TV is playing or just stopped – one tap continues here.
+struct HandoffCard: View {
+    @EnvironmentObject private var model: AppModel
+    let offer: HandoffOffer
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button { model.takeHandoff() } label: {
+                HStack(spacing: 12) {
+                    RemoteImage(url: offer.item.image) { Theme.surface.overlay(Image(systemName: "tv").foregroundStyle(Theme.muted)) }
+                        .frame(width: 64, height: 40).clipShape(RoundedRectangle(cornerRadius: 8))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(headline).font(.caption).foregroundStyle(Theme.muted).lineLimit(1)
+                        Text(offer.item.title).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                        if let detail { Text(detail).font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "play.fill").font(.body.weight(.semibold)).foregroundStyle(Theme.accent)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Button { model.dismissHandoff() } label: {
+                Image(systemName: "xmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.muted).frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Ausblenden")
+        }
+        .padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 10)
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 22))
+        .accessibilityElement(children: .contain)
+    }
+
+    private var headline: String {
+        offer.tv != nil ? "Läuft gerade auf „\(offer.from)“" : "Eben auf „\(offer.from)“ geschaut"
+    }
+
+    private var detail: String? {
+        if offer.item.kind == "live" { return "Live" }
+        let at = "bei \(Self.clock(offer.position))"
+        if let sub = offer.item.subtitle, !sub.isEmpty { return "\(sub) · \(at)" }
+        return at
+    }
+
+    static func clock(_ s: Double) -> String {
+        let t = Int(max(s, 0)), h = t / 3600, m = t / 60 % 60, sec = t % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
     }
 }

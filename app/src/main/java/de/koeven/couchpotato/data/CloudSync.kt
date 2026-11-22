@@ -1,5 +1,7 @@
 package de.koeven.couchpotato.data
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import android.content.Context
 import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
@@ -105,7 +107,9 @@ class CloudSync(context: Context) {
         Result("Mit dem Haushalt verbunden.", iptvOf(remote))
     }
 
-    suspend fun sync(): Result = withContext(Dispatchers.IO) {
+    suspend fun sync(): Result = syncLock.withLock { syncLocked() }
+
+    private suspend fun syncLocked(): Result = withContext(Dispatchers.IO) {
         requireConfigured()
         val keys = HouseholdKeys.decode(secure.read("keys") ?: throw IOException("Dieses Gerät ist noch in keinem Haushalt."))
         val baseline = prefs.getString("lastSnapshot", null)?.let { runCatching { JSONObject(it) }.getOrNull() }
@@ -214,7 +218,7 @@ class CloudSync(context: Context) {
 
     /** Only app state is included. IPTV credentials, TMDB token and request limits stay local. */
     private fun snapshot(): JSONObject {
-        val names = linkedSetOf("profiles", "couchpotato", "mediaplays")
+        val names = linkedSetOf("profiles", "couchpotato", "mediaplays", Handoff.FILE)
         Profiles.all(app).forEach { p ->
             names += "progress${p.suffix}"
             names += "history${p.suffix}"
@@ -463,3 +467,6 @@ private class HouseholdKeys(private val auth: ByteArray, private val enc: ByteAr
         private fun sha256(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b)
     }
 }
+
+/** One sync at a time per process. */
+private val syncLock = Mutex()

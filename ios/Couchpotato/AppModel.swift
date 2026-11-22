@@ -75,6 +75,23 @@ struct ProgressEntry: Identifiable, Hashable {
     var fraction: Double { duration > 0 ? min(max(position / duration, 0), 1) : 0 }
 }
 
+/// Something a TV was playing that can be continued on the iPhone.
+struct HandoffOffer {
+    let item: PlayItem
+    let position: Double     // seconds
+    let duration: Double
+    let from: String         // the TV's name
+    let at: Date
+    let tv: TvDevice?        // set: the TV is playing right now (same Wi-Fi)
+    let tvPlaying: Bool
+}
+
+/// The household file a TV writes when playback stops there (data/Handoff.kt on the TV).
+enum Handoff {
+    static let file = "handoff"
+    static let key = "last"
+}
+
 struct PinRequest: Identifiable {
     let id = UUID()
     let title: String
@@ -115,6 +132,8 @@ final class AppModel: ObservableObject {
     @Published var openSettings = false
     @Published var showRemote = false
     @Published var notice: String?
+    /// "Weiterschauen vom Fernseher" – shown as a card above the tab bar.
+    @Published var handoff: HandoffOffer?
     @Published private(set) var loadingCatalog = false
     @Published var pendingIptv: XtreamLogin?
     @Published var pinRequest: PinRequest?
@@ -502,6 +521,7 @@ final class AppModel: ObservableObject {
     /// Starts a channel – in the preview of the live list, or straight in full screen.
     func startLive(_ list: [LiveChannel], at channel: LiveChannel, category: String, fullscreen: Bool) {
         guard mayPlay() else { return }
+        if fullscreen { handoff = nil }
         guard channel.id < 0 || client != nil else { notice = needLogin; return }
         closeVod()
         if let live, live.channels.map(\.id) == list.map(\.id), let i = list.firstIndex(where: { $0.id == channel.id }) {
@@ -541,6 +561,7 @@ final class AppModel: ObservableObject {
 
     func play(_ item: PlayItem, from start: Double = 0, queue: [PlayItem] = []) {
         guard mayPlay() else { return }
+        handoff = nil
         guard client != nil else { notice = needLogin; return }
         stopLive()
         vod?.stop()
@@ -558,6 +579,7 @@ final class AppModel: ObservableObject {
     /// Only what depends on the changed file is recomputed. Progress during playback (every 10 s)
     /// doesn't redraw the whole app behind the player – the rows update when it closes.
     private func householdChanged() {
+        if data.lastChanged == nil || data.lastChanged == Handoff.file { Task { await checkHandoff() } }
         guard let file = data.lastChanged else { memo = [:]; objectWillChange.send(); return }
         let s = profile.suffix
         switch file {
@@ -585,10 +607,10 @@ final class AppModel: ObservableObject {
         return p.position
     }
 
-    func playEpisode(_ e: Episode, of s: SeriesInfo) {
+    func playEpisode(_ e: Episode, of s: SeriesInfo, from start: Double? = nil) {
         let item = s.item(e)
         let rest = s.episodes.drop { $0.id != e.id }.dropFirst().prefix(40).map { s.item($0) }
-        play(item, from: startPosition(item.key), queue: Array(rest))
+        play(item, from: start ?? startPosition(item.key), queue: Array(rest))
     }
 
     func resume(_ e: ProgressEntry) {
@@ -847,9 +869,89 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: Weiterschauen vom Fernseher
+
+    /// Looks for something to continue here: a linked TV playing right now (same Wi-Fi), or what a TV
+    /// handed over when it was stopped or switched off (household sync).
+    func checkHandoff() async {
+        guard vod == nil, !liveFullscreen, login != nil else { handoff = nil; return }
+        let seen = UserDefaults.standard.double(forKey: "handoffSeen")
+        let dismissedKey = UserDefaults.standard.string(forKey: "handoffDismissedLive")
+
+        // 1. a TV in the same Wi-Fi is playing right now
+        for tv in orderedTVs {
+            guard let s = try? await tv.getJSON("/state"), s["screen"] as? String == "player",
+                  let o = s["item"] as? [String: Any], let item = PlayItem(json: o) else { continue }
+            let paused = s["paused"] as? Bool ?? false
+            if dismissedKey == "\(tv.name)|\(item.key)" { continue }
+            handoff = HandoffOffer(item: item, position: ((s["pos"] as? NSNumber)?.doubleValue ?? 0) / 1000,
+                                   duration: ((s["dur"] as? NSNumber)?.doubleValue ?? 0) / 1000,
+                                   from: tv.name, at: Date(), tv: tv, tvPlaying: !paused)
+            return
+        }
+
+        // 2. what a TV handed over when it stopped (at most 3 hours ago, this profile)
+        guard let raw = data.string(Handoff.file, Handoff.key),
+              let o = (try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any],
+              let item = PlayItem(json: o) else { handoff = nil; return }
+        let atMs = (o["at"] as? NSNumber)?.doubleValue ?? 0
+        let at = Date(timeIntervalSince1970: atMs / 1000)
+        let position = ((o["pos"] as? NSNumber)?.doubleValue ?? 0) / 1000
+        guard atMs > seen, Date().timeIntervalSince(at) < 3 * 3600,
+              (o["profile"] as? String).map({ $0 == profile.id }) ?? true,
+              // already continued on this iPhone since then
+              (progress(item.key)?.updatedAt ?? .distantPast) < at.addingTimeInterval(30) else { handoff = nil; return }
+        handoff = HandoffOffer(item: item, position: position, duration: ((o["dur"] as? NSNumber)?.doubleValue ?? 0) / 1000,
+                               from: o["from"] as? String ?? "Fernseher", at: at, tv: nil, tvPlaying: false)
+    }
+
+    /// Continue here – a few seconds earlier, so nothing is missed. A TV still playing is paused.
+    func takeHandoff() {
+        guard let h = handoff else { return }
+        handoff = nil
+        remember(h)
+        if let tv = h.tv, h.tvPlaying { Task { try? await tv.post("/key", ["k": "playpause"]) } }
+        let start = max(h.position - 5, 0)
+        if h.item.kind == "live" {
+            let all = allChannels
+            guard let ch = all.first(where: { $0.id == h.item.streamId }) else {
+                notice = "„\(h.item.title)“ gibt es in deiner Senderliste hier nicht."; return
+            }
+            let list = all.filter { $0.cat == ch.cat }
+            startLive(list.isEmpty ? [ch] : list, at: ch, category: "Live-TV", fullscreen: true)
+        } else if h.item.kind == "episode", let sid = h.item.seriesId, let series = entry(Entry.series, sid) {
+            Task {
+                if let info = try? await titles.series(series, tv: orderedTVs.first, client: client),
+                   let ep = info.episodes.first(where: { $0.id == h.item.streamId }) {
+                    playEpisode(ep, of: info, from: start)
+                } else {
+                    play(h.item, from: start)
+                }
+            }
+        } else {
+            play(h.item, from: start)
+        }
+    }
+
+    func dismissHandoff() {
+        guard let h = handoff else { return }
+        handoff = nil
+        remember(h)
+    }
+
+    private func remember(_ h: HandoffOffer) {
+        if let tv = h.tv {
+            UserDefaults.standard.set("\(tv.name)|\(h.item.key)", forKey: "handoffDismissedLive")
+        } else {
+            UserDefaults.standard.set(h.at.timeIntervalSince1970 * 1000, forKey: "handoffSeen")
+        }
+    }
+
     func becameActive() async {
         tvBrowser.start(linkKey: household.linkKey)
-        if household.linked, Date().timeIntervalSince(household.lastSync ?? .distantPast) > 120 { await syncNow(quiet: true) }
+        // always fetch on opening: a TV that was just switched off has handed over what it was playing
+        if household.linked, Date().timeIntervalSince(household.lastSync ?? .distantPast) > 10 { await syncNow(quiet: true) }
+        await checkHandoff()
         // give Bonjour a moment to find a TV before asking the provider
         try? await Task.sleep(nanoseconds: 2_500_000_000)
         await refreshCatalog(force: false, background: true)

@@ -257,6 +257,9 @@ object TvLink {
                 .put("image", item?.image)
                 .put("pos", p.currentPosition.coerceAtLeast(0)).put("dur", p.duration.takeIf { it > 0 } ?: 0)
                 .put("paused", !p.playWhenReady)
+                .put("live", a.isLive)
+                .put("profile", de.koeven.couchpotato.data.Profiles.active(app).id)
+            item?.let { o.put("item", it.toJson()) }           // lets the iPhone take over exactly here
         }
         o
     } ?: JSONObject().put("screen", "other")

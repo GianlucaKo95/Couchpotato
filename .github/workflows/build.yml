@@ -38,6 +38,8 @@ jobs:
       - name: Build
         env:
           TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
+          # read-only key for this repo's releases; only needed while the repo is private
+          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
           CP_KEYSTORE_PASSWORD: ${{ secrets.CP_KEYSTORE_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
