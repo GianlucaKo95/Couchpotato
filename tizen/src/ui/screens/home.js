@@ -13,12 +13,14 @@ export class HomeScreen {
   render() {
     const el = clear(this.el);
     el.className = 'screen home';
-    if (!model.login) {
+    if (!model.login && !model.demo) {
       el.appendChild(emptyState('Willkommen bei Couchpotato',
         'Verbinde diesen Fernseher mit deinem Haushalt oder trage deinen IPTV-Zugang ein – dann geht es los.',
         h('div.buttons', { dataset: { row: 'welcome' } },
           button('Haushalt beitreten', () => app.openTab('settings', { page: 'household' }), { primary: true, autofocus: true, fid: 'w-house' }),
-          button('IPTV-Zugang eintragen', () => app.openTab('settings', { page: 'iptv' }), { fid: 'w-iptv' }))));
+          button('IPTV-Zugang eintragen', () => app.openTab('settings', { page: 'iptv' }), { fid: 'w-iptv' }),
+          button('Ohne Zugang ausprobieren', () => model.setDemo(true), { fid: 'w-demo' })),
+        h('p.muted.small', null, 'Couchpotato enthält keine Sender, Filme oder Serien. Du nutzt die App mit deinem eigenen IPTV-Zugang.')));
       return;
     }
     const cont = model.continueWatching;

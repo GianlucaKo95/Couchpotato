@@ -48,3 +48,7 @@ node test/mock-server.mjs     # App + Test-Anbieter auf http://localhost:8765 (i
 ```
 
 Im Browser: Pfeiltasten, Enter, Esc = Zurück, Leertaste = Play/Pause, Bild↑/↓ = Senderwechsel, R = Rot.
+
+## Samsung-Store
+
+Alles für die Einreichung (Bilder, Screenshots, Texte, UI-Beschreibung, Signier-Skript) liegt in [`store/`](store/STORE.md).

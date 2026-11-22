@@ -18,6 +18,7 @@ class Engine {
   /** Opens and plays; rect = [x, y, w, h] in 1920×1080 or null for full screen. */
   open(url, { start = 0, rect = null } = {}) {
     this.close();
+    screenSaver(false);
     this.url = url;
     this.rect = rect;
     this.ended = false;
@@ -167,7 +168,16 @@ class Engine {
       this.video.style.display = 'none';
     }
     this.url = null;
+    screenSaver(true);
   }
+}
+
+/** No screensaver while a video runs (Samsung's media rule). */
+function screenSaver(on) {
+  try {
+    const s = webapis.appcommon.AppCommonScreenSaverState;
+    webapis.appcommon.setScreenSaver(on ? s.SCREEN_SAVER_ON : s.SCREEN_SAVER_OFF);
+  } catch (e) { /* not on a TV */ }
 }
 
 const LANGS = { de: 'Deutsch', ger: 'Deutsch', deu: 'Deutsch', en: 'Englisch', eng: 'Englisch', fr: 'Französisch', fre: 'Französisch', fra: 'Französisch',

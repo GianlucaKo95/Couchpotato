@@ -62,7 +62,7 @@ export class LiveScreen {
       onclick: () => this.choose(c, list),
     },
     h('span.num', null, String(i + 1)),
-    h('div.chrow-logo', null, img(c.logo, 'logo-pic')),
+    h('div.chrow-logo', null, img(c.logo, 'logo-pic', h('div.ch-name.small', null, c.name))),
     h('div.chrow-text', null, h('div.chrow-name', null, c.name, model.isFavorite(c) ? icon('star', 'fav') : null), now ? h('div.chrow-now', null, now.title) : null));
     btn.addEventListener('focused', () => this.focusChannel(c));
     return btn;

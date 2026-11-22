@@ -12,6 +12,28 @@ import { sha256Hex } from './crypto.js';
 import { display } from './names.js';
 
 export const ANIMALS = 12;
+
+// Free test streams (Apple's HLS examples) – lets anyone, including Samsung's testers, try the app
+// without an IPTV account. Negative ids never clash with a provider's.
+const DEMO_URLS = {
+  '-1': 'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8',
+  '-2': 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8',
+  '-11': 'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8',
+  '-12': 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8',
+};
+function demoCatalog() {
+  const e = (kind, id, name, cat, extra = {}) => Object.assign({ kind, itemId: id, ext: 'm3u8', image: null, name, norm: name.toLowerCase(), cat,
+    added: 0, rating: 0, genre: null, year: null, tmdb: null, id: kind + ':' + id, categoryKey: kind + ':' + cat }, extra);
+  return {
+    entries: [
+      e('l', -1, 'Demo · HLS fMP4', 'demo'), e('l', -2, 'Demo · HLS 16:9', 'demo'),
+      e('m', -11, 'Testvideo (HLS, fMP4)', 'demo', { genre: 'Demo', year: '2024' }),
+      e('m', -12, 'Testvideo (HLS, 4:3)', 'demo', { genre: 'Demo', year: '2024' }),
+    ],
+    categories: { m: [{ id: 'demo', name: 'Demo' }], s: [], l: [{ id: 'demo', name: 'Demo' }] },
+    fetchedAt: Date.now(),
+  };
+}
 export const PROFILE_COLORS = ['#F6D9A8', '#F7C1C1', '#BFD9F2', '#C8E6C0', '#DCC7EE', '#FBE3B5', '#BDE9EE', '#F8C9DE'];
 
 /** Watched to the end – the last 10 % (end credits) or the last 2 minutes. Same rule as on the TVs. */
@@ -58,6 +80,7 @@ export class Model {
     this.titles = new TitleStore();
     this.epg = new EpgStore();
     this.login = local.get('iptv.login');
+    this.demo = local.get('demo', false);
     this.profileId = local.get('profile', 'main');
     this.catalog = { entries: [], categories: { m: [], s: [], l: [] }, fetchedAt: 0 };
     this.index = buildIndex([]);
@@ -95,7 +118,7 @@ export class Model {
   }
 
   async start() {
-    const c = await this.catalogStore.load();
+    const c = this.demoOnly ? demoCatalog() : await this.catalogStore.load();
     if (c) this.setCatalog(c);
     this.emit();
     if (this.household.linked) this.syncNow(true);
@@ -110,6 +133,17 @@ export class Model {
     this.memo.clear();
   }
 
+  // MARK: demo (no IPTV account)
+  get demoOnly() { return this.demo && !loginValid(this.login); }
+
+  setDemo(on) {
+    this.demo = on;
+    local.set('demo', on);
+    this.setCatalog(on && !loginValid(this.login) ? demoCatalog() : { entries: [], categories: { m: [], s: [], l: [] }, fetchedAt: 0 });
+    this.emit();
+    if (!on) this.catalogStore.load().then((c) => { if (c) { this.setCatalog(c); this.emit(); } });
+  }
+
   // MARK: IPTV login
   get client() { return loginValid(this.login) ? new XtreamClient(this.login) : null; }
   get providerHost() { return this.login ? loginHost(this.login) : null; }
@@ -119,6 +153,7 @@ export class Model {
     const changed = JSON.stringify(l) !== JSON.stringify(this.login);
     this.login = l;
     if (l) local.set('iptv.login', l); else local.remove('iptv.login');
+    if (l && this.demo) { this.demo = false; local.set('demo', false); }
     if (changed) {
       gate.clearBlock();
       await this.catalogStore.clear();
@@ -504,6 +539,7 @@ export class Model {
 
   // MARK: playback URLs
   streamURL(item) {
+    if (this.demoOnly) return DEMO_URLS[String(item.streamId)] || null;
     const c = this.client;
     if (!c) return null;
     if (item.kind === 'live') return local.get('pref.liveTs', false) ? c.liveTSURL(item.streamId) : c.liveURL(item.streamId);

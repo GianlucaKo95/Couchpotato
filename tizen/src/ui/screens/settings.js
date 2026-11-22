@@ -81,7 +81,8 @@ export class SettingsScreen {
     const d = this.draft || (this.draft = Object.assign({ server: '', user: '', password: '' }, model.login || {}));
     return [
       section('IPTV-Zugang',
-        h('p.muted', null, 'Die Zugangsdaten deines Anbieters (Xtream Codes). Sie bleiben auf diesem Fernseher.'),
+        h('p.muted', null, 'Die Zugangsdaten deines Anbieters (Xtream Codes). Sie bleiben auf diesem Fernseher. Couchpotato selbst enthält keine Inhalte.'),
+        model.demo ? action('Demo beenden', () => { model.setDemo(false); app.refresh(); }, { fid: 'demo-off', sub: 'Die Testvideos verschwinden wieder' }) : null,
         field('Server', d.server, { fid: 'srv', placeholder: 'http://anbieter.example:8080', onchange: (v) => { d.server = v; } }),
         field('Benutzername', d.user, { fid: 'usr', onchange: (v) => { d.user = v; } }),
         field('Passwort', d.password, { fid: 'pwd', type: 'password', onchange: (v) => { d.password = v; } }),

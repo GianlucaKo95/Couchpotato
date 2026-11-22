@@ -34,7 +34,7 @@ class Player {
   playLive(list, channel, category) {
     const reason = model.lockReason();
     if (reason) { app.toast(reason); return; }
-    if (!model.client) { app.toast('Zum Abspielen braucht es den IPTV-Zugang (Einstellungen).'); return; }
+    if (!model.streamURL(liveItem(channel))) { app.toast('Zum Abspielen braucht es den IPTV-Zugang (Einstellungen).'); return; }
     this.begin('live');
     this.list = list.length ? list : [channel];
     this.category = category || 'Live TV';
