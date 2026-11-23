@@ -41,7 +41,8 @@ class Player {
     if (reuseCurrent) {
       // The preview already owns the AVPlay instance; promote it instead of closing and reopening it.
       this.channel = channel;
-      this.retried = false;
+      // the preview may already have switched to MPEG-TS: then there is nothing left to try
+      this.retried = !!(model.client && engine.url === model.client.liveTSURL(channel.id));
       model.rememberWatched(channel);
       this.renderLive();
       engine.setRect(null);
@@ -121,8 +122,12 @@ class Player {
     if (this.mode === 'live' && !this.retried && this.channel) {
       // some providers only offer MPEG-TS
       this.retried = true;
-      const c = model.client;
-      if (c) { this.load(c.liveTSURL(this.channel.id), 0); return; }
+      const c = model.client, ts = c && c.liveTSURL(this.channel.id);
+      if (ts && engine.url !== ts) {
+        local.set('pref.liveTs', true); // this provider wants MPEG-TS: start with it next time (no double start when zapping)
+        this.load(ts, 0);
+        return;
+      }
     }
     app.toast('Wiedergabe nicht möglich' + (e ? ` (${String(e).slice(0, 60)})` : ''), 6000);
     this.stop();

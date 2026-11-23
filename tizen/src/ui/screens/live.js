@@ -120,7 +120,10 @@ export class LiveScreen {
       // some providers only offer MPEG-TS – one more try, then give up quietly
       if (retried || !this.preview || this.preview.id !== c.id || !model.client) return;
       retried = true;
-      engine.open(model.client.liveTSURL(c.id), { rect: PREVIEW }).catch(() => {});
+      const ts = model.client.liveTSURL(c.id);
+      if (engine.url === ts) return;
+      local.set('pref.liveTs', true);
+      engine.open(ts, { rect: PREVIEW }).catch(() => {});
     });
     engine.on('time', null); engine.on('ended', null); engine.on('buffering', null); engine.on('subtitle', null);
     engine.open(url, { rect: PREVIEW }).catch(() => {});

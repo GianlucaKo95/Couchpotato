@@ -238,7 +238,7 @@ export class SettingsScreen {
     return section('Wiedergabe',
       toggle('Programminfos laden', local.get('pref.epg', true), flip('pref.epg'), { fid: 'epg', sub: 'Eine Anfrage pro Sender, nur wenn du auf ihm verweilst' }),
       toggle('Bilder vom Anbieter laden', local.get('pref.providerImages', true), flip('pref.providerImages'), { fid: 'imgs', sub: 'Höchstens 60 pro Stunde – Bilder von TMDB zählen nicht' }),
-      toggle('Live-TV als MPEG-TS', local.get('pref.liveTs', false), flip('pref.liveTs'), { fid: 'ts', sub: 'Falls dein Anbieter kein HLS (m3u8) liefert' }),
+      toggle('Live-TV als MPEG-TS', local.get('pref.liveTs', false), flip('pref.liveTs'), { fid: 'ts', sub: 'Schaltet sich von selbst ein, wenn dein Anbieter kein HLS (m3u8) liefert' }),
       choice('Bildformat', [['fit', 'Ganzes Bild'], ['zoom', 'Bildschirm füllen'], ['auto', 'Automatisch']], local.get('pref.fit', 'fit'), (v) => { local.set('pref.fit', v); app.refresh(); }, { fid: 'fit' }),
       action('Weiterschauen leeren', async () => { if (await app.confirm('„Weiterschauen“ leeren?', `Für das Profil „${model.profile.name}“, auf allen Geräten.`, 'Leeren')) model.clearProgress(); }, { fid: 'clrp' }),
       action('„Für dich“ zurücksetzen', async () => { if (await app.confirm('„Für dich“ zurücksetzen?', 'Der Verlauf, aus dem „Für dich“ lernt, wird auf allen Geräten gelöscht.', 'Zurücksetzen')) model.clearHistory(); }, { fid: 'clrh' }));

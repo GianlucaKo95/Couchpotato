@@ -8,6 +8,7 @@ class Engine {
     this.url = null;
     this.rect = null;
     this.video = null;
+    this.session = 0; // every open() starts a new session; events of older ones are dropped
   }
 
   on(ev, fn) { this.listeners[ev] = fn; }
@@ -18,6 +19,12 @@ class Engine {
   /** Opens and plays; rect = [x, y, w, h] in 1920×1080 or null for full screen. */
   open(url, { start = 0, rect = null } = {}) {
     this.close();
+    const id = ++this.session;
+    // AVPlay reports one failed start twice (listener + prepareAsync) and late events can arrive after
+    // the next stream was opened: only the first error of the current session counts
+    let failed = false;
+    this.live = () => id === this.session;
+    this.fail = (e) => { if (!this.live() || failed) return; failed = true; this.emit('error', String(e)); };
     screenSaver(false);
     this.url = url;
     this.rect = rect;
@@ -33,26 +40,28 @@ class Engine {
     av.open(url);
     this.applyRect();
     try { av.setDisplayMethod(this.fit || 'PLAYER_DISPLAY_MODE_LETTER_BOX'); } catch (e) { /* older TVs */ }
+    const live = this.live, fail = this.fail;
     av.setListener({
-      onbufferingstart: () => this.emit('buffering', true),
-      onbufferingcomplete: () => this.emit('buffering', false),
+      onbufferingstart: () => live() && this.emit('buffering', true),
+      onbufferingcomplete: () => live() && this.emit('buffering', false),
       onbufferingprogress: () => {},
-      oncurrentplaytime: (ms) => this.emit('time', ms / 1000),
-      onstreamcompleted: () => { this.ended = true; this.emit('ended'); },
-      onerror: (e) => this.emit('error', String(e)),
+      oncurrentplaytime: (ms) => live() && this.emit('time', ms / 1000),
+      onstreamcompleted: () => { if (live()) { this.ended = true; this.emit('ended'); } },
+      onerror: (e) => fail(e),
       onevent: () => {},
-      onsubtitlechange: (dur, text) => this.emit('subtitle', text, dur),
+      onsubtitlechange: (dur, text) => live() && this.emit('subtitle', text, dur),
       ondrmevent: () => {},
     });
     return new Promise((resolve, reject) => {
       av.prepareAsync(() => {
+        if (!live()) { resolve(); return; }
         try {
           if (start > 1) av.seekTo(Math.floor(start * 1000));
           av.play();
           this.emit('buffering', false);
           resolve();
-        } catch (e) { reject(e); }
-      }, (e) => { this.emit('error', String(e)); reject(new Error(String(e))); });
+        } catch (e) { fail(e && e.message ? e.message : e); reject(e); }
+      }, (e) => { fail(e); reject(new Error(String(e))); });
     });
   }
 
@@ -64,7 +73,7 @@ class Engine {
     v.onplaying = () => this.emit('buffering', false);
     v.ontimeupdate = () => this.emit('time', v.currentTime);
     v.onended = () => { this.ended = true; this.emit('ended'); };
-    v.onerror = () => this.emit('error', 'Video konnte nicht geladen werden');
+    v.onerror = () => this.fail('Video konnte nicht geladen werden');
     v.src = url;
     if (start > 1) v.currentTime = start;
     // a failed start is reported once, through onerror
@@ -154,6 +163,7 @@ class Engine {
   }
 
   close() {
+    this.session++;
     if (hasAvplay()) {
       try { webapis.avplay.stop(); } catch (e) { /* ignore */ }
       try { webapis.avplay.close(); } catch (e) { /* ignore */ }
