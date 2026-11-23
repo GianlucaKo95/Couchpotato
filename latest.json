@@ -1,8 +1,8 @@
 {
- "version": "1.0.7",
- "build": 7,
+ "version": "1.0.8",
+ "build": 8,
  "js": "app.js",
  "css": "style.css",
- "jsSha256": "0dc020d3c111426960893a548807da23b5e569f46b108792905feaa3bd54846c",
+ "jsSha256": "b66f4f2e7f25b8ee3e38383f28e39c99acb55bdeba1121aad297d80ceadbc547",
  "cssSha256": "9ff3ae64fa8836b66057463e3f4acc94017d44e0c05525076b51aca9b8f2f280"
 }
