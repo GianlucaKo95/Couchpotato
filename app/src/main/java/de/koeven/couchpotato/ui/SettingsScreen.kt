@@ -70,6 +70,7 @@ import androidx.compose.material3.darkColorScheme as m3DarkColorScheme
 private enum class Section(val label: String, val group: String) {
     Profiles("Profile & Kinder", "Familie"),
     CloudSync("Haushalt & Geräte", "Familie"),
+    Hausgeist("Hausgeist", "Familie"),
     Home("Startbildschirm", "Fernsehen"),
     Continue("Weiterschauen", "Fernsehen"),
     Live("Live-TV", "Fernsehen"),
@@ -186,6 +187,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                         Section.Live -> LiveSection(vm, state)
                         Section.Continue -> ContinueSection(vm, state)
                         Section.CloudSync -> CloudSyncSection(vm)
+                        Section.Hausgeist -> HausgeistSection()
                         Section.Profiles -> ProfilesSection(vm, state)
                         Section.About -> AboutSection(state)
                     }

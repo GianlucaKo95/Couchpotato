@@ -11,6 +11,7 @@ class CouchpotatoApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         de.koeven.couchpotato.player.TvLink.install(this)   // link to the iPhone app (same household, same Wi-Fi)
+        de.koeven.couchpotato.player.HausgeistLink.install(this)   // voice control via the family's Hausgeist (if paired)
     }
 
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)

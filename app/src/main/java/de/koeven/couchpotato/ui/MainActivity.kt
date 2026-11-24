@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
         de.koeven.couchpotato.data.CrashLog.install(this)   // first: so even a crash during start is recorded
         ImageGate.start(this)          // request brake + picture loader, before anything goes online
         applyConfigExtras(intent)
+        takeRemoteSearch(intent)
         if (savedInstanceState == null && isBootHijack(intent)) moveTaskToBack(true)
         setContent {
             CouchpotatoTheme {
@@ -86,10 +87,19 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         if (isBootHijack(intent)) { moveTaskToBack(true); return }
         setIntent(intent)
+        if (takeRemoteSearch(intent)) return
         if (!applyConfigExtras(intent)) {
             // Home button / Launcher Manager brings us back: jump to the start screen.
             homeTick.intValue++
         }
+    }
+
+    /** The Hausgeist asked to show search results ("Such mal Pokémon auf dem Fernseher"). */
+    private fun takeRemoteSearch(intent: Intent?): Boolean {
+        val q = intent?.getStringExtra(de.koeven.couchpotato.player.RemoteNav.EXTRA_SEARCH) ?: return false
+        intent.removeExtra(de.koeven.couchpotato.player.RemoteNav.EXTRA_SEARCH)
+        de.koeven.couchpotato.player.RemoteNav.search.value = de.koeven.couchpotato.player.RemoteNav.Search(q)
+        return true
     }
 
     /**
@@ -144,6 +154,14 @@ private fun CouchpotatoApp(vm: HomeViewModel, homeTick: Int) {
     }
 
     val state by vm.state.collectAsState()
+    // the Hausgeist opened a search on this TV
+    val remoteSearch by de.koeven.couchpotato.player.RemoteNav.search.collectAsState()
+    LaunchedEffect(remoteSearch?.id) {
+        val r = remoteSearch ?: return@LaunchedEffect
+        vm.search.setQuery(r.query)
+        stack = listOf(Screen.Home, Screen.Search)
+        de.koeven.couchpotato.player.RemoteNav.search.value = null
+    }
     // something that needs the parents' PIN first (leaving a kids profile, settings in a kids profile)
     var pinAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val guarded: (() -> Unit) -> Unit = { action -> if (vm.profiles.pinNeeded()) pinAction = action else action() }

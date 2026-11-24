@@ -57,6 +57,9 @@ object TvLink {
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var resumed: WeakReference<Activity>? = null
 
+    /** Our screen in front right now (launcher or player), null when another app is open. */
+    internal fun foreground(): Activity? = resumed?.get()
+
     /** Called once from the Application; tracks which of our screens is in front (for the remote). */
     fun install(application: Application) {
         app = application
@@ -247,7 +250,7 @@ object TvLink {
     }
 
     /** What's on: the player's item, position and pause state (read on the main thread). */
-    private fun state(): JSONObject = onMain {
+    internal fun state(): JSONObject = onMain {
         val a = resumed?.get()
         val o = JSONObject().put("screen", when (a) { null -> "other"; is PlayerActivity -> "player"; else -> "home" })
         if (a is PlayerActivity && runCatching { a.player }.isSuccess) {
@@ -310,7 +313,7 @@ object TvLink {
     }
 
     /** Keys go to our own screen in front (player or launcher); Home and volume work everywhere. */
-    private fun key(k: String): JSONObject {
+    internal fun key(k: String): JSONObject {
         val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         when (k) {
             "volup" -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
