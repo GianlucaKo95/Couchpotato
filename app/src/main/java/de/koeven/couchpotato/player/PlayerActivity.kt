@@ -27,6 +27,9 @@ import de.koeven.couchpotato.data.ScreenTime
 import de.koeven.couchpotato.data.SettingsStore
 import de.koeven.couchpotato.data.XtreamClient
 import de.koeven.couchpotato.data.XtreamConfig
+import de.koeven.couchpotato.sonos.SonosLink
+import de.koeven.couchpotato.sonos.SonosPrefs
+import de.koeven.couchpotato.sonos.SonosSpeaker
 
 /**
  * Fullscreen player for films, series and live TV. Saves the position every 10 s and when
@@ -56,6 +59,10 @@ class PlayerActivity : Activity() {
     internal lateinit var channels: ChannelPanel
     internal lateinit var upNext: UpNextPanel
     private lateinit var tracks: TrackMemory
+    /** Sound on Sonos speakers instead of the stick (see [SonosAudioSink]). */
+    internal lateinit var sonos: SonosLink
+    private var sonosSink: SonosAudioSink? = null
+    internal var sonosSearching = false
 
     private val saveTask = object : Runnable {
         override fun run() {
@@ -98,12 +105,22 @@ class PlayerActivity : Activity() {
             .setTargetBufferBytes(64 * 1024 * 1024)
             .setPrioritizeTimeOverSizeThresholds(false)
             .build()
-        player = ExoPlayer.Builder(this)
+        sonos = SonosLink(object : SonosLink.Listener {
+            override fun failed(message: String) = runOnUiThread { onSonosFailed(message) }
+            override fun playing() = runOnUiThread { toast("🔊 Ton über Sonos · ${sonos.speakers.joinToString(" + ") { it.room }}") }
+        })
+        sonos.trimMs = SonosPrefs.trimMs(this)
+        val renderers = SonosRenderersFactory(this, sonos)
+        player = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(sourceFactory))
             .setLoadControl(if (isLive) androidx.media3.exoplayer.DefaultLoadControl() else loadControl)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
             .build()
+
+        sonosSink = renderers.sink
+        // the sound stays on the Sonos rooms picked last time, until "Fire TV" is picked again
+        SonosPrefs.selected(this).takeIf { it.isNotEmpty() }?.let { startSonos(it) }
 
         playerView.player = player
         playerView.keepScreenOn = true
@@ -167,6 +184,66 @@ class PlayerActivity : Activity() {
         player.stop()
         FloatingPlayer.start(this, items, i)
         finish()
+    }
+
+    // ---------- sound on Sonos ----------
+
+    internal val soundLabel: String
+        get() = if (sonos.active) "Sonos · " + sonos.speakers.joinToString(" + ") { it.room } else "Fire TV"
+
+    /** Sound to [list] (empty = back to the stick). Remembered for the next films. */
+    internal fun useSonos(list: List<SonosSpeaker>) {
+        SonosPrefs.setSelected(this, list.map { it.uuid })
+        if (list.isEmpty()) {
+            sonos.stop()          // the stick's clock again: the picture delay is gone at once
+            toast("🔊 Ton wieder über den Fire TV")
+            return
+        }
+        startSonos(list)
+    }
+
+    private fun startSonos(list: List<SonosSpeaker>) {
+        sonos.title = items.getOrNull(if (isLive && ::live.isInitialized) live.index.coerceAtLeast(0) else player.currentMediaItemIndex)?.title ?: "Couchpotato"
+        val wasPassthrough = sonosSink?.passthrough == true
+        sonos.start(list)
+        // Dolby/DTS went to HDMI undecoded: open the stream again, decoded, so the sound can go to Sonos
+        if (wasPassthrough) restartForSound()
+    }
+
+    private fun restartForSound() {
+        if (isLive) { if (::live.isInitialized) live.restart(); return }
+        val index = player.currentMediaItemIndex
+        val pos = player.currentPosition
+        player.stop()
+        player.prepare()
+        player.seekTo(index, pos)
+    }
+
+    private fun onSonosFailed(message: String) {
+        toast("$message – Ton wieder über den Fire TV")
+        if (::overlays.isInitialized) overlays.refreshMenu()
+    }
+
+    internal fun findSonos(done: () -> Unit) {
+        if (sonosSearching) return
+        sonosSearching = true
+        Thread {
+            val found = SonosPrefs.discover(applicationContext)
+            runOnUiThread {
+                sonosSearching = false
+                if (found.isEmpty()) toast("Keine Sonos gefunden – ist der Fire TV im selben WLAN?")
+                done()
+            }
+        }.start()
+    }
+
+    internal fun shiftSonos(ms: Int) {
+        sonos.trimMs = (sonos.trimMs + ms).coerceIn(-1_000, 1_000)
+        SonosPrefs.setTrimMs(this, sonos.trimMs)
+    }
+
+    internal fun sonosVolume(delta: Int) {
+        sonos.volume(delta) { v -> runOnUiThread { toast(if (v != null) "🔊 Sonos-Lautstärke $v" else "Sonos-Lautstärke nicht änderbar") } }
     }
 
     internal fun toast(text: String) {
@@ -341,12 +418,18 @@ class PlayerActivity : Activity() {
         if (::overlays.isInitialized) overlays.release()
         if (::live.isInitialized) live.release()
         if (::player.isInitialized) player.release()
+        if (::sonos.isInitialized) sonos.release()   // the speakers stop with the player
         super.onDestroy()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (!::player.isInitialized) return super.dispatchKeyEvent(event)
         if (event.action == KeyEvent.ACTION_DOWN) upNext.autoInARow = 0   // someone is on the couch
+        // sound on Sonos: the volume keys (if the remote sends them to the stick) change the Sonos volume
+        if (sonos.active && (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            if (event.action == KeyEvent.ACTION_DOWN) sonosVolume(if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) 2 else -2)
+            return true
+        }
         // "Nächste Folge" panel: D-pad moves between its buttons, Back closes it
         if (upNext.visible) {
             if (event.keyCode == KeyEvent.KEYCODE_BACK) {

@@ -96,8 +96,13 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
         menu.getChildAt(focused.coerceAtLeast(1))?.requestFocus()
     }
 
+    /** 0 = ≡ menu, 1 = "Ton über" (Fire TV or Sonos rooms). */
+    private var page = 0
+    private var autoSearched = false
+
     private fun fillMenu() {
         menu.removeAllViews()
+        if (page == 1) { fillSoundMenu(); return }
         val live = a.live
         menu.addView(TextView(a).apply {
             text = if (a.isLive) a.items.getOrNull(live.index)?.title ?: "Live-TV" else "Wiedergabe"
@@ -127,11 +132,55 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
             }
             add("▣ Als kleines Fenster weiterlaufen") { hideMenu(); a.floatAway() }
         }
+        add("🔊 Ton: ${a.soundLabel}") { page = 1; fillMenu(); menu.getChildAt(1)?.requestFocus() }
         add("☾ Sleep-Timer: ${a.sleep.label()?.removePrefix("☾ ") ?: "aus"}") { a.cycleSleep() }
         add("Schließen") { hideMenu() }
     }
 
+    /** Where the sound goes: the stick (projector/TV) or one or more Sonos rooms. */
+    private fun fillSoundMenu() {
+        menu.addView(TextView(a).apply {
+            text = "Ton über"
+            setTextColor(ACCENT); textSize = 15f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 0, 0, a.dp(10))
+        })
+        fun add(label: String, action: () -> Unit) {
+            menu.addView(a.pillButton(label).apply { setOnClickListener { action() } },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = a.dp(8) })
+        }
+        val sonos = a.sonos
+        val chosen = if (sonos.active) sonos.speakers.map { it.uuid } else emptyList()
+        add((if (!sonos.active) "● " else "○ ") + "Fire TV / Beamer") { a.useSonos(emptyList()); refreshMenu() }
+        val rooms = de.koeven.couchpotato.sonos.SonosPrefs.known(a)
+        for (r in rooms) {
+            add((if (r.uuid in chosen) "● " else "○ ") + r.room) {
+                val now = if (r.uuid in chosen) chosen - r.uuid else chosen + r.uuid
+                a.useSonos(now.mapNotNull { id -> rooms.find { it.uuid == id } })
+                refreshMenu()
+            }
+        }
+        if (a.sonosSearching) {
+            menu.addView(TextView(a).apply { text = "Suche Sonos im WLAN …"; setTextColor(TEXT); textSize = 15f; setPadding(0, a.dp(10), 0, 0) })
+        } else {
+            add(if (rooms.isEmpty()) "🔍 Sonos suchen" else "🔍 Neu suchen") { a.findSonos { refreshMenu() }; refreshMenu() }
+        }
+        if (sonos.active) {
+            add("🔉 Leiser") { a.sonosVolume(-3) }
+            add("🔊 Lauter") { a.sonosVolume(3) }
+            val t = sonos.trimMs
+            menu.addView(TextView(a).apply {
+                text = "Bild passt nicht zum Ton? Feinjustieren (jetzt ${if (t > 0) "+" else ""}$t ms)"
+                setTextColor(TEXT); textSize = 14f; setPadding(0, a.dp(12), 0, 0)
+            })
+            add("◀ Bild früher") { a.shiftSonos(-40); refreshMenu() }
+            add("Bild später ▶") { a.shiftSonos(40); refreshMenu() }
+        }
+        add("‹ Zurück") { page = 0; fillMenu(); menu.getChildAt(1)?.requestFocus() }
+        // nothing found yet: look right away
+        if (rooms.isEmpty() && !a.sonosSearching && !autoSearched) { autoSearched = true; a.findSonos { refreshMenu() } }
+    }
+
     fun showMenu() {
+        page = 0
         fillMenu()
         a.playerView.hideController()
         menuHint.visibility = View.GONE
