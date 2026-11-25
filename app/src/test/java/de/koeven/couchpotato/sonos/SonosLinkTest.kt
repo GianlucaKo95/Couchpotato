@@ -1,11 +1,10 @@
 package de.koeven.couchpotato.sonos
 
-import com.sun.net.httpserver.HttpServer
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.InputStream
-import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.net.URL
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -18,7 +17,8 @@ import kotlin.math.abs
  * so the test knows exactly which film moment the "speaker" plays.
  */
 private class FakeSonos(private val prebufferS: Double = 1.5) {
-    val http: HttpServer = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    private val server = ServerSocket(0)
+    val port: Int get() = server.localPort
     @Volatile var uri = ""
     @Volatile var state = "STOPPED"
     @Volatile var playedFrames = 0L
@@ -28,26 +28,46 @@ private class FakeSonos(private val prebufferS: Double = 1.5) {
     private var rate = 16_000
 
     init {
-        http.createContext("/") { ex ->
-            val action = ex.requestHeaders.getFirst("SOAPACTION")!!.trim('"').substringAfter('#')
-            val body = ex.requestBody.readBytes().toString(Charsets.UTF_8)
-            val reply = when (action) {
-                "SetAVTransportURI" -> { stopAll(); uri = SonosXml.unescape(SonosXml.value(body, "CurrentURI")!!); "" }
-                "Play" -> { if (state == "PAUSED_PLAYBACK") state = "PLAYING" else startPlaying(); "" }
-                "Pause" -> { state = "PAUSED_PLAYBACK"; "" }
-                "Stop" -> { stopAll(); "" }
-                "GetTransportInfo" -> "<CurrentTransportState>$state</CurrentTransportState>"
-                "GetPositionInfo" -> {
-                    val s = playedFrames / rate
-                    "<RelTime>${s / 3600}:${"%02d".format(s / 60 % 60)}:${"%02d".format(s % 60)}</RelTime><TrackURI>${SonosXml.escape(uri)}</TrackURI>"
-                }
-                else -> ""
+        thread(isDaemon = true) {
+            while (!server.isClosed) {
+                val s = runCatching { server.accept() }.getOrNull() ?: continue
+                thread(isDaemon = true) { runCatching { s.use { handle(it) } } }
             }
-            val out = "<s:Envelope><s:Body><u:${action}Response>$reply</u:${action}Response></s:Body></s:Envelope>".toByteArray()
-            ex.sendResponseHeaders(200, out.size.toLong())
-            ex.responseBody.use { it.write(out) }
         }
-        http.start()
+    }
+
+    private fun readFully(input: InputStream, n: Int): ByteArray? {
+        val b = ByteArray(n); var off = 0
+        while (off < n) { val r = input.read(b, off, n - off); if (r < 0) return null; off += r }
+        return b
+    }
+
+    /** One SOAP request in, one answer out (just enough HTTP for HttpURLConnection). */
+    private fun handle(s: java.net.Socket) {
+        val input = s.getInputStream()
+        val head = StringBuilder()
+        while (!head.endsWith("\r\n\r\n")) { val c = input.read(); if (c < 0) return; head.append(c.toChar()) }
+        val headers = head.lines()
+        val len = headers.firstOrNull { it.startsWith("Content-Length:", true) }?.substringAfter(':')?.trim()?.toInt() ?: 0
+        val action = headers.first { it.startsWith("SOAPACTION:", true) }.substringAfter(':').trim().trim('"').substringAfter('#')
+        val body = String(readFully(input, len) ?: return, Charsets.UTF_8)
+        val reply = when (action) {
+            "SetAVTransportURI" -> { stopAll(); uri = SonosXml.unescape(SonosXml.value(body, "CurrentURI")!!); "" }
+            "Play" -> { if (state == "PAUSED_PLAYBACK") state = "PLAYING" else startPlaying(); "" }
+            "Pause" -> { state = "PAUSED_PLAYBACK"; "" }
+            "Stop" -> { stopAll(); "" }
+            "GetTransportInfo" -> "<CurrentTransportState>$state</CurrentTransportState>"
+            "GetPositionInfo" -> {
+                val sec = playedFrames / rate
+                "<RelTime>${sec / 3600}:${"%02d".format(sec / 60 % 60)}:${"%02d".format(sec % 60)}</RelTime><TrackURI>${SonosXml.escape(uri)}</TrackURI>"
+            }
+            else -> ""
+        }
+        val out = "<s:Envelope><s:Body><u:${action}Response>$reply</u:${action}Response></s:Body></s:Envelope>".toByteArray()
+        s.getOutputStream().apply {
+            write("HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: ${out.size}\r\nConnection: close\r\n\r\n".toByteArray())
+            write(out); flush()
+        }
     }
 
     private fun stopAll() { session++; state = "STOPPED"; buffer.clear(); playedFrames = 0; playingMediaMs = -1 }
@@ -59,12 +79,11 @@ private class FakeSonos(private val prebufferS: Double = 1.5) {
         thread(isDaemon = true) {   // network: reads as fast as it can, up to 4 s ahead
             runCatching {
                 val input: InputStream = URL(u).openStream()
-                val head = input.readNBytes(44)
+                val head = readFully(input, 44) ?: return@runCatching
                 rate = ByteBuffer.wrap(head).order(ByteOrder.LITTLE_ENDIAN).getInt(24)
-                val frame = ByteArray(4)
                 while (my == session) {
                     if (buffer.size > rate * 4) { Thread.sleep(5); continue }
-                    if (input.readNBytes(frame, 0, 4) < 4) break
+                    val frame = readFully(input, 4) ?: break
                     val b = ByteBuffer.wrap(frame).order(ByteOrder.LITTLE_ENDIAN)
                     val l = b.getShort(0).toLong() and 0xffff
                     val r = b.getShort(2).toLong() and 0xffff
@@ -90,7 +109,7 @@ private class FakeSonos(private val prebufferS: Double = 1.5) {
         }
     }
 
-    fun close() { stopAll(); http.stop(0) }
+    fun close() { stopAll(); server.close() }
 }
 
 class SonosLinkTest {
@@ -98,7 +117,7 @@ class SonosLinkTest {
     private val failures = mutableListOf<String>()
     private val link = SonosLink(object : SonosLink.Listener {
         override fun failed(message: String) { failures += message }
-    }, SonosControl(port = fake.http.address.port))
+    }, SonosControl(port = fake.port))
     private val rate = 16_000
     @Volatile private var feeding = true
     @Volatile private var mediaUs = 10_000_000L
