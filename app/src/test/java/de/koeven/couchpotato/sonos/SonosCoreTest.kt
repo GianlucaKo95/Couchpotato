@@ -24,6 +24,7 @@ class SonosXmlTest {
             listOf(SonosSpeaker("RINCON_C", "K&üche", "192.168.1.30"), SonosSpeaker("RINCON_A", "Wohnzimmer", "192.168.1.20")),
             SonosXml.zoneMembers(state),
         )
+        assertEquals(mapOf("RINCON_A" to "RINCON_A", "RINCON_B" to "RINCON_A", "RINCON_C" to "RINCON_C", "RINCON_D" to "RINCON_D"), SonosXml.coordinators(state))
     }
 
     @Test fun `values, rel time and the speaker line format`() {

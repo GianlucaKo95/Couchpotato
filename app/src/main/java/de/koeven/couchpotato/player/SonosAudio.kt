@@ -97,15 +97,23 @@ internal class SonosAudioSink(inner: AudioSink, private val link: SonosLink, pri
         link.onFlush()
     }
 
+    @Volatile private var running = false
+
     override fun pause() {
+        running = false
         super.pause()
         link.onPause()
     }
 
     override fun play() {
+        running = true
         super.play()
         link.onPlay()
     }
+
+    /** How far the picture is held back right now (ms), for the menu; null while unknown. */
+    @Volatile var delayMs: Long? = null; private set
+    private var stuckSince = 0L
 
     override fun setVolume(volume: Float) {
         this.volume = volume
@@ -122,9 +130,17 @@ internal class SonosAudioSink(inner: AudioSink, private val link: SonosLink, pri
     override fun getCurrentPositionUs(sourceEnded: Boolean): Long {
         syncVolume()
         val local = super.getCurrentPositionUs(sourceEnded)
-        if (!link.active || passthrough) return local
+        if (!link.active || passthrough) { delayMs = null; stuckSince = 0; return local }
         // the film time the speakers play; unknown yet → the picture waits
-        return link.heardPositionUs() ?: AudioSink.CURRENT_POSITION_NOT_SET
+        val heard = link.heardPositionUs()
+        delayMs = if (heard != null && local != AudioSink.CURRENT_POSITION_NOT_SET) (local - heard) / 1000 else null
+        // never leave the picture standing: if it cannot follow the speakers, back to the stick's sound
+        val stuck = running && (heard == null || (local != AudioSink.CURRENT_POSITION_NOT_SET && local - heard > 20_000_000))
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!stuck) stuckSince = 0
+        else if (stuckSince == 0L) stuckSince = now
+        else if (now - stuckSince > 15_000) { stuckSince = 0; link.giveUp("Sonos: das Bild kommt nicht hinterher (${link.status(delayMs)})") }
+        return heard ?: AudioSink.CURRENT_POSITION_NOT_SET
     }
 }
 

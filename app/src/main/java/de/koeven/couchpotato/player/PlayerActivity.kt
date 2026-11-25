@@ -205,9 +205,20 @@ class PlayerActivity : Activity() {
     private fun startSonos(list: List<SonosSpeaker>) {
         sonos.title = items.getOrNull(if (isLive && ::live.isInitialized) live.index.coerceAtLeast(0) else player.currentMediaItemIndex)?.title ?: "Couchpotato"
         val wasPassthrough = sonosSink?.passthrough == true
+        val playing = player.playbackState != Player.STATE_IDLE && player.currentMediaItem != null
         sonos.start(list)
-        // Dolby/DTS went to HDMI undecoded: open the stream again, decoded, so the sound can go to Sonos
-        if (wasPassthrough) restartForSound()
+        when {
+            !playing -> {}
+            // Dolby/DTS went to HDMI undecoded: open the stream again, decoded, so the sound can go to Sonos
+            wasPassthrough -> restartForSound()
+            // switched on while playing: start from the picture you see (like a fresh start)
+            else -> resyncForSound()
+        }
+    }
+
+    private fun resyncForSound() {
+        if (player.isCurrentMediaItemSeekable) player.seekTo(player.currentPosition)
+        else if (isLive && ::live.isInitialized) live.restart()
     }
 
     private fun restartForSound() {
@@ -218,6 +229,8 @@ class PlayerActivity : Activity() {
         player.prepare()
         player.seekTo(index, pos)
     }
+
+    internal val sonosStatus: String get() = sonos.status(sonosSink?.delayMs)
 
     private fun onSonosFailed(message: String) {
         toast("$message – Ton wieder über den Fire TV")
@@ -297,6 +310,7 @@ class PlayerActivity : Activity() {
         if (now - lastChecks < 2_000L) return
         lastChecks = now
         overlays.updateLabel()
+        overlays.updateSoundStatus()
         if (sleep.due()) { goToSleep("Sleep-Timer: Gute Nacht"); return }
         when (val st = ScreenTime.state(this)) {
             is ScreenTime.State.LimitReached -> goToSleep(if (st.evening) "Schlafenszeit – gute Nacht!" else "Bildschirmzeit für heute ist vorbei")

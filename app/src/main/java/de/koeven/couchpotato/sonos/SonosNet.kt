@@ -27,7 +27,7 @@ import kotlin.concurrent.thread
  */
 
 /** Local control of one Sonos player. Blocking – call it off the main thread. */
-class SonosControl(private val port: Int = 1400, private val timeoutMs: Int = 2_500) {
+class SonosControl(private val port: Int = 1400, private val timeoutMs: Int = 6_000) {
 
     fun call(host: String, path: String, service: String, action: String, args: List<Pair<String, String>>): String {
         val c = URL("http://$host:$port$path").openConnection() as HttpURLConnection
@@ -78,11 +78,14 @@ class SonosControl(private val port: Int = 1400, private val timeoutMs: Int = 2_
         return SonosXml.value(r, "NewVolume")?.toIntOrNull()
     }
 
-    /** All rooms of the household, asked from any one player. */
-    fun rooms(host: String): List<SonosSpeaker> {
+    /** The household's zone group state (unescaped XML), asked from any one player. */
+    fun zoneState(host: String): String {
         val r = call(host, "/ZoneGroupTopology/Control", SonosXml.ZONE_TOPOLOGY, "GetZoneGroupState", emptyList())
-        return SonosXml.zoneMembers(SonosXml.unescape(SonosXml.value(r, "ZoneGroupState") ?: return emptyList()))
+        return SonosXml.unescape(SonosXml.value(r, "ZoneGroupState") ?: "")
     }
+
+    /** All rooms of the household, asked from any one player. */
+    fun rooms(host: String): List<SonosSpeaker> = SonosXml.zoneMembers(zoneState(host))
 
     companion object {
         /** Sonos players answering an SSDP search (needs a multicast lock on Android). */
@@ -138,6 +141,10 @@ class SonosStream : Closeable {
     @Volatile var holdSilence = false
     private val queue = LinkedBlockingQueue<Chunk>()
     private val queued = AtomicLong()
+    /** For the status line: requests for this session, sound and silence sent (bytes). */
+    @Volatile var requests = 0; private set
+    @Volatile var soundBytes = 0L; private set
+    @Volatile var silenceBytes = 0L; private set
     @Volatile private var current: Socket? = null
     private val random = SecureRandom()
 
@@ -159,6 +166,7 @@ class SonosStream : Closeable {
         queue.clear(); queued.set(0)
         timeline.clear()
         holdSilence = false
+        requests = 0; soundBytes = 0; silenceBytes = 0
         current?.let { runCatching { it.close() } }
         current = null
     }
@@ -202,6 +210,7 @@ class SonosStream : Closeable {
         val reqPath = parts.getOrNull(1)?.substringBefore('?') ?: return
         val out = BufferedOutputStream(s.getOutputStream(), 16 * 1024)
         val myToken = token
+        if (reqPath == "/cp/$myToken.wav") requests++
         if (myToken.isEmpty() || reqPath != "/cp/$myToken.wav") {
             out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray()); out.flush()
             return
@@ -242,10 +251,12 @@ class SonosStream : Closeable {
                 val frames = c.pcm.size / Wav.FRAME_BYTES
                 timeline.add(frame, c.mediaUs, frames)
                 frame += frames
+                soundBytes += c.pcm.size
             } else if (!holdSilence) {
                 out.write(silence)
                 out.flush()
                 frame += silence.size / Wav.FRAME_BYTES
+                silenceBytes += silence.size
             }
         }
     }
@@ -285,6 +296,10 @@ class SonosLink(
     @Volatile private var sessionAt = 0.0
     @Volatile private var lastOurs = 0.0
     @Volatile private var announced = false
+    @Volatile private var lastState: String? = null
+    @Volatile private var lastTrack: String? = null
+    @Volatile private var lastRel: Int? = null
+    @Volatile private var step = ""            // what begin() is doing (for error messages)
     private var failures = 0
     private var pending: java.util.concurrent.ScheduledFuture<*>? = null
     private var polling = false
@@ -401,27 +416,49 @@ class SonosLink(
         val list = speakers
         val s = stream ?: return
         try {
+            step = "Gruppe"
             if (grouped != list) group(list)
             val c = coordinator ?: return
+            step = "Adresse"
             val uri = "http://${SonosControl.localAddressFor(c.host)}:${s.port}${s.path}"
-            control.setUri(c.host, uri, SonosXml.didl(uri, title))
+            // right after regrouping Sonos may be busy for a moment: try a few times
+            step = "Stream setzen"
+            retry { control.setUri(c.host, uri, SonosXml.didl(uri, title)) }
             if (g != gen) return
-            control.play(c.host)
+            step = "Abspielen"
+            retry { control.play(c.host) }
+            step = ""
             sessionUri = uri
             sessionAt = now()
             lastOurs = sessionAt
             failures = 0
             if (!polling) { polling = true; later(100) { poll() } }
         } catch (e: Exception) {
-            fail("Sonos nicht erreichbar (${e.message ?: e.javaClass.simpleName})")
+            fail("Sonos nicht erreichbar – $step: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 
+    private fun <T> retry(block: () -> T): T {
+        var last: Exception? = null
+        repeat(3) { i ->
+            try { return block() } catch (e: Exception) { last = e; Thread.sleep(700L * (i + 1)) }
+        }
+        throw last!!
+    }
+
+    /** Groups only what is not grouped like that already (regrouping takes Sonos a moment). */
     private fun group(list: List<SonosSpeaker>) {
         val lead = list.first()
-        for (old in grouped) if (list.none { it.uuid == old.uuid }) runCatching { control.standalone(old.host) }
-        runCatching { control.standalone(lead.host) }
-        for (m in list.drop(1)) runCatching { control.join(m.host, lead.uuid) }
+        val coords = runCatching { SonosXml.coordinators(control.zoneState(lead.host)) }.getOrDefault(emptyMap())
+        val wanted = list.map { it.uuid }.toSet()
+        val leadGroup = coords.filterValues { it == coords[lead.uuid] }.keys
+        for (old in grouped) if (old.uuid !in wanted) runCatching { control.standalone(old.host) }
+        var changed = false
+        if (coords[lead.uuid] != lead.uuid || (leadGroup - wanted).isNotEmpty()) {
+            runCatching { control.standalone(lead.host) }; changed = true
+        }
+        for (m in list.drop(1)) if (coords[m.uuid] != lead.uuid) { runCatching { control.join(m.host, lead.uuid) }; changed = true }
+        if (changed) Thread.sleep(800)
         coordinator = lead
         grouped = list
     }
@@ -438,14 +475,16 @@ class SonosLink(
                 val (rel, track) = control.positionInfo(c.host)
                 val t1 = now()
                 failures = 0
+                lastState = state; lastTrack = track; lastRel = rel
                 if (uri == sessionUri) {
-                    val ours = track == uri
+                    val token = stream?.token.orEmpty()
+                    val ours = track != null && token.isNotEmpty() && track.contains(token)
                     val playingNow = ours && state == "PLAYING"
                     clock.observe(t0, t1, playingNow, rel)
                     if (ours) lastOurs = t1
                     if (playingNow && !announced) { announced = true; listener.playing() }
                     when {
-                        !announced && !pausedByUs && t1 - sessionAt > 15 -> fail("Sonos startet die Wiedergabe nicht")
+                        !announced && !pausedByUs && t1 - sessionAt > 12 -> fail(whyNotPlaying())
                         !ours && t1 - lastOurs > 6 -> fail("Sonos spielt jetzt etwas anderes")
                     }
                     if (playingNow && clock.precision() < 0.08) delay = 400L
@@ -456,6 +495,34 @@ class SonosLink(
         }
         if (active) later(delay) { poll() } else polling = false
     }
+
+    private fun whyNotPlaying(): String {
+        val s = stream
+        return when {
+            s == null || s.requests == 0 -> "Sonos holt den Ton nicht ab (Status ${lastState ?: "?"})"
+            s.soundBytes == 0L -> "Sonos bekommt keinen Ton vom Player"
+            else -> "Sonos startet die Wiedergabe nicht (Status ${lastState ?: "?"})"
+        }
+    }
+
+    /** One line for the menu: what is going on right now. */
+    fun status(delayMs: Long?): String {
+        if (!active) return ""
+        val s = stream
+        val parts = mutableListOf<String>()
+        parts += when {
+            step.isNotEmpty() -> "verbinde ($step)"
+            lastState == "PLAYING" && clock.playing -> "spielt"
+            else -> (lastState ?: "warte").lowercase()
+        }
+        if (s != null) parts += "Abrufe ${s.requests} · Ton ${s.soundBytes / (s.rate * Wav.FRAME_BYTES)} s · Stille ${s.silenceBytes / (s.rate * Wav.FRAME_BYTES)} s"
+        lastRel?.let { parts += "Sonos bei ${it} s" }
+        if (delayMs != null) parts += "Bild ${"%.1f".format(delayMs / 1000.0)} s verzögert"
+        return parts.joinToString(" · ")
+    }
+
+    /** From the player: the picture could not follow the speakers – give up on Sonos. */
+    fun giveUp(message: String) { onCtl { fail(message) } }
 
     private fun fail(message: String) {
         if (!active) return

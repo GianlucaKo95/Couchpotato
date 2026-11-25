@@ -99,9 +99,18 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
     /** 0 = ≡ menu, 1 = "Ton über" (Fire TV or Sonos rooms). */
     private var page = 0
     private var autoSearched = false
+    private var statusView: TextView? = null
+
+    /** Every few seconds while "Ton über" is open: the Sonos status line. */
+    fun updateSoundStatus() {
+        val v = statusView ?: return
+        if (menu.visibility != View.VISIBLE || page != 1 || v.parent == null) return
+        v.text = a.sonosStatus
+    }
 
     private fun fillMenu() {
         menu.removeAllViews()
+        statusView = null
         if (page == 1) { fillSoundMenu(); return }
         val live = a.live
         menu.addView(TextView(a).apply {
@@ -164,6 +173,10 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
             add(if (rooms.isEmpty()) "🔍 Sonos suchen" else "🔍 Neu suchen") { a.findSonos { refreshMenu() }; refreshMenu() }
         }
         if (sonos.active) {
+            menu.addView(TextView(a).apply {
+                text = a.sonosStatus
+                setTextColor(TEXT); textSize = 13f; alpha = 0.75f; setPadding(0, a.dp(8), 0, 0)
+            }.also { statusView = it })
             add("🔉 Leiser") { a.sonosVolume(-3) }
             add("🔊 Lauter") { a.sonosVolume(3) }
             val t = sonos.trimMs

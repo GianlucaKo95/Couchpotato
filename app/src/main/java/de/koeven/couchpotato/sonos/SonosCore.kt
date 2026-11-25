@@ -68,6 +68,16 @@ object SonosXml {
         return out.values.sortedBy { it.room.lowercase() }
     }
 
+    /** Which room follows which: member UUID → UUID of its group's coordinator. */
+    fun coordinators(state: String): Map<String, String> {
+        val out = HashMap<String, String>()
+        for (g in Regex("<ZoneGroup\\b([^>]*)>(.*?)</ZoneGroup>", RegexOption.DOT_MATCHES_ALL).findAll(state)) {
+            val coord = Regex("Coordinator=\"([^\"]*)\"").find(g.groupValues[1])?.groupValues?.get(1) ?: continue
+            for (m in Regex("<ZoneGroupMember\\b[^>]*\\bUUID=\"([^\"]*)\"").findAll(g.groupValues[2])) out[m.groupValues[1]] = coord
+        }
+        return out
+    }
+
     /** "0:01:05" → 65; "NOT_IMPLEMENTED" or nonsense → null. */
     fun relTimeSeconds(s: String?): Int? {
         val p = s?.trim()?.split(':') ?: return null
