@@ -109,6 +109,8 @@ private class FakeSonos(private val prebufferS: Double = 1.5) {
         }
     }
 
+    fun dropOut() { session++; state = "STOPPED"; buffer.clear() }
+
     fun close() { stopAll(); server.close() }
 }
 
@@ -154,14 +156,14 @@ class SonosLinkTest {
         link.onFormat(rate)
         link.start(listOf(SonosSpeaker("RINCON_X", "Test", "127.0.0.1")))
         feeder()
-        Thread.sleep(800)
+        Thread.sleep(400)
         assertTrue("waits while the speaker buffers", link.heardPositionUs() == null || fake.state != "PLAYING")
         Thread.sleep(3_700)
         assertTrue(failures.toString(), failures.isEmpty())
         assertTrue("speaker plays", fake.state == "PLAYING")
         assertInSync("after start")
-        // the film plays ~1.5 s ahead of what is heard (the speaker's buffer)
-        assertTrue(mediaUs / 1000 - fake.playingMediaMs in 1_300..2_200)
+        // the film plays ahead of what is heard by the speaker's buffer + the cushion
+        assertTrue("${mediaUs / 1000 - fake.playingMediaMs}", mediaUs / 1000 - fake.playingMediaMs in 1_800..3_800)
 
         link.onPause(); feeding = false
         Thread.sleep(1_000)
@@ -181,6 +183,12 @@ class SonosLinkTest {
         Thread.sleep(4_500)
         assertInSync("after seek")
         assertTrue(fake.playingMediaMs > 100_000)
+        assertTrue(failures.toString(), failures.isEmpty())
+
+        fake.dropOut()                       // the speaker stops by itself (Wi-Fi gone)
+        Thread.sleep(10_000)
+        assertTrue("plays again", fake.state == "PLAYING")
+        assertInSync("after a drop-out")
         assertTrue(failures.toString(), failures.isEmpty())
     }
 }

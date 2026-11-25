@@ -108,6 +108,7 @@ class PlayerActivity : Activity() {
         sonos = SonosLink(object : SonosLink.Listener {
             override fun failed(message: String) = runOnUiThread { onSonosFailed(message) }
             override fun playing() = runOnUiThread { toast("🔊 Ton über Sonos · ${sonos.speakers.joinToString(" + ") { it.room }}") }
+            override fun recovering() = runOnUiThread { toast("🔊 Sonos hat ausgesetzt – verbinde neu …") }
         })
         sonos.trimMs = SonosPrefs.trimMs(this)
         val renderers = SonosRenderersFactory(this, sonos)

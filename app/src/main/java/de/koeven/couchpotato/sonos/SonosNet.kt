@@ -132,6 +132,11 @@ class SonosControl(private val port: Int = 1400, private val timeoutMs: Int = 6_
 class SonosStream : Closeable {
     private class Chunk(val pcm: ByteArray, val mediaUs: Long)
 
+    companion object {
+        /** Extra buffer for the speakers (seconds). More = steadier, the picture waits that much longer at the start. */
+        const val PREROLL_S = 2.0
+    }
+
     private val server = ServerSocket(0)
     val port: Int get() = server.localPort
     val timeline = StreamTimeline()
@@ -230,10 +235,17 @@ class SonosStream : Closeable {
             current = s
         }
         s.soTimeout = 0
+        runCatching { s.sendBufferSize = 512 * 1024 }
         val rate = this.rate
         var frame = 0L
         if (rangeStart < Wav.HEADER_BYTES) {
             out.write(Wav.header(rate), rangeStart.toInt(), Wav.HEADER_BYTES - rangeStart.toInt())
+            // a cushion: the speakers start on this silence, so the real sound then always has
+            // ~PREROLL_S more in their buffer – Wi-Fi hiccups no longer make them run dry
+            val pre = ByteArray((rate * PREROLL_S).toInt() * Wav.FRAME_BYTES)
+            out.write(pre)
+            frame += pre.size / Wav.FRAME_BYTES
+            silenceBytes += pre.size
         } else {
             val off = rangeStart - Wav.HEADER_BYTES
             val pad = ((Wav.FRAME_BYTES - off % Wav.FRAME_BYTES) % Wav.FRAME_BYTES).toInt()
@@ -277,6 +289,8 @@ class SonosLink(
         fun failed(message: String)
         /** The speakers play (first time per session). */
         fun playing() {}
+        /** The speakers stopped by themselves – a fresh stream is on its way. */
+        fun recovering() {}
     }
 
     @Volatile var active = false; private set
@@ -299,6 +313,8 @@ class SonosLink(
     @Volatile private var lastState: String? = null
     @Volatile private var lastTrack: String? = null
     @Volatile private var lastRel: Int? = null
+    @Volatile private var stalledSince = 0.0
+    private val recoveries = ArrayDeque<Double>()
     @Volatile private var step = ""            // what begin() is doing (for error messages)
     private var failures = 0
     private var pending: java.util.concurrent.ScheduledFuture<*>? = null
@@ -483,9 +499,16 @@ class SonosLink(
                     clock.observe(t0, t1, playingNow, rel)
                     if (ours) lastOurs = t1
                     if (playingNow && !announced) { announced = true; listener.playing() }
+                    // stopped or stuck buffering after it played: start a fresh stream (a few times), then give up
+                    stalledSince = if (announced && !pausedByUs && ours && state != "PLAYING") (if (stalledSince == 0.0) t1 else stalledSince) else 0.0
                     when {
                         !announced && !pausedByUs && t1 - sessionAt > 12 -> fail(whyNotPlaying())
                         !ours && t1 - lastOurs > 6 -> fail("Sonos spielt jetzt etwas anderes")
+                        stalledSince > 0 && t1 - stalledSince > 4 -> {
+                            while (recoveries.isNotEmpty() && t1 - recoveries.first() > 120) recoveries.removeFirst()
+                            if (recoveries.size >= 3) fail("Sonos bricht immer wieder ab (WLAN?)")
+                            else { recoveries.addLast(t1); stalledSince = 0.0; listener.recovering(); restart() }
+                        }
                     }
                     if (playingNow && clock.precision() < 0.08) delay = 400L
                 }
