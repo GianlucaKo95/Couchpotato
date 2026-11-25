@@ -247,8 +247,23 @@ struct VodPlayerScreen: View {
     }
 }
 
+/// Bottom-row buttons: icon + title, or only the icon where the row is narrow (iPhone upright) –
+/// titles never wrap letter by letter.
+struct PlayerRowLabel: LabelStyle {
+    let iconOnly: Bool
+    func makeBody(configuration: Configuration) -> some View {
+        if iconOnly {
+            configuration.icon.frame(minWidth: 24)
+        } else {
+            Label(configuration).lineLimit(1).fixedSize()
+        }
+    }
+}
+
 private struct VodChrome: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var horizontal
+    @Environment(\.verticalSizeClass) private var vertical
     @ObservedObject var session: VodSession
     @ObservedObject var engine: PlayerEngine
     @ObservedObject var chrome: ChromeVisibility
@@ -303,6 +318,7 @@ private struct VodChrome: View {
                 }
             }
             .font(.system(size: 18, weight: .medium))
+            .labelStyle(PlayerRowLabel(iconOnly: horizontal == .compact && vertical == .regular))
             .padding(.top, 10)
         }
         .foregroundStyle(.white)
@@ -424,6 +440,8 @@ struct EpgRow: View {
 
 private struct LiveChrome: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var horizontal
+    @Environment(\.verticalSizeClass) private var vertical
     @ObservedObject var session: LiveSession
     @ObservedObject var engine: PlayerEngine
     @ObservedObject var chrome: ChromeVisibility
@@ -506,6 +524,7 @@ private struct LiveChrome: View {
                 }
             }
             .font(.system(size: 18, weight: .medium))
+            .labelStyle(PlayerRowLabel(iconOnly: horizontal == .compact && vertical == .regular))
             .padding(.top, 8)
         }
         .foregroundStyle(.white)
