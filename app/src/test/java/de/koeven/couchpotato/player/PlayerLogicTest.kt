@@ -28,11 +28,11 @@ class SleepTimerTest {
     @Test fun `label shows the minutes rounded up`() {
         assertNull(timer.label())
         timer.cycle(false)
-        assertEquals("☾ 15 Min.", timer.label())
+        assertEquals("15 Min.", timer.label())
         now += 14 * 60_000L + 30_000L
-        assertEquals("☾ 1 Min.", timer.label())
+        assertEquals("1 Min.", timer.label())
         timer.cycle(true); timer.cycle(true); timer.cycle(true); timer.cycle(true)
-        assertEquals("☾ nach dieser Folge", timer.label())
+        assertEquals("nach dieser Folge", timer.label())
     }
 
     @Test fun `due once when the time is up`() {
