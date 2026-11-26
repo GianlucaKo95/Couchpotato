@@ -228,11 +228,13 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("▣  ${floating.title}", style = MaterialTheme.typography.labelLarge, color = CpColors.Accent, maxLines = 1,
+            Icon(painter = androidx.compose.ui.res.painterResource(de.koeven.couchpotato.R.drawable.ic_pl_pip), contentDescription = null,
+                tint = CpColors.Accent, modifier = Modifier.size(18.dp))
+            Text(floating.title, style = MaterialTheme.typography.labelLarge, color = CpColors.Text, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
             // short labels: everything fits in one row on the TV
-            SecondaryPill("◀") { fp.previous() }
-            SecondaryPill("▶") { fp.next() }
+            SecondaryPill("", icon = de.koeven.couchpotato.R.drawable.ic_pl_shift_left) { fp.previous() }
+            SecondaryPill("", icon = de.koeven.couchpotato.R.drawable.ic_pl_shift_right) { fp.next() }
             SecondaryPill("Vollbild") { fp.fullscreen() }
             SecondaryPill(if (floating.muted) "Ton an" else "Ton aus") { fp.toggleSound() }
             SecondaryPill("Ecke") { fp.nextCorner() }

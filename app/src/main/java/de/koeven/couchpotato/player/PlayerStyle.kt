@@ -29,7 +29,11 @@ internal fun Context.panelBackground() = GradientDrawable().apply {
     cornerRadius = dp(16).toFloat(); setColor(PlayerStyle.PANEL); setStroke(dp(1), 0x1AFFFFFF)
 }
 
-internal fun Context.pillButton(text: String): Button {
+/**
+ * Menu/panel button. With [icon] it is a menu row: the icon in one column on the left, the label
+ * next to it – both take the text colour (dark on the gold focus).
+ */
+internal fun Context.pillButton(text: String, icon: Int? = null): Button {
     fun pill(bg: Int) = GradientDrawable().apply { cornerRadius = dp(10).toFloat(); setColor(bg) }
     return Button(this).apply {
         this.text = text
@@ -48,5 +52,15 @@ internal fun Context.pillButton(text: String): Button {
             intArrayOf(PlayerStyle.ON_ACCENT, PlayerStyle.TEXT),
         ))
         isFocusable = true
+        if (icon != null) {
+            gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(16), 0, dp(20), 0)
+            androidx.core.content.ContextCompat.getDrawable(this@pillButton, icon)?.mutate()?.let { d ->
+                d.setBounds(0, 0, dp(20), dp(20))
+                setCompoundDrawablesRelative(d, null, null, null)
+                compoundDrawablePadding = dp(12)
+                compoundDrawableTintList = textColors
+            }
+        }
     }
 }

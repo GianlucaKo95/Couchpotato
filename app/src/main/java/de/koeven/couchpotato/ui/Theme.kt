@@ -20,6 +20,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
+import androidx.compose.ui.unit.sp
 
 object CpColors {
     // graphite with a breath of petrol: on a TV (and even more on a projector) the pictures
@@ -79,10 +80,11 @@ fun CouchpotatoTheme(content: @Composable () -> Unit) {
         titleSmall = t.titleSmall.copy(fontFamily = CpFont),
         bodyLarge = t.bodyLarge.copy(fontFamily = CpFont),
         bodyMedium = t.bodyMedium.copy(fontFamily = CpFont),
-        bodySmall = t.bodySmall.copy(fontFamily = CpFont),
+        // from 3 m away 11–12 sp is too small: the small styles go one step up
+        bodySmall = t.bodySmall.copy(fontFamily = CpFont, fontSize = 14.sp, lineHeight = 20.sp),
         labelLarge = t.labelLarge.copy(fontFamily = CpFont),
-        labelMedium = t.labelMedium.copy(fontFamily = CpFont),
-        labelSmall = t.labelSmall.copy(fontFamily = CpFont),
+        labelMedium = t.labelMedium.copy(fontFamily = CpFont, fontSize = 14.sp, lineHeight = 20.sp),
+        labelSmall = t.labelSmall.copy(fontFamily = CpFont, fontSize = 12.sp, lineHeight = 16.sp),
     )
     MaterialTheme(colorScheme = scheme, typography = type) {
         CompositionLocalProvider(

@@ -1,5 +1,7 @@
 package de.koeven.couchpotato.player
 
+import de.koeven.couchpotato.R.drawable as D
+
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -117,33 +119,33 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
             text = if (a.isLive) a.items.getOrNull(live.index)?.title ?: "Live-TV" else "Wiedergabe"
             setTextColor(PlayerStyle.MUTED); textSize = 15f; typeface = context.interMedium(); setPadding(0, 0, 0, a.dp(10))
         })
-        fun add(label: String, action: () -> Unit) {
-            menu.addView(a.pillButton(label).apply { setOnClickListener { action() } },
+        fun add(label: String, icon: Int, action: () -> Unit) {
+            menu.addView(a.pillButton(label, icon).apply { setOnClickListener { action() } },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = a.dp(8) })
         }
         if (a.isLive) {
-            add("Senderliste") { hideMenu(); a.channels.show() }
-            live.previousItem?.let { prev -> add("↩ Zurück zu ${prev.title}") { hideMenu(); live.backToPrevious() } }
-            if (live.behindMs() > 8_000L) add("▶▶ Zurück zu Live") { hideMenu(); live.goLive() }
+            add("Senderliste", D.ic_pl_list) { hideMenu(); a.channels.show() }
+            live.previousItem?.let { prev -> add("Zurück zu ${prev.title}", D.ic_pl_undo) { hideMenu(); live.backToPrevious() } }
+            if (live.behindMs() > 8_000L) add("Zurück zu Live", D.ic_pl_live) { hideMenu(); live.goLive() }
             if (live.canRewind) {
-                add("30 Sekunden zurück") { live.shiftBy(-30_000L); refreshMenu() }
-                add("5 Minuten zurück") { live.shiftBy(-5 * 60_000L); refreshMenu() }
+                add("30 Sekunden zurück", D.ic_pl_back) { live.shiftBy(-30_000L); refreshMenu() }
+                add("5 Minuten zurück", D.ic_pl_back) { live.shiftBy(-5 * 60_000L); refreshMenu() }
             }
         }
         if (a.isLive && !de.koeven.couchpotato.data.Profiles.active(a).kid) {
             val split = a.split
             if (split.active) {
-                add(if (split.soundLeft) "Ton auf Live-TV" else "Ton auf Twitch") { split.setSound(!split.soundLeft); refreshMenu() }
-                add("▥ Anderer Twitch-Kanal") { hideMenu(); split.showPicker() }
-                add("▥ Splitscreen beenden") { hideMenu(); split.stop() }
+                add(if (split.soundLeft) "Ton auf Live-TV" else "Ton auf Twitch", D.ic_pl_sound) { split.setSound(!split.soundLeft); refreshMenu() }
+                add("Anderer Twitch-Kanal", D.ic_pl_split) { hideMenu(); split.showPicker() }
+                add("Splitscreen beenden", D.ic_pl_close) { hideMenu(); split.stop() }
             } else {
-                add("▥ Splitscreen mit Twitch") { hideMenu(); split.showPicker() }
+                add("Splitscreen mit Twitch", D.ic_pl_split) { hideMenu(); split.showPicker() }
             }
-            add("▣ Als kleines Fenster weiterlaufen") { hideMenu(); a.floatAway() }
+            add("Als kleines Fenster weiterlaufen", D.ic_pl_pip) { hideMenu(); a.floatAway() }
         }
-        add("Ton: ${a.soundLabel}") { page = 1; fillMenu(); menu.getChildAt(1)?.requestFocus() }
-        add("Sleep-Timer: ${a.sleep.label() ?: "aus"}") { a.cycleSleep() }
-        add("Schließen") { hideMenu() }
+        add("Ton: ${a.soundLabel}", D.ic_pl_sound) { page = 1; fillMenu(); menu.getChildAt(1)?.requestFocus() }
+        add("Sleep-Timer: ${a.sleep.label() ?: "aus"}", D.ic_pl_sleep) { a.cycleSleep() }
+        add("Schließen", D.ic_pl_close) { hideMenu() }
     }
 
     /** Where the sound goes: the stick (projector/TV) or one or more Sonos rooms. */
@@ -152,16 +154,16 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
             text = "Ton über"
             setTextColor(PlayerStyle.MUTED); textSize = 15f; typeface = context.interMedium(); setPadding(0, 0, 0, a.dp(10))
         })
-        fun add(label: String, action: () -> Unit) {
-            menu.addView(a.pillButton(label).apply { setOnClickListener { action() } },
+        fun add(label: String, icon: Int, action: () -> Unit) {
+            menu.addView(a.pillButton(label, icon).apply { setOnClickListener { action() } },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = a.dp(8) })
         }
         val sonos = a.sonos
         val chosen = if (sonos.active) sonos.speakers.map { it.uuid } else emptyList()
-        add((if (!sonos.active) "● " else "○ ") + "Fire TV / Beamer") { a.useSonos(emptyList()); refreshMenu() }
+        add("Fire TV / Beamer", if (!sonos.active) D.ic_pl_check else D.ic_pl_tv) { a.useSonos(emptyList()); refreshMenu() }
         val rooms = de.koeven.couchpotato.sonos.SonosPrefs.known(a)
         for (r in rooms) {
-            add((if (r.uuid in chosen) "● " else "○ ") + r.room) {
+            add(r.room, if (r.uuid in chosen) D.ic_pl_check else D.ic_pl_speaker) {
                 val now = if (r.uuid in chosen) chosen - r.uuid else chosen + r.uuid
                 a.useSonos(now.mapNotNull { id -> rooms.find { it.uuid == id } })
                 refreshMenu()
@@ -170,24 +172,24 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
         if (a.sonosSearching) {
             menu.addView(TextView(a).apply { text = "Suche Sonos im WLAN …"; setTextColor(TEXT); textSize = 15f; setPadding(0, a.dp(10), 0, 0) })
         } else {
-            add(if (rooms.isEmpty()) "Sonos suchen" else "Neu suchen") { a.findSonos { refreshMenu() }; refreshMenu() }
+            add(if (rooms.isEmpty()) "Sonos suchen" else "Neu suchen", D.ic_search) { a.findSonos { refreshMenu() }; refreshMenu() }
         }
         if (sonos.active) {
             menu.addView(TextView(a).apply {
                 text = a.sonosStatus
                 setTextColor(TEXT); textSize = 13f; alpha = 0.75f; setPadding(0, a.dp(8), 0, 0)
             }.also { statusView = it })
-            add("Leiser") { a.sonosVolume(-3) }
-            add("Lauter") { a.sonosVolume(3) }
+            add("Leiser", D.ic_pl_volume_down) { a.sonosVolume(-3) }
+            add("Lauter", D.ic_pl_sound) { a.sonosVolume(3) }
             val t = sonos.trimMs
             menu.addView(TextView(a).apply {
                 text = "Bild passt nicht zum Ton? Feinjustieren (jetzt ${if (t > 0) "+" else ""}$t ms)"
                 setTextColor(TEXT); textSize = 14f; setPadding(0, a.dp(12), 0, 0)
             })
-            add("◀ Bild früher") { a.shiftSonos(-40); refreshMenu() }
-            add("Bild später ▶") { a.shiftSonos(40); refreshMenu() }
+            add("Bild früher", D.ic_pl_shift_left) { a.shiftSonos(-40); refreshMenu() }
+            add("Bild später", D.ic_pl_shift_right) { a.shiftSonos(40); refreshMenu() }
         }
-        add("‹ Zurück") { page = 0; fillMenu(); menu.getChildAt(1)?.requestFocus() }
+        add("Zurück", D.ic_pl_undo) { page = 0; fillMenu(); menu.getChildAt(1)?.requestFocus() }
         // nothing found yet: look right away
         if (rooms.isEmpty() && !a.sonosSearching && !autoSearched) { autoSearched = true; a.findSonos { refreshMenu() } }
     }

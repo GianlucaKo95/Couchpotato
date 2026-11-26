@@ -134,10 +134,25 @@ fun RoundIcon(icon: Int, description: String, highlighted: Boolean = false, onCl
     }
 }
 
-/** Primary pill button (white), e.g. "Fortsetzen". */
+/** Leading "▶" in a label becomes the play icon (one icon set, no text glyphs). */
+private fun splitIcon(label: String, icon: Int?): Pair<Int?, String> =
+    if (icon == null && label.startsWith("▶")) R.drawable.ic_pl_play to label.removePrefix("▶").trim() else icon to label
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun PrimaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+private fun ButtonLabel(label: String, icon: Int?, weight: FontWeight) {
+    val (ic, text) = splitIcon(label, icon)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (ic != null) Icon(painter = painterResource(ic), contentDescription = if (text.isEmpty()) label else null, modifier = Modifier.size(20.dp))
+        if (ic != null && text.isNotEmpty()) Spacer(Modifier.width(8.dp))
+        if (text.isNotEmpty()) Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = weight, maxLines = 1)
+    }
+}
+
+/** Primary button (white), e.g. "Fortsetzen". */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun PrimaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, icon: Int? = null, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         enabled = enabled,
@@ -151,14 +166,14 @@ fun PrimaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean =
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
         modifier = modifier,
     ) {
-        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium, maxLines = 1)
+        ButtonLabel(label, icon, FontWeight.SemiBold)
     }
 }
 
-/** Secondary pill button (translucent). */
+/** Secondary button (translucent). */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun SecondaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+fun SecondaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, icon: Int? = null, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         enabled = enabled,
@@ -172,7 +187,7 @@ fun SecondaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
         modifier = modifier,
     ) {
-        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium, maxLines = 1)
+        ButtonLabel(label, icon, FontWeight.Medium)
     }
 }
 
