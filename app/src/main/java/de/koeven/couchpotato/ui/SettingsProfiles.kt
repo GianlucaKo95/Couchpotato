@@ -84,20 +84,13 @@ internal fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
         "apps" -> { KidApps(vm, state) { kidList = null }; return }
     }
 
-    SectionTitle(
-        "Profile & Kinder",
-        "Jedes Profil hat sein eigenes „Weiterschauen“, „Für dich“, eigene Favoriten und Suchen. " +
-            "Anmeldung, Katalog und Apps teilen sich alle.",
-    )
-    state.profiles.forEach { p ->
-        val active = p.id == state.profile.id
-        SettingRow(
-            title = p.name + if (active) "  (aktiv)" else "",
-            description = if (editingId == p.id) "OK = zuklappen" else null,
-            value = if (p.kid) "Kinder · bis FSK ${p.maxFsk}" else "Erwachsen",
-        ) { editingId = if (editingId == p.id) null else p.id }
-        if (editingId == p.id) {
-            Column(Modifier.padding(start = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // one profile open: its own page (instead of a list that unfolds in the middle)
+    state.profiles.firstOrNull { it.id == editingId }?.let { p ->
+        androidx.activity.compose.BackHandler { editingId = null }
+        SectionTitle(p.name.ifBlank { "Neues Profil" }, if (p.kid) "Kinderprofil · bis FSK ${p.maxFsk}" else "Profil für Erwachsene")
+        SettingRow(title = "Zurück zu allen Profilen", value = "") { editingId = null }
+        run {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 TextFieldButton(
                     label = "Name",
                     value = p.name,
@@ -152,7 +145,7 @@ internal fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                     vm.profiles.update(p.copy(animal = (p.animalIndex + 1) % de.koeven.couchpotato.data.Profile.ANIMAL_COUNT))
                 }
                 SettingRow(title = "Farbe", value = "ändern") { vm.profiles.update(p.copy(color = p.color + 1)) }
-                SettingRow(title = "Neu würfeln", description = if (p.kid) "Zufälliges Kindertier und Farbe" else "Zufällige Figur und Farbe", value = "🎲 Würfeln") {
+                SettingRow(title = "Neu würfeln", description = if (p.kid) "Zufälliges Kindertier und Farbe" else "Zufällige Figur und Farbe", value = "Würfeln") {
                     vm.profiles.update(
                         p.copy(
                             // kids: cute animal on a soft colour, grown-ups: cool animal on a dark one
@@ -169,6 +162,18 @@ internal fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
                 }
             }
         }
+        return
+    }
+
+    SectionTitle(
+        "Profile",
+        "Jedes Profil hat eigenes „Weiterschauen“, „Für dich“, Favoriten und Suchen. Zugang, Katalog und Apps teilen sich alle.",
+    )
+    state.profiles.forEach { p ->
+        SettingRow(
+            title = p.name + if (p.id == state.profile.id) "  · aktiv" else "",
+            value = if (p.kid) "Kinder · FSK ${p.maxFsk}" else "Erwachsen",
+        ) { editingId = p.id }
     }
     SettingRow(title = "Neues Profil", value = "Anlegen") {
         editingId = vm.profiles.add("", kid = false).id
@@ -180,9 +185,9 @@ internal fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
 
     Text(
         "Kinderschutz",
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Medium,
-        modifier = Modifier.padding(top = 12.dp),
+        modifier = Modifier.padding(top = 24.dp),
     )
     SettingRow(
         title = "Eltern-PIN",
@@ -210,7 +215,7 @@ internal fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
 @Composable
 internal fun KidCategories(vm: HomeViewModel, state: HomeState, onBack: () -> Unit) {
     SectionTitle("Kategorien für Kinder", "OK schaltet eine Kategorie frei oder sperrt sie.")
-    SettingRow(title = "← Zurück", value = "${state.kidCategories.size} freigegeben") { onBack() }
+    SettingRow(title = "Zurück", value = "${state.kidCategories.size} freigegeben") { onBack() }
     for ((kind, label) in listOf(
         SearchEntry.KIND_MOVIE to "Filme",
         SearchEntry.KIND_SERIES to "Serien",
@@ -232,7 +237,7 @@ internal fun KidCategories(vm: HomeViewModel, state: HomeState, onBack: () -> Un
 @Composable
 internal fun KidApps(vm: HomeViewModel, state: HomeState, onBack: () -> Unit) {
     SectionTitle("Apps für Kinder", "Nur diese Apps erscheinen in Kinderprofilen.")
-    SettingRow(title = "← Zurück", value = "${state.kidApps.size} freigegeben") { onBack() }
+    SettingRow(title = "Zurück", value = "${state.kidApps.size} freigegeben") { onBack() }
     state.allApps.forEach { a ->
         val allowed = a.packageName in state.kidApps
         SettingRow(title = a.label, value = if (allowed) "✓ frei" else "gesperrt") {

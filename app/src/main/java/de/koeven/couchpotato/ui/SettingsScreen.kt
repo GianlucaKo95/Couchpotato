@@ -67,16 +67,25 @@ import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.darkColorScheme as m3DarkColorScheme
 
 /** Grouped by what you want to do, not by technology; rarely needed things under "Erweitert". */
+/** Six places instead of nine: what belongs together is on one page (with sub-headings). */
 private enum class Section(val label: String, val group: String) {
-    Profiles("Profile & Kinder", "Familie"),
-    CloudSync("Haushalt & Geräte", "Familie"),
-    Hausgeist("Hausgeist", "Familie"),
+    Profiles("Profile & Kinderschutz", "Familie"),
     Home("Startbildschirm", "Fernsehen"),
-    Continue("Weiterschauen", "Fernsehen"),
     Live("Live-TV", "Fernsehen"),
     Login("IPTV-Zugang", "Verbindung"),
-    Catalog("Katalog & Anfragen", "Erweitert"),
-    About("Über Couchpotato", "Erweitert"),
+    Devices("Geräte & Haushalt", "Verbindung"),
+    System("System & Info", "Mehr"),
+}
+
+/** One quiet line under each section in the list: how things stand, so you know where to go. */
+private fun summary(s: Section, state: HomeState): String = when (s) {
+    Section.Profiles -> "${state.profiles.size.coerceAtLeast(1)} " + (if (state.profiles.size == 1) "Profil" else "Profile") +
+        (if (state.profiles.any { it.kid }) (if (state.hasPin) " · PIN an" else " · ohne PIN") else "")
+    Section.Home -> "${state.rowOrder.size} Reihen · Weiterschauen"
+    Section.Live -> if (state.favorites.isEmpty()) "Senderliste, Favoriten" else "${state.favorites.size} Favoriten"
+    Section.Login -> if (state.configured) "verbunden" else "nicht eingerichtet"
+    Section.Devices -> "Haushalt, Hausgeist"
+    Section.System -> "Version ${de.koeven.couchpotato.BuildConfig.VERSION_NAME}"
 }
 
 /** Einstellungen (design B): sections on the left, the chosen section on the right. */
@@ -132,7 +141,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(32.dp),
             ) {
                 // ---------------- section list ----------------
-                Column(Modifier.width(230.dp)) {
+                Column(Modifier.width(260.dp)) {
                     Text(
                         "Einstellungen",
                         style = MaterialTheme.typography.titleLarge,
@@ -152,6 +161,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                             }
                             NavRow(
                                 label = s.label,
+                                summary = summary(s, state),
                                 selected = s == section,
                                 onClick = { section = s; jumpToContent = true },
                                 modifier = Modifier
@@ -181,14 +191,20 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                 ) {
                     when (section) {
                         Section.Login -> LoginSection(vm) { status = it }
-                        Section.Catalog -> CatalogSection(vm, state) { status = it }
-                        Section.Home -> HomeSection(vm, state) { status = it }
+                        Section.Home -> {
+                            HomeSection(vm, state) { status = it }
+                            SubPage { ContinueSection(vm, state) }
+                        }
                         Section.Live -> LiveSection(vm, state)
-                        Section.Continue -> ContinueSection(vm, state)
-                        Section.CloudSync -> CloudSyncSection(vm)
-                        Section.Hausgeist -> HausgeistSection()
+                        Section.Devices -> {
+                            CloudSyncSection(vm)
+                            SubPage { HausgeistSection() }
+                        }
                         Section.Profiles -> ProfilesSection(vm, state)
-                        Section.About -> AboutSection(state)
+                        Section.System -> {
+                            AboutSection(state)
+                            SubPage { CatalogSection(vm, state) { status = it } }
+                        }
                     }
                     status?.let {
                         Text(

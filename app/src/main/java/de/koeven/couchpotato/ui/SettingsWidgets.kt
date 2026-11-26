@@ -69,10 +69,23 @@ import androidx.compose.material3.MaterialTheme as M3Theme
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.darkColorScheme as m3DarkColorScheme
 
+/** Inside [SubPage]: section titles become sub-headings (a second part of the same page). */
+private val LocalSubPage = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/** A second topic on the same settings page, set apart with space and a smaller heading. */
+@Composable
+internal fun SubPage(content: @Composable () -> Unit) {
+    androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp))
+    androidx.compose.runtime.CompositionLocalProvider(LocalSubPage provides true) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+    }
+}
+
 @Composable
 internal fun SectionTitle(title: String, subtitle: String) {
+    val sub = LocalSubPage.current
     Column(Modifier.padding(bottom = 6.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium)
+        Text(title, style = if (sub) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium)
         Text(
             subtitle,
             style = MaterialTheme.typography.bodySmall,
@@ -170,6 +183,7 @@ internal fun NavRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     muted: Boolean = false,
+    summary: String? = null,
 ) {
     ListItem(
         selected = selected,
@@ -187,6 +201,8 @@ internal fun NavRow(
         headlineContent = {
             Text(label, maxLines = 1, fontWeight = FontWeight.Medium)
         },
+        supportingContent = summary?.let { { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1,
+            color = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.65f)) } },
         modifier = modifier.fillMaxWidth(),
     )
 }

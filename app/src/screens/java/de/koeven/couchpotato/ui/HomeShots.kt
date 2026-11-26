@@ -102,15 +102,16 @@ class SettingsShots {
                 TopBar(active = NavTab.None, showContentTabs = true, activeIcon = "settings")
                 androidx.compose.foundation.layout.Row(Modifier.fillMaxSize().padding(horizontal = ScreenPadding, vertical = 24.dp),
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(32.dp)) {
-                    Column(Modifier.androidx_width(230)) {
+                    Column(Modifier.androidx_width(260)) {
                         Text("Einstellungen", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
                         Text("Familie", style = MaterialTheme.typography.labelLarge, color = CpColors.TextMuted, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
-                        NavRow("Profile & Kinder", false, {})
-                        NavRow("Haushalt & Geräte", false, {})
+                        NavRow("Profile & Kinderschutz", false, {}, summary = "3 Profile · PIN an")
                         Text("Fernsehen", style = MaterialTheme.typography.labelLarge, color = CpColors.TextMuted, modifier = Modifier.padding(start = 12.dp, top = 24.dp, bottom = 8.dp))
-                        NavRow("Startbildschirm", true, {})
-                        NavRow("Weiterschauen", false, {})
-                        NavRow("Live-TV", false, {})
+                        NavRow("Startbildschirm", true, {}, summary = "6 Reihen · Weiterschauen")
+                        NavRow("Live-TV", false, {}, summary = "12 Favoriten")
+                        Text("Verbindung", style = MaterialTheme.typography.labelLarge, color = CpColors.TextMuted, modifier = Modifier.padding(start = 12.dp, top = 24.dp, bottom = 8.dp))
+                        NavRow("IPTV-Zugang", false, {}, summary = "verbunden")
+                        NavRow("Geräte & Haushalt", false, {}, summary = "Haushalt, Hausgeist")
                     }
                     Column(Modifier.weight(1f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                         SectionTitle("Startbildschirm", "Welche Reihen der Startbildschirm zeigt und in welcher Reihenfolge")
@@ -118,6 +119,10 @@ class SettingsShots {
                         SettingRow("Live-TV", "Favoriten", null, onStep = {}) {}
                         SettingRow("Für dich", "an", "Empfehlungen aus deinem Verlauf") {}
                         SettingRow("Reihenfolge ändern", "6 Reihen") {}
+                        SubPage {
+                            SectionTitle("Weiterschauen", "Was du angefangen hast – auch aus Netflix, ARD und Co.")
+                            SettingRow("Status neu prüfen", "Prüfen") {}
+                        }
                     }
                 }
             }
