@@ -108,3 +108,10 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 }
+
+// Screenshots of the screens on the JVM (no TV needed): ./gradlew -Pscreenshots :app:recordPaparazziDebug
+// Off in CI and normal builds.
+if (providers.gradleProperty("screenshots").isPresent) {
+    apply(plugin = "app.cash.paparazzi")
+    android.sourceSets["test"].java.srcDir("src/screens/java")
+}

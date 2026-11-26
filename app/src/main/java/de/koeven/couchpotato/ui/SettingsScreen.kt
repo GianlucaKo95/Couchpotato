@@ -161,7 +161,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                         }
                         item {
                             Spacer(Modifier.height(10.dp))
-                            NavRow(label = "← Zurück", selected = false, muted = true, onClick = onDone)
+                            NavRow(label = "Zurück", selected = false, muted = true, onClick = onDone)
                         }
                     }
                 }

@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import androidx.tv.material3.Icon
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -115,7 +118,7 @@ internal fun SettingRow(
     onClick: () -> Unit,
 ) {
     val supporting: (@Composable () -> Unit)? = if (description != null) {
-        { Text(description, style = MaterialTheme.typography.bodyMedium) }
+        { Text(description, style = MaterialTheme.typography.bodyMedium, color = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.7f)) }
     } else null
     val stepKeys = if (onStep == null) Modifier else Modifier.onPreviewKeyEvent { e ->
         val d = when (e.key) {
@@ -138,19 +141,22 @@ internal fun SettingRow(
             focusedContentColor = CpColors.Background,
         ),
         scale = ListItemDefaults.scale(focusedScale = 1.01f),
-        headlineContent = { Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1) },
+        headlineContent = { Text(title, fontWeight = FontWeight.Medium, maxLines = 1) },
         supportingContent = supporting,
         trailingContent = {
-            Text(
-                if (onStep != null) "◀  $value  ▶" else value,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = CpColors.OnAccent,
-                maxLines = 1,
-                modifier = Modifier
-                    .background(CpColors.Accent, RoundedCornerShape(50))
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-            )
+            // the value quietly in the row's own colour (dark on the focused row), arrows where ◀ ▶ change it
+            val c = androidx.tv.material3.LocalContentColor.current
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onStep != null) Icon(painterResource(de.koeven.couchpotato.R.drawable.ic_pl_shift_left), null, tint = c.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                Text(
+                    value,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = c.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 6.dp),
+                )
+                if (onStep != null) Icon(painterResource(de.koeven.couchpotato.R.drawable.ic_pl_shift_right), null, tint = c.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+            }
         },
         modifier = Modifier.fillMaxWidth().then(stepKeys),
     )
@@ -179,7 +185,7 @@ internal fun NavRow(
         ),
         scale = ListItemDefaults.scale(focusedScale = 1.02f),
         headlineContent = {
-            Text(label, maxLines = 1, fontWeight = if (selected) FontWeight.Medium else FontWeight.Medium)
+            Text(label, maxLines = 1, fontWeight = FontWeight.Medium)
         },
         modifier = modifier.fillMaxWidth(),
     )

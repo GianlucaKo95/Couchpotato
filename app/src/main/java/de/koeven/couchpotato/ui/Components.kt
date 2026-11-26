@@ -177,27 +177,36 @@ fun CaptionText(
  * left, bottom and top – home screen info area and the film/series pages.
  */
 @Composable
-fun WideBackdrop(url: String?) {
+fun WideBackdrop(url: String?, large: Boolean = false) {
+    androidx.compose.animation.Crossfade(targetState = url, label = "wideBackdrop") { u ->
+        if (u == null) return@Crossfade
+        BackdropFrame(large) {
+            AsyncImage(
+                model = u,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/**
+ * The frame of the big picture in the top right (on the home screen two thirds of it, down to below the first row),
+ * fading softly into the background to the left and bottom so the text on it stays readable –
+ * on bright pictures and on a projector too.
+ */
+@Composable
+fun BackdropFrame(large: Boolean = false, picture: @Composable () -> Unit) {
+    // large: the home screen (text only on the left); film/series pages keep it smaller for their long text
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopEnd) {
-        androidx.compose.animation.Crossfade(
-            targetState = url,
-            label = "wideBackdrop",
-            modifier = Modifier.fillMaxWidth(0.44f).fillMaxHeight(0.56f),
-        ) { u ->
-            if (u == null) return@Crossfade
-            Box(Modifier.fillMaxSize()) {
-                AsyncImage(
-                    model = u,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                val bg = CpColors.Background
-                Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.horizontalGradient(
-                    0f to bg, 0.14f to bg.copy(alpha = 0.6f), 0.34f to bg.copy(alpha = 0f))))
-                Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
-                    0f to bg.copy(alpha = 0.6f), 0.22f to bg.copy(alpha = 0f), 0.68f to bg.copy(alpha = 0f), 1f to bg)))
-            }
+        Box(Modifier.fillMaxWidth(if (large) 0.66f else 0.46f).fillMaxHeight(if (large) 0.74f else 0.58f)) {
+            picture()
+            val bg = CpColors.Background
+            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.horizontalGradient(
+                0f to bg, 0.22f to bg.copy(alpha = 0.78f), 0.5f to bg.copy(alpha = 0.2f), 1f to bg.copy(alpha = 0f))))
+            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to bg.copy(alpha = 0.55f), 0.18f to bg.copy(alpha = 0f), 0.52f to bg.copy(alpha = 0f), 1f to bg)))
         }
     }
 }

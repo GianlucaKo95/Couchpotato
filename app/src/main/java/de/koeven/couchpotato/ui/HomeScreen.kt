@@ -202,6 +202,13 @@ fun HomeScreen(
     Box(Modifier.fillMaxSize()) {
     // big picture of the focused title in the right part of the screen (behind everything)
     HeroBackdrop(vm, hero)
+    // the long press does a lot here – say so, quietly, in the corner
+    Text(
+        "OK lang drücken: Optionen",
+        style = MaterialTheme.typography.labelMedium,
+        color = CpColors.TextMuted,
+        modifier = Modifier.align(Alignment.BottomEnd).padding(end = ScreenPadding, bottom = 16.dp),
+    )
     Column(Modifier.fillMaxSize()) {
     TopBar(
         active = NavTab.Start,
@@ -669,7 +676,7 @@ private suspend fun LazyListState.keepVisible(index: Int) {
 
 
 /** What the info area shows. */
-private data class Hero(
+internal data class Hero(
     val kicker: String,
     val title: String,
     val sub: String? = null,
@@ -702,7 +709,7 @@ private fun HeroBackdrop(vm: HomeViewModel, hero: Hero?) {
         }
         url = tmdb ?: h.image
     }
-    WideBackdrop(url)
+    WideBackdrop(url, large = true)
 }
 
 /**
@@ -725,13 +732,19 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
         delay(250)   // scrolling quickly through a row: only look it up where you stop
         plot = vm.titles.heroPlot(k, id, hero.season, hero.episode)
     }
-    // compact, so two rows still fit below it
+    HeroInfo(hero, plot)
+}
+
+/** The info about the focused tile: what it is, the title, where you are, two lines of plot. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+internal fun HeroInfo(hero: Hero?, plot: String?) {
+    // two rows still fit below it
     Column(
         Modifier
             .fillMaxWidth()
-            .height(138.dp)
-            // breathing room below the tab bar, like in the mockup
-            .padding(start = ScreenPadding, end = ScreenPadding * 3, top = 20.dp),
+            .height(172.dp)
+            .padding(start = ScreenPadding, end = ScreenPadding * 3, top = 24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (hero == null) return@Column
@@ -743,13 +756,11 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
-            // the long press does a lot here – say so, quietly
-            Text("OK lang: Optionen", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted, maxLines = 1)
         }
         // long titles (other apps often send "Serie – Staffel 2 – Folge 5: …") run through instead of "…"
         Text(
             hero.title,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1_500, velocity = 40.dp),
@@ -765,9 +776,9 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
         }
         plot?.let {
             // two short lines instead of one endless one – easier to read from the sofa
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted, maxLines = 2,
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextSecondary, maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 540.dp))
+                modifier = Modifier.widthIn(max = 520.dp).padding(top = 4.dp))
         }
     }
 }
