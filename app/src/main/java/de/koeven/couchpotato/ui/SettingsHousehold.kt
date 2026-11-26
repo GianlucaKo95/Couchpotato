@@ -103,10 +103,10 @@ internal fun CloudSyncSection(vm: HomeViewModel) {
         Text(
             code!!.replace("-", "  –  "),
             style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
             color = CpColors.Text,
             modifier = Modifier
-                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
                 .padding(horizontal = 20.dp, vertical = 10.dp),
         )
         if (isMain) {

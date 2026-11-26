@@ -15,28 +15,33 @@ internal object PlayerStyle {
     val ACCENT = CpColors.Accent.toArgb()
     val ON_ACCENT = CpColors.OnAccent.toArgb()
     val TEXT = CpColors.Text.toArgb()
+    val MUTED = CpColors.TextMuted.toArgb()
 }
 
 internal fun Context.dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+/** Inter 500 – the launcher's font in the player's own views too. */
+internal fun Context.interMedium(): Typeface =
+    runCatching { androidx.core.content.res.ResourcesCompat.getFont(this, de.koeven.couchpotato.R.font.inter_500) }.getOrNull() ?: Typeface.DEFAULT
+
 /** Couchpotato's look in the player too: petrol panels, gold focus (like the menus in the launcher). */
 internal fun Context.panelBackground() = GradientDrawable().apply {
-    cornerRadius = dp(18).toFloat(); setColor(PlayerStyle.PANEL); setStroke(dp(2), 0x40FFFFFF)
+    cornerRadius = dp(16).toFloat(); setColor(PlayerStyle.PANEL); setStroke(dp(1), 0x1AFFFFFF)
 }
 
 internal fun Context.pillButton(text: String): Button {
-    fun pill(bg: Int) = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(bg) }
+    fun pill(bg: Int) = GradientDrawable().apply { cornerRadius = dp(10).toFloat(); setColor(bg) }
     return Button(this).apply {
         this.text = text
         isAllCaps = false
         textSize = 17f
-        setTypeface(typeface, Typeface.BOLD)
-        setPadding(dp(22), 0, dp(22), 0)
+        typeface = interMedium()
+        setPadding(dp(20), 0, dp(20), 0)
         minHeight = dp(44); minimumHeight = dp(44)
         stateListAnimator = null
         background = StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_focused), pill(PlayerStyle.ACCENT))
-            addState(intArrayOf(), pill(0x1FFFFFFF))
+            addState(intArrayOf(), pill(0x14FFFFFF))
         }
         setTextColor(ColorStateList(
             arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),

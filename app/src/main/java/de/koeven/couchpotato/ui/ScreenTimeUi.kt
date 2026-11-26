@@ -52,11 +52,11 @@ private fun SleepingBear() {
                 modifier = Modifier.size(120.dp).rotate(-14f),
             )
         }
-        Text("z", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, fontFamily = KidFont,
+        Text("z", fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = Color.White, fontFamily = KidFont,
             modifier = Modifier.align(Alignment.TopStart).offset(x = 140.dp, y = 30.dp))
-        Text("z", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, fontFamily = KidFont,
+        Text("z", fontSize = 34.sp, fontWeight = FontWeight.SemiBold, color = Color.White, fontFamily = KidFont,
             modifier = Modifier.align(Alignment.TopStart).offset(x = 156.dp, y = 2.dp))
-        Text("Z", fontSize = 44.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, fontFamily = KidFont,
+        Text("Z", fontSize = 44.sp, fontWeight = FontWeight.SemiBold, color = Color.White, fontFamily = KidFont,
             modifier = Modifier.align(Alignment.TopStart).offset(x = 120.dp, y = (-24).dp))
     }
 }
@@ -81,17 +81,17 @@ fun ScreenTimeLock(vm: HomeViewModel, message: String, hasPin: Boolean, night: B
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 SleepingBear()
-                Text("Für heute ist Schluss", fontSize = 44.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, fontFamily = KidFont)
+                Text("Für heute ist Schluss", fontSize = 44.sp, fontWeight = FontWeight.SemiBold, color = Color.White, fontFamily = KidFont)
                 // dark text on a white bubble – easy to read on the blue sky
                 Text(
                     message,
                     fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Medium,
                     color = KidColors.Ink,
                     textAlign = TextAlign.Center,
                     fontFamily = KidFont,
                     modifier = Modifier
-                        .background(Color.White, RoundedCornerShape(22.dp))
+                        .background(Color.White, RoundedCornerShape(16.dp))
                         .padding(horizontal = 22.dp, vertical = 12.dp),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 18.dp)) {

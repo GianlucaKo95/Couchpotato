@@ -136,7 +136,7 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                     Text(
                         "Einstellungen",
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(start = 12.dp, bottom = 10.dp),
                     )
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -144,11 +144,10 @@ fun SettingsScreen(vm: HomeViewModel, onDone: () -> Unit) {
                             // group heading above the first section of each group
                             if (s.ordinal == 0 || Section.values()[s.ordinal - 1].group != s.group) {
                                 Text(
-                                    s.group.uppercase(),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = CpColors.Accent,
-                                    modifier = Modifier.padding(start = 12.dp, top = if (s.ordinal == 0) 0.dp else 12.dp, bottom = 2.dp),
+                                    s.group,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = CpColors.TextMuted,
+                                    modifier = Modifier.padding(start = 12.dp, top = if (s.ordinal == 0) 0.dp else 24.dp, bottom = 8.dp),
                                 )
                             }
                             NavRow(

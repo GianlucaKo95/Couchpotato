@@ -62,6 +62,8 @@ import java.util.Locale
  */
 val ScreenPadding = 48.dp
 internal val CardShape = RoundedCornerShape(12.dp)
+/** Buttons and other controls (cards 12, panels 16). */
+internal val ControlShape = RoundedCornerShape(10.dp)
 
 /** Design B: focused tile gets a light frame and grows a little. */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -121,21 +123,21 @@ fun Shelf(
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(start = ScreenPadding),
         )
         hint?.let {
             Text(
                 text = it,
                 style = MaterialTheme.typography.bodySmall,
-                color = CpColors.Accent,
-                modifier = Modifier.padding(start = ScreenPadding, bottom = 6.dp),
+                color = CpColors.TextMuted,
+                modifier = Modifier.padding(start = ScreenPadding, top = 4.dp),
             )
         }
         LazyRow(
             state = state,
             // just enough vertical room for the focus zoom of the cards
-            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 6.dp, bottom = 4.dp),
+            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 8.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(RowGap),
             content = content,
         )
@@ -308,7 +310,7 @@ fun ContinueCard(
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(6.dp)
-                            .background(Color(0x99000000), RoundedCornerShape(6.dp))
+                            .background(Color(0x99000000), RoundedCornerShape(8.dp))
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                 }
@@ -320,7 +322,7 @@ fun ContinueCard(
                             .fillMaxWidth()
                             .fillMaxHeight(0.32f)
                             .background(androidx.compose.ui.graphics.Brush.verticalGradient(
-                                listOf(Color.Transparent, Color(0xCC0B2A2E))))
+                                listOf(Color.Transparent, Color(0xCC0D1012))))
                     )
                     ProgressBar(
                         fraction,
@@ -349,7 +351,7 @@ fun ProgressBar(fraction: Float, modifier: Modifier = Modifier, onPicture: Boole
             .fillMaxWidth()
             .height(4.dp)
             // on a picture: a solid dark track, so you always see how much is left
-            .background(if (onPicture) Color(0xE62A3436) else Color(0x40FFFFFF), RoundedCornerShape(2.dp))
+            .background(if (onPicture) Color(0xE6262C2F) else Color(0x40FFFFFF), RoundedCornerShape(2.dp))
     ) {
         Box(
             Modifier
@@ -501,6 +503,6 @@ fun Clock(modifier: Modifier = Modifier) {
         }
     }
     Column(modifier, horizontalAlignment = Alignment.End) {
-        Text(value.first, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(value.first, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
     }
 }

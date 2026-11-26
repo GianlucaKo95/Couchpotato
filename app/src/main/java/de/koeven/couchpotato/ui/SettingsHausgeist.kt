@@ -35,16 +35,16 @@ internal fun HausgeistSection() {
             Text(
                 s.code.chunked(3).joinToString("  "),
                 style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
                 color = CpColors.Text,
                 modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             )
             SettingRow(title = "Abbrechen", value = "") { HausgeistLink.unpair() }
         }
         is HausgeistLink.Status.Connected -> {
-            Text("Verbunden als „${s.name}“", color = CpColors.Accent)
+            Text("Verbunden als „${s.name}“", color = CpColors.TextSecondary)
             Hint("Sag dem Hausgeist z. B. „Spiel Pokémon auf ${s.name}“ oder „Mach YouTube an“.")
             SettingRow(title = "Kopplung aufheben", value = "Trennen") { HausgeistLink.unpair() }
         }

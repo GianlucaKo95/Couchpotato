@@ -153,7 +153,7 @@ internal fun AboutSection(state: HomeState) {
         Text(
             "Letzter Absturz",
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
             color = CpColors.Error,
             modifier = Modifier.padding(top = 10.dp),
         )

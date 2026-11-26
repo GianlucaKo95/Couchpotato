@@ -80,7 +80,7 @@ internal class VodControls(private val a: PlayerActivity, root: FrameLayout) {
 
         val top = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            title.apply { setTextColor(TEXT); textSize = 30f; setTypeface(typeface, Typeface.BOLD); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+            title.apply { setTextColor(TEXT); textSize = 30f; typeface = context.interMedium(); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
             subtitle.apply { setTextColor(MUTED); textSize = 19f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
             addView(title); addView(subtitle)
         }
@@ -92,7 +92,7 @@ internal class VodControls(private val a: PlayerActivity, root: FrameLayout) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(bar, LinearLayout.LayoutParams(0, dp(78), 1f))
-            remaining.apply { setTextColor(TEXT); textSize = 17f; setTypeface(typeface, Typeface.BOLD); setPadding(dp(16), dp(22), 0, 0) }
+            remaining.apply { setTextColor(TEXT); textSize = 17f; typeface = context.interMedium(); setPadding(dp(16), dp(22), 0, 0) }
             addView(remaining)
         }
         bottom.addView(barRow)
@@ -170,7 +170,7 @@ internal class VodControls(private val a: PlayerActivity, root: FrameLayout) {
             if (player.playWhenReady) "Pause" else "Abspielen")
         nextBtn.visibility = if (episode && a.items.getOrNull(player.currentMediaItemIndex + 1) != null) View.VISIBLE else View.GONE
         episodesBtn.visibility = if (episode && a.items.size > 1) View.VISIBLE else View.GONE
-        setButton(sleepBtn, R.drawable.ic_pl_sleep, a.sleep.label()?.removePrefix("☾ ")?.let { "Sleep: $it" } ?: "Sleep-Timer")
+        setButton(sleepBtn, R.drawable.ic_pl_sleep, a.sleep.label()?.let { "Sleep: $it" } ?: "Sleep-Timer")
     }
 
     // ---------------------------------------------------------------- keys
@@ -288,7 +288,7 @@ internal class VodControls(private val a: PlayerActivity, root: FrameLayout) {
     private fun openPanel(heading: String, entries: List<Triple<String, Boolean, () -> Unit>>) {
         panel.removeAllViews()
         panel.addView(TextView(ctx).apply {
-            text = heading; setTextColor(ACCENT); textSize = 16f; setTypeface(typeface, Typeface.BOLD)
+            text = heading; setTextColor(PlayerStyle.MUTED); textSize = 16f; typeface = context.interMedium()
             setPadding(dp(4), 0, 0, dp(8))
         })
         var focusMe: View? = null
@@ -378,7 +378,7 @@ internal class VodControls(private val a: PlayerActivity, root: FrameLayout) {
             addView(ImageView(ctx).apply { setImageResource(icon); imageTintList = colors; isDuplicateParentStateEnabled = true },
                 LinearLayout.LayoutParams(dp(26), dp(26)))
             addView(TextView(ctx).apply {
-                text = label; textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(colors)
+                text = label; textSize = 16f; typeface = context.interMedium(); setTextColor(colors)
                 isDuplicateParentStateEnabled = true; setPadding(dp(8), 0, 0, 0)
             })
             setOnClickListener { onClick(); poke() }

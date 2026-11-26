@@ -255,7 +255,7 @@ fun BrowseScreen(
                     Text(
                         "Kategorien",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         modifier = Modifier.weight(1f),
                     )
                     if (categories.orEmpty().isNotEmpty() && !kidMode) {
@@ -277,7 +277,7 @@ fun BrowseScreen(
                     Text(
                         "OK schaltet eine Kategorie an oder aus · ${cats.count { !isHidden(it) }} von ${cats.size} sichtbar",
                         style = MaterialTheme.typography.labelMedium,
-                        color = CpColors.Accent,
+                        color = CpColors.TextMuted,
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
@@ -287,8 +287,8 @@ fun BrowseScreen(
                     Text(
                         "▲ ▼ verschieben · OK oder Zurück = fertig",
                         style = MaterialTheme.typography.labelMedium,
-                        color = CpColors.Accent,
-                        modifier = Modifier.padding(bottom = 6.dp),
+                        color = CpColors.TextSecondary,
+                        modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
                 LazyColumn(
@@ -381,7 +381,7 @@ fun BrowseScreen(
                     Text(
                         selectedCat?.name ?: "Mediathek",
                         style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
@@ -561,7 +561,7 @@ private fun CategoryRow(
                 name,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Medium,
                 color = if (accent) CpColors.Accent else Color.Unspecified,
             )
         },

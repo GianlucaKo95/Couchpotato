@@ -27,7 +27,7 @@ import kotlinx.coroutines.withContext
 data class BackdropColors(val start: Color, val middle: Color, val end: Color) {
     companion object {
         /** The warm glow from the mockup, used when nothing with a picture is focused. */
-        val Default = BackdropColors(Color(0xFF2F7C8F), Color(0xFF7A5A44), Color(0xFFC98A48))
+        val Default = BackdropColors(Color(0xFF1C2A2E), Color(0xFF25302F), Color(0xFF3A3A33))
     }
 }
 
@@ -84,7 +84,7 @@ class BackdropState(private val context: Context, private val scope: CoroutineSc
         val start = p.darkMutedSwatch?.rgb ?: p.darkVibrantSwatch?.rgb ?: fallback
         val middle = p.mutedSwatch?.rgb ?: p.dominantSwatch?.rgb ?: fallback
         val end = p.vibrantSwatch?.rgb ?: p.lightVibrantSwatch?.rgb ?: p.dominantSwatch?.rgb ?: fallback
-        return BackdropColors(tame(start, 0.32f), tame(middle, 0.62f), tame(end, 0.78f))
+        return BackdropColors(tame(start, 0.26f), tame(middle, 0.46f), tame(end, 0.58f))
     }
 
     /**
@@ -92,11 +92,11 @@ class BackdropState(private val context: Context, private val scope: CoroutineSc
      * so white text stays readable on top of it.
      */
     private fun tame(argb: Int, maxLightness: Float): Color {
-        val mixed = ColorUtils.blendARGB(argb, CpColors.Background.toArgb(), 0.25f)
+        val mixed = ColorUtils.blendARGB(argb, CpColors.Background.toArgb(), 0.4f)
         val hsl = FloatArray(3)
         ColorUtils.colorToHSL(mixed, hsl)
-        hsl[2] = hsl[2].coerceIn(0.18f, maxLightness)
-        hsl[1] = hsl[1].coerceAtMost(0.75f)
+        hsl[2] = hsl[2].coerceIn(0.14f, maxLightness)
+        hsl[1] = hsl[1].coerceAtMost(0.55f)
         return Color(ColorUtils.HSLToColor(hsl))
     }
 }

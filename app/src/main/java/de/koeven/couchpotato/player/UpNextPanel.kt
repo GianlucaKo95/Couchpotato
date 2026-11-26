@@ -35,10 +35,10 @@ internal class UpNextPanel(private val a: PlayerActivity, root: FrameLayout) {
 
     init {
         title = TextView(a).apply {
-            setTextColor(ACCENT); textSize = 15f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(PlayerStyle.MUTED); textSize = 15f; typeface = context.interMedium()
         }
         sub = TextView(a).apply {
-            setTextColor(TEXT); textSize = 21f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(TEXT); textSize = 21f; typeface = context.interMedium()
             maxLines = 2; setPadding(0, a.dp(2), 0, a.dp(14))
         }
         play = a.pillButton("Jetzt abspielen").apply { setOnClickListener { playNextNow() } }

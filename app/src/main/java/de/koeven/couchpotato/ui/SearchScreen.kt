@@ -54,7 +54,7 @@ import de.koeven.couchpotato.data.VodItem
 import de.koeven.couchpotato.player.Playback
 import kotlinx.coroutines.delay
 
-private val SearchBackground = Color(0xFF0E4247)
+private val SearchBackground = CpColors.Panel
 private val KeyGap = 6.dp
 private const val KEY_COLUMNS = 7
 
@@ -219,7 +219,7 @@ fun SearchScreen(
                         PhoneLinkPanel("Suche") { text -> vm.search.setQuery(text.replace(Regex("\\s+"), " ").trimStart()) }
                     }
                     if (voiceAvailable) Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
-                        Key("🎤 Sprechen", keyWidth * 7 + KeyGap * 6) { runCatching { voice.launch(voiceIntent) } }
+                        Key("Sprechen", keyWidth * 7 + KeyGap * 6) { runCatching { voice.launch(voiceIntent) } }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         Key("Alles löschen", keyWidth * 4 + KeyGap * 3, muted = true) { vm.search.setQuery("") }
@@ -320,8 +320,7 @@ fun SearchScreen(
                                             Text(
                                                 r.apps.joinToString(" · ") { it.label },
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = CpColors.Accent,
-                                                fontWeight = FontWeight.SemiBold,
+                                                color = CpColors.TextMuted,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                             )
@@ -348,8 +347,7 @@ fun SearchScreen(
                                         Text(
                                             r.apps.joinToString(" · ") { it.label },
                                             style = MaterialTheme.typography.labelMedium,
-                                            color = CpColors.Accent,
-                                            fontWeight = FontWeight.SemiBold,
+                                            color = CpColors.TextMuted,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
@@ -431,7 +429,7 @@ fun SearchScreen(
 @Composable
 private fun Section(title: String, content: LazyListScope.() -> Unit) {
     Column {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
         LazyRow(
             contentPadding = PaddingValues(top = 8.dp, bottom = 4.dp, end = ScreenPadding, start = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

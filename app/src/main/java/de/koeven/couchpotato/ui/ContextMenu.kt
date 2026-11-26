@@ -59,8 +59,8 @@ fun ContextMenu(title: String, actions: List<MenuAction>, onDismiss: () -> Unit)
             Modifier
                 .width(400.dp)
                 // solid dark panel with a light edge, so it stands out over any background
-                .background(CpColors.Panel, RoundedCornerShape(18.dp))
-                .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
+                .background(CpColors.Panel, RoundedCornerShape(16.dp))
+                .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
                 .padding(22.dp)
                 .onPreviewKeyEvent { e ->
                     if (armed) return@onPreviewKeyEvent false
@@ -79,7 +79,7 @@ fun ContextMenu(title: String, actions: List<MenuAction>, onDismiss: () -> Unit)
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
                 color = CpColors.Text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

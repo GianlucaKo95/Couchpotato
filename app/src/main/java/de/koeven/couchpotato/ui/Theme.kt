@@ -22,16 +22,19 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
 object CpColors {
-    // dark petrol: on a TV (and even more on a projector) the content should glow, not the background
-    val Background = Color(0xFF0E3E44)
-    val Surface = Color(0xFF165A61)      // dialogs, plain tiles – the former background
-    val SurfaceHigh = Color(0x1FFFFFFF)  // translucent tile background, lets the glow shine through
+    // graphite with a breath of petrol: on a TV (and even more on a projector) the pictures
+    // should carry the colour, not the background. Gold marks only focus and what you are watching.
+    val Background = Color(0xFF111517)
+    val Surface = Color(0xFF1B2124)      // dialogs, plain tiles
+    val SurfaceHigh = Color(0x14FFFFFF)  // translucent tile background (8 %)
     val Accent = Color(0xFFE8B86D)
     val OnAccent = Color(0xFF1B1408)
-    val Text = Color(0xFFF4F1EC)
-    val TextMuted = Color(0xFFC3D6D7)
-    val Error = Color(0xFFFFA197)
-    val Panel = Color(0xFF0B3236)        // menus, dialogs, the player's panels
+    val Text = Color(0xFFF2F0EC)
+    val TextSecondary = Color(0xFFC9CDCE)
+    val TextMuted = Color(0xFF9AA3A6)
+    val Hairline = Color(0x1AFFFFFF)     // borders: text colour at 10 %
+    val Error = Color(0xFFF0A49A)
+    val Panel = Color(0xFF181E21)        // menus, dialogs, the player's panels
     val PanelGlass = Panel.copy(alpha = 0.95f)   // notices floating over a picture
 }
 
@@ -40,8 +43,8 @@ val CpFont = androidx.compose.ui.text.font.FontFamily(
     androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_400, androidx.compose.ui.text.font.FontWeight.Normal),
     androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_500, androidx.compose.ui.text.font.FontWeight.Medium),
     androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_600, androidx.compose.ui.text.font.FontWeight.SemiBold),
-    androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_700, androidx.compose.ui.text.font.FontWeight.Bold),
-    androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_800, androidx.compose.ui.text.font.FontWeight.ExtraBold),
+    androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_700, androidx.compose.ui.text.font.FontWeight.Medium),
+    androidx.compose.ui.text.font.Font(de.koeven.couchpotato.R.font.inter_800, androidx.compose.ui.text.font.FontWeight.SemiBold),
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -98,7 +101,7 @@ fun CouchpotatoTheme(content: @Composable () -> Unit) {
 }
 
 /**
- * Petrol background with a soft glow in the top right, like the hero area of Fire OS.
+ * Graphite background with a soft glow in the top right, like the hero area of Fire OS.
  * The glow takes the colours of whatever is focused and blends over smoothly.
  */
 @Composable
@@ -119,7 +122,7 @@ private fun Modifier.backdropGlow(colors: BackdropColors): Modifier {
             topLeft = Offset(left, 0f),
             size = Size(w, h),
         )
-        // fade to the left into the petrol
+        // fade to the left into the background
         drawRect(
             brush = Brush.horizontalGradient(
                 0f to bg,

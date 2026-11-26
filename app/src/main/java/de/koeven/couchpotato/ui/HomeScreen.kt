@@ -729,16 +729,15 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
             .fillMaxWidth()
             .height(138.dp)
             // breathing room below the tab bar, like in the mockup
-            .padding(start = ScreenPadding, end = ScreenPadding * 3, top = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .padding(start = ScreenPadding, end = ScreenPadding * 3, top = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (hero == null) return@Column
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                hero.kicker.uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = CpColors.Accent,
+                hero.kicker,
+                style = MaterialTheme.typography.labelLarge,
+                color = CpColors.TextSecondary,
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
@@ -749,7 +748,7 @@ private fun HeroArea(vm: HomeViewModel, hero: Hero?) {
         Text(
             hero.title,
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.ExtraBold,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1_500, velocity = 40.dp),
         )

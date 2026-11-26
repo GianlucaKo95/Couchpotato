@@ -45,7 +45,7 @@ internal class TwitchSplit(private val a: PlayerActivity, private val root: Fram
         }
         panel.addView(TextView(a).apply {
             text = "Splitscreen mit Twitch"
-            setTextColor(ACCENT); textSize = 16f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(PlayerStyle.MUTED); textSize = 16f; typeface = context.interMedium()
             setPadding(0, 0, 0, a.dp(12))
         })
         fun row() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = a.dp(8) }

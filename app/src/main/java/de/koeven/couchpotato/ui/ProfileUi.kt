@@ -96,11 +96,11 @@ fun ProfilePicker(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color(0xFF0E4247)),
+            .background(CpColors.Surface),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Wer schaut?", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+            Text("Wer schaut?", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(36.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
                 profiles.forEach { p ->
@@ -128,7 +128,7 @@ fun ProfilePicker(
                         Spacer(Modifier.height(12.dp))
                         Text(p.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         if (p.kid) {
-                            Text("Kinder · bis FSK ${p.maxFsk}", style = MaterialTheme.typography.labelMedium, color = CpColors.Accent)
+                            Text("Kinder · bis FSK ${p.maxFsk}", style = MaterialTheme.typography.labelMedium, color = CpColors.TextMuted)
                         }
                     }
                 }
@@ -167,12 +167,12 @@ fun PinDialog(title: String, hint: String? = null, onDismiss: () -> Unit, onPin:
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
-                .background(CpColors.Panel, RoundedCornerShape(18.dp))
-                    .border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
+                .background(CpColors.Panel, RoundedCornerShape(16.dp))
+                    .border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
                 .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
             hint?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = CpColors.TextMuted, textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 6.dp).width(300.dp))

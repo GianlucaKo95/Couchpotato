@@ -155,23 +155,22 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
             Row(Modifier.fillMaxWidth().padding(horizontal = ScreenPadding)) {
                 Column(Modifier.weight(1f).padding(end = 40.dp)) {
                     val label = buildList {
-                        add("SERIE")
+                        add("Serie")
                         (details?.genres?.firstOrNull() ?: loaded?.genre?.substringBefore(',')?.substringBefore('/')?.trim())
-                            ?.takeIf { it.isNotEmpty() }?.let { add(it.uppercase()) }
+                            ?.takeIf { it.isNotEmpty() }?.let { add(it) }
                         (details?.year ?: loaded?.year)?.let { add(it) }
-                        if (seasons.isNotEmpty()) add(if (seasons.size == 1) "1 STAFFEL" else "${seasons.size} STAFFELN")
+                        if (seasons.isNotEmpty()) add(if (seasons.size == 1) "1 Staffel" else "${seasons.size} Staffeln")
                     }.joinToString("  ·  ")
                     Text(
                         label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = CpColors.Accent,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = CpColors.TextSecondary,
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         loaded?.name ?: name,
                         style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -238,7 +237,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                             val label = when (val g = gate) {
                                 ProfilesController.Gate.Allowed -> primary
                                 ProfilesController.Gate.Checking -> "Prüfe Freigabe …"
-                                is ProfilesController.Gate.Blocked -> if (kid) "Eltern-PIN eingeben" else "🔒  Gesperrt · ${g.reason}"
+                                is ProfilesController.Gate.Blocked -> if (kid) "Eltern-PIN eingeben" else "Gesperrt · ${g.reason}"
                             }
                             MainAction(
                                 if (kid && gate == ProfilesController.Gate.Allowed && resume == null) "▶  Los geht’s!" else label,
@@ -296,7 +295,7 @@ fun SeriesScreen(vm: HomeViewModel, seriesId: Long, name: String) {
                     Text(
                         "Folgen · Staffel $season",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(start = ScreenPadding),
                     )
                     LazyRow(
@@ -390,12 +389,12 @@ private fun EpisodeCard(
                 Text(
                     "E${episode.number}",
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Medium,
                     color = CpColors.Text,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(8.dp)
-                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 7.dp, vertical = 2.dp),
                 )
                 if (watched) {
@@ -415,7 +414,7 @@ private fun EpisodeCard(
                             .fillMaxWidth()
                             .fillMaxHeight(0.32f)
                             .background(androidx.compose.ui.graphics.Brush.verticalGradient(
-                                listOf(Color.Transparent, Color(0xCC0B2A2E))))
+                                listOf(Color.Transparent, Color(0xCC0D1012))))
                     )
                     ProgressBar(
                         fraction = progress.fraction,

@@ -55,7 +55,7 @@ fun PhoneLinkPanel(fields: List<PhoneLink.Field>, compact: Boolean = false, vert
                 modifier = Modifier.size(112.dp).background(Color.White, RoundedCornerShape(10.dp)).padding(5.dp),
             )
             Text("Mit dem Handy scannen", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-            Text("Code ${session.pin}", style = MaterialTheme.typography.labelMedium, color = CpColors.Accent, fontWeight = FontWeight.Bold)
+            Text("Code ${session.pin}", style = MaterialTheme.typography.labelMedium, color = CpColors.Accent, fontWeight = FontWeight.Medium)
         }
         return
     }
@@ -71,8 +71,8 @@ fun PhoneLinkPanel(fields: List<PhoneLink.Field>, compact: Boolean = false, vert
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Bequemer mit dem Handy: Code scannen und live mittippen", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text("oder im Handy-Browser öffnen:  ${session.url}", style = MaterialTheme.typography.bodyMedium, color = CpColors.Accent)
-            Text("Code: ${session.pin}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("oder im Handy-Browser öffnen:  ${session.url}", style = MaterialTheme.typography.bodyMedium, color = CpColors.TextSecondary)
+            Text("Code: ${session.pin}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             if (!compact) Text("Handy und Fernseher müssen im selben WLAN sein.", style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted)
         }
     }

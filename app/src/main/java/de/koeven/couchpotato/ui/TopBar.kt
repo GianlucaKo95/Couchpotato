@@ -62,7 +62,7 @@ fun TopBar(
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(start = ScreenPadding, end = ScreenPadding, top = 18.dp),
+            .padding(start = ScreenPadding, end = ScreenPadding, top = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(
@@ -72,7 +72,7 @@ fun TopBar(
                 .height(46.dp)
                 .aspectRatio(228f / 148f),
         )
-        Spacer(Modifier.width(22.dp))
+        Spacer(Modifier.width(24.dp))
         TabPill("Start", active == NavTab.Start) { (onStart ?: nav?.home)?.invoke() }
         if (showContentTabs) {
             TabPill("Live-TV", active == NavTab.Live) { nav?.browse?.invoke(SearchEntry.KIND_LIVE) }
@@ -88,7 +88,7 @@ fun TopBar(
         RoundIcon(R.drawable.ic_search, "Suchen", activeIcon == "search") { nav?.search?.invoke() }
         Spacer(Modifier.width(8.dp))
         RoundIcon(R.drawable.ic_settings, "Einstellungen", activeIcon == "settings") { nav?.settings?.invoke() }
-        Spacer(Modifier.width(18.dp))
+        Spacer(Modifier.width(20.dp))
         Clock()
     }
 }
@@ -106,13 +106,13 @@ fun TabPill(label: String, selected: Boolean, modifier: Modifier = Modifier, onC
             focusedContainerColor = CpColors.Accent,
             focusedContentColor = CpColors.OnAccent,
         ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-        modifier = modifier.padding(end = 6.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        modifier = modifier.padding(end = 8.dp),
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            fontWeight = FontWeight.Medium,
         )
     }
 }
@@ -141,17 +141,17 @@ fun PrimaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean =
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = ButtonDefaults.shape(RoundedCornerShape(50)),
+        shape = ButtonDefaults.shape(ControlShape),
         colors = ButtonDefaults.colors(
             containerColor = CpColors.Text,
             contentColor = CpColors.Background,
             focusedContainerColor = CpColors.Accent,
             focusedContentColor = CpColors.OnAccent,
         ),
-        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
         modifier = modifier,
     ) {
-        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 
@@ -162,17 +162,17 @@ fun SecondaryPill(label: String, modifier: Modifier = Modifier, enabled: Boolean
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = ButtonDefaults.shape(RoundedCornerShape(50)),
+        shape = ButtonDefaults.shape(ControlShape),
         colors = ButtonDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.12f),
+            containerColor = Color.White.copy(alpha = 0.10f),
             contentColor = CpColors.Text,
             focusedContainerColor = CpColors.Accent,
             focusedContentColor = CpColors.OnAccent,
         ),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
         modifier = modifier,
     ) {
-        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 
@@ -204,7 +204,7 @@ private fun ProfileButton(onClick: () -> Unit) {
                 Text(
                     profile.name,
                     style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     modifier = Modifier.padding(start = 10.dp, end = 16.dp),
                 )

@@ -28,14 +28,14 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
 
     init {
         label = TextView(a).apply {
-            setTextColor(TEXT); textSize = 16f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(TEXT); textSize = 16f; typeface = context.interMedium()
             setPadding(a.dp(14), a.dp(6), a.dp(14), a.dp(6))
-            background = GradientDrawable().apply { cornerRadius = a.dp(14).toFloat(); setColor(PANEL) }
+            background = GradientDrawable().apply { cornerRadius = a.dp(10).toFloat(); setColor(PANEL) }
             visibility = View.GONE
         }
         // notices in Couchpotato's style instead of the small system toasts
         notice = TextView(a).apply {
-            setTextColor(TEXT); textSize = 18f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(TEXT); textSize = 18f; typeface = context.interMedium()
             setPadding(a.dp(22), a.dp(12), a.dp(22), a.dp(12))
             background = a.panelBackground()
             visibility = View.GONE
@@ -45,11 +45,11 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
         ).apply { setMargins(0, a.dp(28), 0, 0) })
         // "≡ Menü" while the controls are visible, so the menu can be found
         menuHint = TextView(a).apply {
-            text = (if (a.isLive) "OK  Senderliste   ·   " else "") + "≡  Menü: Sleep-Timer" + if (a.isLive) " · letzter Sender · zurückspulen" +
+            text = (if (a.isLive) "OK  Senderliste   ·   " else "") + "≡  Menü: Ton, Sleep-Timer" + if (a.isLive) " · letzter Sender · zurückspulen" +
                 (if (de.koeven.couchpotato.data.Profiles.active(a).kid) "" else " · Splitscreen") else ""
-            setTextColor(TEXT); textSize = 15f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(TEXT); textSize = 15f; typeface = context.interMedium()
             setPadding(a.dp(14), a.dp(6), a.dp(14), a.dp(6))
-            background = GradientDrawable().apply { cornerRadius = a.dp(14).toFloat(); setColor(PANEL) }
+            background = GradientDrawable().apply { cornerRadius = a.dp(10).toFloat(); setColor(PANEL) }
             visibility = View.GONE
         }
         root.addView(menuHint, FrameLayout.LayoutParams(
@@ -82,8 +82,8 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
     fun updateLabel() {
         val behind = if (a.isLive) a.live.behindMs() else 0L
         val parts = listOfNotNull(
-            if (behind > 10_000L) "⏪ −${LiveSession.fmt(behind)}" else null,
-            a.sleep.label(),
+            if (behind > 10_000L) "−${LiveSession.fmt(behind)} hinter live" else null,
+            a.sleep.label()?.let { "Sleep-Timer $it" },
         )
         label.text = parts.joinToString("   ·   ")
         label.visibility = if (parts.isEmpty()) View.GONE else View.VISIBLE
@@ -115,25 +115,25 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
         val live = a.live
         menu.addView(TextView(a).apply {
             text = if (a.isLive) a.items.getOrNull(live.index)?.title ?: "Live-TV" else "Wiedergabe"
-            setTextColor(ACCENT); textSize = 15f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 0, 0, a.dp(10))
+            setTextColor(PlayerStyle.MUTED); textSize = 15f; typeface = context.interMedium(); setPadding(0, 0, 0, a.dp(10))
         })
         fun add(label: String, action: () -> Unit) {
             menu.addView(a.pillButton(label).apply { setOnClickListener { action() } },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = a.dp(8) })
         }
         if (a.isLive) {
-            add("☰ Senderliste") { hideMenu(); a.channels.show() }
+            add("Senderliste") { hideMenu(); a.channels.show() }
             live.previousItem?.let { prev -> add("↩ Zurück zu ${prev.title}") { hideMenu(); live.backToPrevious() } }
             if (live.behindMs() > 8_000L) add("▶▶ Zurück zu Live") { hideMenu(); live.goLive() }
             if (live.canRewind) {
-                add("⏪ 30 Sekunden zurück") { live.shiftBy(-30_000L); refreshMenu() }
-                add("⏪ 5 Minuten zurück") { live.shiftBy(-5 * 60_000L); refreshMenu() }
+                add("30 Sekunden zurück") { live.shiftBy(-30_000L); refreshMenu() }
+                add("5 Minuten zurück") { live.shiftBy(-5 * 60_000L); refreshMenu() }
             }
         }
         if (a.isLive && !de.koeven.couchpotato.data.Profiles.active(a).kid) {
             val split = a.split
             if (split.active) {
-                add(if (split.soundLeft) "🔈 Ton auf Live-TV" else "🔈 Ton auf Twitch") { split.setSound(!split.soundLeft); refreshMenu() }
+                add(if (split.soundLeft) "Ton auf Live-TV" else "Ton auf Twitch") { split.setSound(!split.soundLeft); refreshMenu() }
                 add("▥ Anderer Twitch-Kanal") { hideMenu(); split.showPicker() }
                 add("▥ Splitscreen beenden") { hideMenu(); split.stop() }
             } else {
@@ -141,8 +141,8 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
             }
             add("▣ Als kleines Fenster weiterlaufen") { hideMenu(); a.floatAway() }
         }
-        add("🔊 Ton: ${a.soundLabel}") { page = 1; fillMenu(); menu.getChildAt(1)?.requestFocus() }
-        add("☾ Sleep-Timer: ${a.sleep.label()?.removePrefix("☾ ") ?: "aus"}") { a.cycleSleep() }
+        add("Ton: ${a.soundLabel}") { page = 1; fillMenu(); menu.getChildAt(1)?.requestFocus() }
+        add("Sleep-Timer: ${a.sleep.label() ?: "aus"}") { a.cycleSleep() }
         add("Schließen") { hideMenu() }
     }
 
@@ -150,7 +150,7 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
     private fun fillSoundMenu() {
         menu.addView(TextView(a).apply {
             text = "Ton über"
-            setTextColor(ACCENT); textSize = 15f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 0, 0, a.dp(10))
+            setTextColor(PlayerStyle.MUTED); textSize = 15f; typeface = context.interMedium(); setPadding(0, 0, 0, a.dp(10))
         })
         fun add(label: String, action: () -> Unit) {
             menu.addView(a.pillButton(label).apply { setOnClickListener { action() } },
@@ -170,15 +170,15 @@ internal class PlayerOverlays(private val a: PlayerActivity, root: FrameLayout) 
         if (a.sonosSearching) {
             menu.addView(TextView(a).apply { text = "Suche Sonos im WLAN …"; setTextColor(TEXT); textSize = 15f; setPadding(0, a.dp(10), 0, 0) })
         } else {
-            add(if (rooms.isEmpty()) "🔍 Sonos suchen" else "🔍 Neu suchen") { a.findSonos { refreshMenu() }; refreshMenu() }
+            add(if (rooms.isEmpty()) "Sonos suchen" else "Neu suchen") { a.findSonos { refreshMenu() }; refreshMenu() }
         }
         if (sonos.active) {
             menu.addView(TextView(a).apply {
                 text = a.sonosStatus
                 setTextColor(TEXT); textSize = 13f; alpha = 0.75f; setPadding(0, a.dp(8), 0, 0)
             }.also { statusView = it })
-            add("🔉 Leiser") { a.sonosVolume(-3) }
-            add("🔊 Lauter") { a.sonosVolume(3) }
+            add("Leiser") { a.sonosVolume(-3) }
+            add("Lauter") { a.sonosVolume(3) }
             val t = sonos.trimMs
             menu.addView(TextView(a).apply {
                 text = "Bild passt nicht zum Ton? Feinjustieren (jetzt ${if (t > 0) "+" else ""}$t ms)"

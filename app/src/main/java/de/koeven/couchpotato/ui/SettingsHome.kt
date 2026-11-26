@@ -87,7 +87,7 @@ internal fun HomeSection(vm: HomeViewModel, state: HomeState, setStatus: (String
     Text(
         "Reihenfolge der Reihen",
         style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(top = 10.dp),
     )
     state.rowOrder.forEachIndexed { i, id ->

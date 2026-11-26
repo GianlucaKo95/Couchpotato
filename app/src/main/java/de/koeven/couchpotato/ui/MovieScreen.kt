@@ -130,17 +130,17 @@ fun MovieScreen(
             Row(Modifier.fillMaxWidth().padding(horizontal = ScreenPadding)) {
                 Column(Modifier.weight(1f).padding(end = 36.dp)) {
                     val label = buildList {
-                        add("FILM")
-                        genre?.takeIf { it.isNotEmpty() }?.let { add(it.uppercase()) }
+                        add("Film")
+                        genre?.takeIf { it.isNotEmpty() }?.let { add(it) }
                         year?.let { add(it) }
                         info?.runtimeMin?.takeIf { it > 0 }?.let { add(duration(it)) }
                     }.joinToString("  ·  ")
-                    Text(label, style = MaterialTheme.typography.labelMedium, color = CpColors.Accent, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(6.dp))
+                    Text(label, style = MaterialTheme.typography.labelLarge, color = CpColors.TextSecondary)
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         title,
                         style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -149,7 +149,7 @@ fun MovieScreen(
                         Text(
                             "„$it“",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = CpColors.Accent,
+                            color = CpColors.TextMuted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 8.dp),
@@ -201,7 +201,7 @@ fun MovieScreen(
                             ProfilesController.Gate.Checking -> MainAction(if (kid) "Moment …" else "Prüfe Freigabe …", Modifier.focusRequester(playFocus)) {}
                             is ProfilesController.Gate.Blocked ->
                                 if (kid) SideAction("Eltern-PIN eingeben", Modifier.focusRequester(playFocus), icon = de.koeven.couchpotato.R.drawable.ic_lock) { askPin = true }
-                                else PrimaryPill("🔒  Gesperrt · ${g.reason}", Modifier.focusRequester(playFocus)) { askPin = true }
+                                else PrimaryPill("Gesperrt · ${g.reason}", Modifier.focusRequester(playFocus)) { askPin = true }
                         }
                         if (progress != null && gate == ProfilesController.Gate.Allowed) {
                             SideAction("Von vorne") {
@@ -292,10 +292,10 @@ fun FskBadge(fsk: String) {
     Text(
         "FSK $fsk",
         style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         color = fg,
         modifier = Modifier
-            .background(bg, RoundedCornerShape(6.dp))
+            .background(bg, RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }

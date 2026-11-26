@@ -13,8 +13,8 @@ class SleepTimer(private val clock: () -> Long = System::currentTimeMillis) {
     val active: Boolean get() = endOfEpisode || at > 0
 
     fun label(): String? = when {
-        endOfEpisode -> "☾ nach dieser Folge"
-        at > 0 -> "☾ ${minutesLeft()} Min."
+        endOfEpisode -> "nach dieser Folge"
+        at > 0 -> "${minutesLeft()} Min."
         else -> null
     }
 

@@ -43,7 +43,7 @@ internal class ChannelPanel(private val a: PlayerActivity, private val root: Fra
             ?.takeIf { id -> categories.any { it.id == id } } ?: categories.first().id
 
         title = TextView(a).apply {
-            setTextColor(ACCENT); textSize = 15f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(PlayerStyle.MUTED); textSize = 15f; typeface = context.interMedium()
             setPadding(a.dp(14), 0, 0, a.dp(8))
         }
         catList = list()

@@ -69,7 +69,7 @@ import androidx.compose.material3.darkColorScheme as m3DarkColorScheme
 @Composable
 internal fun SectionTitle(title: String, subtitle: String) {
     Column(Modifier.padding(bottom = 6.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium)
         Text(
             subtitle,
             style = MaterialTheme.typography.bodySmall,
@@ -88,14 +88,14 @@ internal fun Hint(text: String) {
 internal fun StatCard(label: String, value: String, sub: String, modifier: Modifier = Modifier, small: Boolean = false) {
     Column(
         modifier
-            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = CpColors.TextMuted)
         Text(
             value,
             style = if (small) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
             maxLines = if (small) 3 else 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 2.dp),
@@ -144,7 +144,7 @@ internal fun SettingRow(
             Text(
                 if (onStep != null) "◀  $value  ▶" else value,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
                 color = CpColors.OnAccent,
                 maxLines = 1,
                 modifier = Modifier
@@ -179,7 +179,7 @@ internal fun NavRow(
         ),
         scale = ListItemDefaults.scale(focusedScale = 1.02f),
         headlineContent = {
-            Text(label, maxLines = 1, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+            Text(label, maxLines = 1, fontWeight = if (selected) FontWeight.Medium else FontWeight.Medium)
         },
         modifier = modifier.fillMaxWidth(),
     )
@@ -247,8 +247,8 @@ internal fun TextFieldButton(
            Row(
                 Modifier
                     .width(if (phone) 900.dp else 600.dp)
-                    .background(CpColors.Panel, RoundedCornerShape(18.dp))
-                    .border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
+                    .background(CpColors.Panel, RoundedCornerShape(16.dp))
+                    .border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
                     .padding(horizontal = 22.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,

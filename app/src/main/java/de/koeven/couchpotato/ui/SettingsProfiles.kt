@@ -181,7 +181,7 @@ internal fun ProfilesSection(vm: HomeViewModel, state: HomeState) {
     Text(
         "Kinderschutz",
         style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(top = 12.dp),
     )
     SettingRow(
@@ -218,7 +218,7 @@ internal fun KidCategories(vm: HomeViewModel, state: HomeState, onBack: () -> Un
     )) {
         val cats = vm.library.categoriesFor(kind)
         if (cats.isEmpty()) continue
-        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
+        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 10.dp))
         cats.forEach { c ->
             val key = "$kind:${c.id}"
             val allowed = key in state.kidCategories

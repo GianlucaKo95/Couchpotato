@@ -107,8 +107,8 @@ class PlayerActivity : Activity() {
             .build()
         sonos = SonosLink(object : SonosLink.Listener {
             override fun failed(message: String) = runOnUiThread { onSonosFailed(message) }
-            override fun playing() = runOnUiThread { toast("🔊 Ton über Sonos · ${sonos.speakers.joinToString(" + ") { it.room }}") }
-            override fun recovering() = runOnUiThread { toast("🔊 Sonos hat ausgesetzt – verbinde neu …") }
+            override fun playing() = runOnUiThread { toast("Ton über Sonos · ${sonos.speakers.joinToString(" + ") { it.room }}") }
+            override fun recovering() = runOnUiThread { toast("Sonos hat ausgesetzt – verbinde neu …") }
         })
         sonos.trimMs = SonosPrefs.trimMs(this)
         val renderers = SonosRenderersFactory(this, sonos)
@@ -197,7 +197,7 @@ class PlayerActivity : Activity() {
         SonosPrefs.setSelected(this, list.map { it.uuid })
         if (list.isEmpty()) {
             sonos.stop()          // the stick's clock again: the picture delay is gone at once
-            toast("🔊 Ton wieder über den Fire TV")
+            toast("Ton wieder über den Fire TV")
             return
         }
         startSonos(list)
@@ -257,7 +257,7 @@ class PlayerActivity : Activity() {
     }
 
     internal fun sonosVolume(delta: Int) {
-        sonos.volume(delta) { v -> runOnUiThread { toast(if (v != null) "🔊 Sonos-Lautstärke $v" else "Sonos-Lautstärke nicht änderbar") } }
+        sonos.volume(delta) { v -> runOnUiThread { toast(if (v != null) "Sonos-Lautstärke $v" else "Sonos-Lautstärke nicht änderbar") } }
     }
 
     internal fun toast(text: String) {
