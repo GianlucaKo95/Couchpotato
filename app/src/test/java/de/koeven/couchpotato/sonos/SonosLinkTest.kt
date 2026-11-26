@@ -155,6 +155,8 @@ class SonosLinkTest {
     @Test fun `picture follows the speaker through start, pause and seek`() {
         link.onFormat(rate)
         link.start(listOf(SonosSpeaker("RINCON_X", "Test", "127.0.0.1")))
+        // ExoPlayer pauses and resumes the sink while it buffers at the start – before the speaker is even set up
+        link.onPause(); Thread.sleep(30); link.onPlay()
         feeder()
         Thread.sleep(400)
         assertTrue("waits while the speaker buffers", link.heardPositionUs() == null || fake.state != "PLAYING")

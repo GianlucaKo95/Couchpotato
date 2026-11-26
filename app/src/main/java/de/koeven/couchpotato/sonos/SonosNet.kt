@@ -394,12 +394,16 @@ class SonosLink(
         if (!active || !pausedByUs) return
         pausedByUs = false
         stream?.holdSilence = false
+        // the clock lets go right away – never wait for an answer (or a speaker not set up yet),
+        // or the picture would wait forever
+        val t = now()
+        clock.resumedAround(t, t)
         val c = coordinator ?: return
         val g = gen
         onCtl {
             if (g != gen) return@onCtl
             val t0 = now()
-            if (runCatching { control.play(c.host) }.isSuccess) clock.resumedAround(t0, now())
+            if (runCatching { control.play(c.host) }.isSuccess && g == gen && !pausedByUs) clock.resumedAround(t0, now())
         }
     }
 

@@ -272,6 +272,13 @@ class SonosClock {
     @Synchronized fun resumedAround(sent: Double, ack: Double) {
         held = false
         if (!started) return
+        if (playing && !lo.isNaN() && sent - resumeSent < 2.0) {
+            // second call for the same resume (the speakers' answer): only narrow, never widen
+            val nl = maxOf(lo, sent - frozen - 0.05)
+            val nh = minOf(hi, ack - frozen + 0.35)
+            if (nl < nh) { lo = nl; hi = nh }
+            return
+        }
         resumeSent = sent
         lo = sent - frozen - 0.05
         hi = ack - frozen + 0.35
